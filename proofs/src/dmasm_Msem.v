@@ -36,6 +36,8 @@ Require Import word dmasm_utils dmasm_type dmasm_var dmasm_expr.
 Require Import memory dmasm_sem dmasm_Ssem dmasm_Ssem_props.
 (*Require Import symbolic_expr symbolic_expr_opt.*)
 
+Require Import Utf8.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -47,7 +49,7 @@ Inductive mexpr : Type :=
   | Madd : mexpr -> mexpr -> mexpr
   | Mand : mexpr -> mexpr -> mexpr.
 
-Inductive minstr : Type :=
+Variant minstr : Type :=
   MCassgn : var -> mexpr -> minstr.
 
 Notation mcmd := (seq minstr).
@@ -79,3 +81,20 @@ Inductive msem : svmap -> mcmd -> svmap -> Prop :=
   | MEassgn : forall (s1 s2 : svmap) (x : var) (e : mexpr),
     Let v := msem_mexpr s1 e in sset_var s1 x v = ok s2 ->
     msem_I s1 (MCassgn x e) s2.
+
+Lemma msem_inv s c s' :
+  msem s c s' →
+  match c with
+  | [::] => s' = s
+  | i :: c' => ∃ s1, msem_I s i s1 ∧ msem s1 c' s'
+end.
+Proof. by case; eauto. Qed.
+
+Lemma msem_I_inv s i s' :
+  msem_I s i s' →
+  match i with
+  | MCassgn x e => ∃ v, msem_mexpr s e = ok v ∧ sset_var s x v = ok s'
+  end.
+Proof.
+  by case=> s1 s2 x e H; case: (bindW H); eauto.
+Qed.
