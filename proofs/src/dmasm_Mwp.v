@@ -87,6 +87,29 @@ Definition formula_denote (f: formula) : hpred :=
 
 Notation "⟦ f ⟧" := (formula_denote f) : msem_scope.
 
+Section ABSTRACT_VAR.
+  Context (x: var).
+  Fixpoint abstract_var_aux (vars: seq var) :
+    { vars': seq var & vpred vars → ssem_t (vtype x) → vpred vars' } :=
+      match vars
+      return { vars' : seq var & vpred vars → ssem_t (vtype x) → vpred vars' }
+      with
+      | [::] => existT _ [::] (λ P _, P)
+      | y :: vars' =>
+        let 'existT q f := abstract_var_aux vars' in
+        match x =P y with
+        | ReflectT EQ => existT _ q (λ h v, f (h (eq_rect _ (λ a, ssem_t (vtype a)) v _ EQ)) v)
+        | ReflectF NE => existT (λ q, vpred (y :: vars') → ssem_t (vtype x) → vpred q) (y :: q) (λ h vx vy, f (h vy) vx)
+        end
+      end.
+End ABSTRACT_VAR.
+
+Definition abstract_var (x: var) (f: formula) :
+  { vars': seq var & ssem_t (vtype x) → vpred vars' } :=
+  let 'existT vars g := f in
+  let 'existT vars' h := abstract_var_aux x vars in
+  existT _ vars' (h g).
+
 Section Example0.
   Local Open Scope Z_scope.
   Let x : var := Var sbool "x".
