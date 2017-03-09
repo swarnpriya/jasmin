@@ -27,6 +27,8 @@ COQFILES := \
 	src/unrolling.v \
 	src/extraction.v \
 	src/zmod_setoid.v \
+	src/dmasm_Msem.v \
+	src/dmasm_Mwp.v \
 	src/dmasm_Ssem.v \
 	src/dmasm_Ssem_props.v \
 	src/dmasm_logic.v \
