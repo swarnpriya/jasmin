@@ -103,16 +103,6 @@ Fixpoint foo_I (s: svmap) (c: minstr) (s': svmap) :=
   | MCassgn v e => [:: v]
   end.
 
-Fixpoint foo (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p} :=
-  match c with
-  | [::] => [::]
-  | i :: c =>
-    (match p with
-    | MEskip _ => _
-    | MEseq _ s1 _ _ _ _ H => (foo_I s i s1) ++ (foo _(*s1 c s'*))
-    end)
-  end.
-
 Lemma msem_inv s c s' :
   msem s c s' →
   match c with
@@ -129,3 +119,37 @@ Lemma msem_I_inv s i s' :
 Proof.
   by case=> s1 s2 x e H; case: (bindW H); eauto.
 Qed.
+
+Fixpoint foo (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p} : seq var.
+  refine
+  (match c return msem s c s' -> seq var with
+  | [::] => fun _ => [::]
+  | i :: c =>
+    match i return msem s (i :: c) s' -> seq var with
+    | MCassgn x e => _
+    end
+  end p).
+  move=> p'.
+  case He: (msem_mexpr s e)=> [v|].
+  case Hs: (sset_var s x v)=> [s1|].
+  refine (x :: (foo s1 c s' _)).
+  move: (msem_inv p')=> [s1' [Hi1 Hc1]].
+  move: (msem_I_inv Hi1)=> [v' [Hv' Hs']].
+  congruence.
+  all: (exfalso;
+  move: (msem_inv p')=> [s1' [Hi1 Hc1]];
+  move: (msem_I_inv Hi1)=> [v' [Hv' Hs']];
+  congruence).
+Fail Defined.
+
+Variant ex_trace : Prop :=
+  ExT : seq var -> ex_trace.
+
+Definition leakage (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') : ex_trace.
+Proof.
+  elim: c s p=> [s H|[x e] c H s].
+  exact (ExT [::]).
+  move => /msem_inv [s1 [/msem_I_inv [v [He Hs]] Hc]].
+  move: (H _ Hc)=> [] q.
+  exact (ExT (x :: q)).
+Defined.
