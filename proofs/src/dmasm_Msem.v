@@ -169,13 +169,26 @@ Abort.
 Variant ex_trace : Prop :=
   ExT : seq (exec svalue) -> ex_trace.
 
-Definition leakage (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') : ex_trace.
+Definition ex_trace_cat t1 t2 :=
+  match t1 with
+  | ExT s1 =>
+    match t2 with
+    | ExT s2 => ExT (s1 ++ s2)
+    end
+  end.
+
+Definition ex_leakage (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') : ex_trace.
 Proof.
   elim: c s p=> [s H|i c H s].
   exact (ExT [::]).
   move => /msem_inv [s1 [Hi /H [] q]].
   exact (ExT ((trace_instr s i) ++ q)).
 Defined.
+
+Lemma ex_leakage_cat s c1 c2 s' (p: msem s (c1 ++ c2) s') s1 p' p'':
+  @ex_leakage s (c1 ++ c2) s' p = ex_trace_cat (@ex_leakage s c1 s1 p') (@ex_leakage s1 c2 s' p'').
+Proof.
+Admitted.
 
 Module LEAKAGE.
 Fixpoint leakage s c s' (p: msem s c s') : seq mrval.
@@ -218,8 +231,8 @@ Section ConstantTime.
 
   Definition same_pubs s s' := forall f, f \in P -> seq_on (pub_vars f.2.(f_params)) s s'.
 
-  Definition constant_time :=
-    forall s1 s2 s1' s2' c H H',
+  Definition constant_time c :=
+    forall s1 s2 s1' s2' H H',
       same_pubs s1 s2 -> @leakage s1 c s1' H = @leakage s2 c s2' H'.
 End ConstantTime.
 
@@ -245,4 +258,19 @@ Section ArrAlloc.
 
   Definition arralloc_cmd (c:mcmd) : mcmd :=
     List.fold_right (fun i c' => arralloc_i i ++ c') [::] c.
+
+  Variable P: prog.
+  (*Variable leakage: forall s c s', msem s c s' -> ex_trace.*)
+
+  Theorem preserve_ct: forall c,
+    constant_time P leakage c
+    -> constant_time P leakage (arralloc_cmd c).
+  Proof.
+    elim=> // a l IH Hsrc.
+    rewrite /=.
+    move=> s1 s2 s1' s2' H H' Hpub.
+    rewrite /leakage /=.
+    cbv.
+    move=> s1 s1'.
+  Admitted.
 End ArrAlloc.
