@@ -73,6 +73,22 @@ Fixpoint msem_mexpr (s: svmap) (e: mexpr) : exec svalue :=
     ok (SVbool (andb i1 i2))
   end.
 
+Fixpoint trace_expr (s: svmap) (e: mexpr) :=
+  match e with
+  | Mvar v => [:: sget_var s v]
+  | Mbool b => [::]
+  | Mconst z => [::]
+  | Madd e1 e2 => (trace_expr s e1) ++ (trace_expr s e2)
+  | Mand e1 e2 => trace_expr s e1
+  end.
+
+Definition trace_instr (s: svmap) (c: minstr) :=
+  match c with
+  | MCassgn _ e => trace_expr s e
+  end.
+
+Print write_rval.
+
 Inductive msem : svmap -> mcmd -> svmap -> Prop :=
     MEskip : forall s : svmap, msem s [::] s
   | MEseq : forall (s1 s2 s3 : svmap) (i : minstr) (c : mcmd),
@@ -81,6 +97,21 @@ Inductive msem : svmap -> mcmd -> svmap -> Prop :=
   | MEassgn : forall (s1 s2 : svmap) (x : var) (e : mexpr),
     Let v := msem_mexpr s1 e in sset_var s1 x v = ok s2 ->
     msem_I s1 (MCassgn x e) s2.
+
+Fixpoint foo_I (s: svmap) (c: minstr) (s': svmap) :=
+  match c with
+  | MCassgn v e => [:: v]
+  end.
+
+Fixpoint foo (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p} :=
+  match c with
+  | [::] => [::]
+  | i :: c =>
+    (match p with
+    | MEskip _ => _
+    | MEseq _ s1 _ _ _ _ H => (foo_I s i s1) ++ (foo _(*s1 c s'*))
+    end)
+  end.
 
 Lemma msem_inv s c s' :
   msem s c s' →
