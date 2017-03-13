@@ -141,6 +141,7 @@ Fixpoint foo (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p} : seq 
   move: (msem_I_inv Hi1)=> [v' [Hv' Hs']];
   congruence).
 Fail Defined.
+Abort.
 
 Variant ex_trace : Prop :=
   ExT : seq var -> ex_trace.
@@ -153,3 +154,29 @@ Proof.
   move: (H _ Hc)=> [] q.
   exact (ExT (x :: q)).
 Defined.
+
+Module LEAKAGE.
+Fixpoint leakage s c s' (p: msem s c s') : seq var.
+Proof.
+  refine
+    (match c return msem s c s' → seq var with
+     | [::] => λ _, [::]
+     | MCassgn x e :: c' =>
+       λ p',
+       match msem_mexpr s e as r
+       return msem_mexpr s e = r → seq var
+       with
+       | Error _ => λ K, False_rect _ _
+       | Ok v =>
+         λ Hv,
+         match sset_var s x v as r
+         return sset_var s x v = r → seq var
+         with
+         | Error _ => λ K, False_rect _ _
+         | Ok s1 => λ Hs1, x :: leakage s1 c' s' _
+         end Logic.eq_refl
+       end Logic.eq_refl
+     end p);
+  case: (msem_inv p') => s1' [/msem_I_inv [v' [X Y]] Z]; congruence.
+Defined.
+End LEAKAGE.
