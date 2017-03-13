@@ -88,7 +88,7 @@ Fixpoint msem_mexpr (s: svmap) (e: mexpr) : exec svalue :=
   | Mget x e =>
     MLet (n,t) := s.[x] in
     Let i := msem_mexpr s e >>= sto_word in
-    ok (SVword (FArray.get t (I64.signed i)))
+    ok (SVword (FArray.get t i))
   end.
 
 Fixpoint trace_expr (s: svmap) (e: mexpr) :=
@@ -111,7 +111,7 @@ Definition mwrite_rval (l: mrval) (v: svalue) (s: svmap) : exec svmap :=
   | MRvar x => sset_var s x v
   | MRaset x i =>
     MLet (n,t) := s.[x] in
-    Let i := msem_mexpr s i >>= sto_int in
+    Let i := msem_mexpr s i >>= sto_word in
     Let v := sto_word v in
     let t := FArray.set t i v in
     sset_var s x (@to_sval (sarr n) t)
