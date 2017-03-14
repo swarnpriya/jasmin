@@ -152,7 +152,9 @@ Qed.
  *)
 
 Module Trace.
-Fixpoint trace_expr (s: svmap) (e: mexpr) :=
+Definition trace := seq (exec svalue).
+
+Fixpoint trace_expr (s: svmap) (e: mexpr) : trace :=
   match e with
   | Mvar v => [::]
   | Mbool b => [::]
@@ -162,7 +164,7 @@ Fixpoint trace_expr (s: svmap) (e: mexpr) :=
   | Mget x e => [:: msem_mexpr s e]
   end.
 
-Definition trace_instr (s: svmap) (c: minstr) :=
+Definition trace_instr (s: svmap) (c: minstr) : trace :=
   match c with
   | MCassgn _ e => trace_expr s e
   end.
@@ -273,7 +275,44 @@ End Leakage_Ex.
  * Definition 3/4: instrumented big step semantics
  *)
 Module Leakage_Instr.
-  (* TODO *)
+  Inductive mtsem : svmap -> mcmd -> Trace.trace -> svmap -> Prop :=
+    MTEskip : forall s : svmap, mtsem s [::] [::] s
+  | MTEseq : forall (s1 s2 s3 : svmap) (i : minstr) (c : mcmd) (t: Trace.trace),
+           mtsem_I s1 i s2 -> mtsem s2 c t s3 -> mtsem s1 (i :: c) ((Trace.trace_instr s1 i) ++ t) s3
+  with mtsem_I : svmap -> minstr -> svmap -> Prop :=
+  | MTEassgn : forall (s1 s2 : svmap) (r : mrval) (e : mexpr),
+    Let v := msem_mexpr s1 e in mwrite_rval r v s1 = ok s2 ->
+    mtsem_I s1 (MCassgn r e) s2.
+
+  Lemma mtsem_inv s c t s' :
+    mtsem s c t s' →
+    match c with
+    | [::] => s' = s /\ t = [::]
+    | i :: c' => ∃ s1 t1, mtsem_I s i s1 ∧ mtsem s1 c' t1 s' /\ t = (Trace.trace_instr s i) ++ t1
+  end.
+  Proof. by case; eauto. Qed.
+
+  Lemma mtsem_I_inv s i s' :
+    mtsem_I s i s' →
+    match i with
+    | MCassgn r e => ∃ v, msem_mexpr s e = ok v ∧ mwrite_rval r v s = ok s'
+    end.
+  Proof.
+    by case=> s1 s2 x e H; case: (bindW H); eauto.
+  Qed.
+
+  Lemma mtsem_cat_inv s c1 c2 s' t: mtsem s (c1 ++ c2) t s' ->
+    exists s1 t1 t2, mtsem s c1 t1 s1 /\ mtsem s1 c2 t2 s' /\ t = t1 ++ t2.
+  Proof.
+  elim: c1 t s=> [|a l IH] t s /=.
+  + exists s; exists [::]; exists t; split=> //; exact: MTEskip.
+  + move=> /mtsem_inv [s1 [t1 [Hi [Hc Ht]]]].
+    move: (IH _ _ Hc)=> [s2 [t2 [t3 [Hc1 [Hc2 Ht2]]]]].
+    exists s2; exists (Trace.trace_instr s a ++ t2); exists t3; split.
+    apply: MTEseq; [exact: Hi|exact: Hc1].
+    split=> //.
+    by rewrite Ht Ht2 catA.
+  Qed.
 End Leakage_Instr.
 
 (*
@@ -293,8 +332,6 @@ Definition seq_on (s : Sv.t) (vm1 vm2 : svmap) :=
 Section ConstantTime.
   Variable P: prog.
 
-  Variable leakage: forall s c s', msem s c s' -> Leakage_Ex.trace.
-
   Definition is_pub (v: var_i) := (var_info_to_attr v.(v_info)).(va_pub).
 
   Definition pub_vars vars : Sv.t :=
@@ -302,12 +339,16 @@ Section ConstantTime.
 
   Definition same_pubs s s' := forall f, f \in P -> seq_on (pub_vars f.2.(f_params)) s s'.
 
-  Definition constant_time c :=
-    forall s1 s2 s1' s2' H H',
-      same_pubs s1 s2 -> @leakage s1 c s1' H = @leakage s2 c s2' H'.
+  Definition constant_time_ex c :=
+    forall s1 s2 s1' s2' H H', same_pubs s1 s2 ->
+      @Leakage_Ex.leakage s1 c s1' H = @Leakage_Ex.leakage s2 c s2' H'.
+
+  Definition constant_time_instr c :=
+    forall s1 s2 s1' s2' t1 t2, same_pubs s1 s2 ->
+      Leakage_Instr.mtsem s1 c t1 s1' -> Leakage_Instr.mtsem s2 c t2 s2' -> t1 = t2.
 End ConstantTime.
 
-Section ArrAlloc.
+Module ArrAlloc.
   Variable glob_arr : var.
 
   Definition glob_acc_l s := MRaset glob_arr (Mconst (I64.repr s)).
@@ -332,9 +373,13 @@ Section ArrAlloc.
 
   Variable P: prog.
 
+  (*
+   * Try with Leakage_Ex
+   *)
+  Module Ex_Proof.
   Lemma arralloc_i_ct i:
-    constant_time P Leakage_Ex.leakage [:: i]
-    -> constant_time P Leakage_Ex.leakage (arralloc_i i).
+    constant_time_ex P [:: i]
+    -> constant_time_ex P (arralloc_i i).
   Proof.
     case: i=> r e Hsrc /=.
     elim: e Hsrc=> /= [v|w|b|e1 IH1 e2 IH2| |] Hsrc; try (
@@ -349,9 +394,19 @@ Section ArrAlloc.
     move: (Leakage_Ex.leakage_cat Hc2)=> [s2''' [p' [p'' H2]]].
   Admitted.
 
+  Lemma ct_head a l:
+    constant_time_ex P (a :: l)
+    -> constant_time_ex P [:: a].
+  Proof.
+    elim: l=> // a' l IH H.
+    apply: IH.
+    move=> s1 s2 s1' s2' H1 H2 Hpub.
+    rewrite /constant_time_ex in H.
+  Admitted.
+
   Theorem preserve_ct: forall c,
-    constant_time P Leakage_Ex.leakage c
-    -> constant_time P Leakage_Ex.leakage (arralloc_cmd c).
+    constant_time_ex P c
+    -> constant_time_ex P (arralloc_cmd c).
   Proof.
     elim=> // a l IH Hsrc.
     rewrite /=.
@@ -360,9 +415,71 @@ Section ArrAlloc.
     move: (Leakage_Ex.leakage_cat H')=> [s2'' [p'2 [p''2 ->]]].
     congr (Leakage_Ex.trace_cat _ _).
     apply: arralloc_i_ct=> //.
+
     move=> s1'0 s2'0 s1'1 s2'1 H0 H'0 Hpub'.
+
     rewrite /Leakage_Ex.leakage /=.
     move: H0=> /msem_inv [s1'2 [Hs1'2 Hskip1]].
     rewrite /=.
   Admitted.
+  End Ex_Proof.
+
+  Module Instr_Proof.
+  Lemma arralloc_i_ct i:
+    constant_time_instr P [:: i]
+    -> constant_time_instr P (arralloc_i i).
+  Proof.
+    case: i=> r e Hsrc /=.
+    elim: e Hsrc=> /= [v|w|b|e1 IH1 e2 IH2| |] Hsrc; try (
+    move=> s1 s2 s1' s2' t1 t2 Hpub;
+    move=> /Leakage_Instr.mtsem_inv /= [s1_1 [t1_1 [Hi1 [Hc1 Ht1]]]];
+    move: Hc1=> /Leakage_Instr.mtsem_inv /= [s1_2 [t1_2 [Hi1' [Hc1 Ht1']]]];
+    rewrite -{}Ht1' in Hc1;
+    move: Hc1=> /Leakage_Instr.mtsem_inv [_ Ht1'2];
+    rewrite {}Ht1'2 in Ht1;
+    move=> /Leakage_Instr.mtsem_inv /= [s2_1 [t2_1 [Hi2 [Hc2 Ht2]]]];
+    move: Hc2=> /Leakage_Instr.mtsem_inv /= [s2_2 [t2_2 [Hi2' [Hc2 Ht2']]]];
+    rewrite -{}Ht2' in Hc2;
+    move: Hc2=> /Leakage_Instr.mtsem_inv [_ Ht2'2];
+    rewrite {}Ht2'2 in Ht2;
+    by rewrite Ht2 Ht1).
+    move=> s1 s2 s1' s2' t1 t2 Hpub.
+    admit. (* Annoying! *)
+  Admitted.
+
+  Import Leakage_Instr.
+
+  Lemma ct_head a l:
+    constant_time_instr P (a :: l)
+    -> constant_time_instr P [:: a].
+  Proof.
+    elim: l=> // a' l IH H.
+    apply: IH.
+    move=> s1 s2 s1' s2' t1 t2 Hpub.
+    rewrite /constant_time_instr in H.
+    move=> /Leakage_Instr.mtsem_inv [s1'' [t1' [Hi1 [Hc1 Ht1]]]].
+    move=> /Leakage_Instr.mtsem_inv [s2'' [t2' [Hi2 [Hc2 Ht2]]]].
+    have H1: Leakage_Instr.mtsem s1 [:: a, a' & l] (Trace.trace_instr s1 a ++ Trace.trace_instr s1'' a' ++ t1') s1'.
+      apply: MTEseq.
+      exact: Hi1.
+      apply: MTEseq.
+      admit. (* Does a' actually have semantics? -> missing hypothesis *)
+      exact: Hc1.
+  Admitted.
+
+  Theorem preserve_ct: forall c,
+    constant_time_instr P c
+    -> constant_time_instr P (arralloc_cmd c).
+  Proof.
+    elim=> // a l IH Hsrc.
+    rewrite /=.
+    move=> s1 s2 s1' s2' t1 t2 Hpub.
+    move=> /Leakage_Instr.mtsem_cat_inv [s1'' [t1' [t1'' [Ht1c1 [Ht1c2 ->]]]]].
+    move=> /Leakage_Instr.mtsem_cat_inv [s2'' [t2' [t2'' [Ht2c1 [Ht2c2 ->]]]]].
+    congr (_ ++ _).
+    apply: arralloc_i_ct.
+    admit.
+    admit.
+  Admitted.
+  End Instr_Proof.
 End ArrAlloc.
