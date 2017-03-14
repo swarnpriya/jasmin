@@ -232,8 +232,17 @@ Defined.
 Lemma leakage_irr (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') (p': msem s c s'):
   leakage p = leakage p'.
 Proof.
-  case: c p p'=> [p p'|a l IH].
-Admitted.
+  elim: c s p p'=> [p p'|a l IH s p p'].
+  by rewrite /leakage /=.
+  rewrite /leakage /=.
+  move: p=> /msem_inv [s1 [Hi1 Hc1]].
+  move: p'=> /msem_inv [s2 [Hi2 Hc2]].
+  move: (msem_I_det Hi1 Hi2)=> H.
+  move: Hi1 Hi2 Hc1 Hc2.
+  case: _ / H=> _ Hi Hc1 Hc2.
+  move: (IH _ Hc1 Hc2).
+  rewrite /leakage /==> -> //.
+Qed.
 
 Lemma leakage_cat s c1 c2 s' (p: msem s (c1 ++ c2) s'):
   exists s1 p' p'',
@@ -243,11 +252,21 @@ Proof.
   exists s1; exists p'; exists p''.
   elim: c1 s p p'=> /= [s p p'|a l IH s p p'].
   move: p'=> /msem_inv H.
-  admit.
+  move: p p''.
+  case: _ / H=> p p''.
+  rewrite (leakage_irr p p'') //.
+  case: (leakage p'')=> //.
   move: p=> /msem_inv [s2 [Hs2 Hs2']].
   move: p'=> /msem_inv [s3 [Hs3 Hs3']].
-  move: (IH _ Hs2').
-Admitted.
+  move: (msem_I_det Hs2 Hs3)=> Hs.
+  move: Hs2 Hs2' Hs3 Hs3'.
+  case: _ / Hs=> _ Hs2' _ Hs3'.
+  rewrite (IH _ Hs2' Hs3').
+  case: (leakage Hs3')=> // t.
+  rewrite /trace_cat /=.
+  case: (leakage p'')=> // v.
+  by rewrite catA.
+Qed.
 End Leakage_Ex.
 
 (*
@@ -313,6 +332,23 @@ Section ArrAlloc.
 
   Variable P: prog.
 
+  Lemma arralloc_i_ct i:
+    constant_time P Leakage_Ex.leakage [:: i]
+    -> constant_time P Leakage_Ex.leakage (arralloc_i i).
+  Proof.
+    case: i=> r e Hsrc /=.
+    elim: e Hsrc=> /= [v|w|b|e1 IH1 e2 IH2| |] Hsrc; try (
+    move=> s1 s2 s1' s2' H H' Hpub;
+    rewrite /Leakage_Ex.leakage /=;
+    move: H=> /msem_inv [s1'' [Hi1 /msem_inv [s1''' [Hc1 Hskip1]]]];
+    move: H'=> /msem_inv [s2'' [Hi2 /msem_inv [s2''' [Hc2 Hskip2]]]] //).
+    move=> s1 s2 s1' s2' H H' Hpub.
+    rewrite /Leakage_Ex.leakage /=.
+    move: H=> /msem_inv [s1'' [Hi1 Hc1]] /=.
+    move: H'=> /msem_inv [s2'' [Hi2 Hc2]] /=.
+    move: (Leakage_Ex.leakage_cat Hc2)=> [s2''' [p' [p'' H2]]].
+  Admitted.
+
   Theorem preserve_ct: forall c,
     constant_time P Leakage_Ex.leakage c
     -> constant_time P Leakage_Ex.leakage (arralloc_cmd c).
@@ -320,5 +356,13 @@ Section ArrAlloc.
     elim=> // a l IH Hsrc.
     rewrite /=.
     move=> s1 s2 s1' s2' H H' Hpub.
+    move: (Leakage_Ex.leakage_cat H)=> [s1'' [p'1 [p''1 ->]]].
+    move: (Leakage_Ex.leakage_cat H')=> [s2'' [p'2 [p''2 ->]]].
+    congr (Leakage_Ex.trace_cat _ _).
+    apply: arralloc_i_ct=> //.
+    move=> s1'0 s2'0 s1'1 s2'1 H0 H'0 Hpub'.
+    rewrite /Leakage_Ex.leakage /=.
+    move: H0=> /msem_inv [s1'2 [Hs1'2 Hskip1]].
+    rewrite /=.
   Admitted.
 End ArrAlloc.
