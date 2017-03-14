@@ -170,6 +170,8 @@ Definition trace_instr (s: svmap) (c: minstr) : trace :=
   end.
 End Trace.
 
+Import Trace.
+
 (*
  * Definition 1/4: use a fixpoint
  *)
@@ -179,7 +181,7 @@ Fixpoint leakage_fix (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p
   (match c as c0 return c = c0 -> seq (exec svalue) with
   | [::] => fun _ => [::]
   | i :: c' => fun (Hc: c = i::c') =>
-    (Trace.trace_instr s i) ++
+    (trace_instr s i) ++
     (match i as i0 return i = i0 -> seq (exec svalue) with
     | MCassgn r e => fun (Hi: i = MCassgn r e) =>
       match msem_mexpr s e as e0 return msem_mexpr s e = e0 -> seq (exec svalue) with
@@ -228,7 +230,7 @@ Proof.
   elim: c s p=> [s H|i c H s].
   exact (ExT [::]).
   move => /msem_inv [s1 [Hi /H [] q]].
-  exact (ExT ((Trace.trace_instr s i) ++ q)).
+  exact (ExT ((trace_instr s i) ++ q)).
 Defined.
 
 Lemma leakage_irr (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') (p': msem s c s'):
@@ -277,8 +279,8 @@ End Leakage_Ex.
 Module Leakage_Instr.
   Inductive mtsem : svmap -> mcmd -> Trace.trace -> svmap -> Prop :=
     MTEskip : forall s : svmap, mtsem s [::] [::] s
-  | MTEseq : forall (s1 s2 s3 : svmap) (i : minstr) (c : mcmd) (t: Trace.trace),
-           mtsem_I s1 i s2 -> mtsem s2 c t s3 -> mtsem s1 (i :: c) ((Trace.trace_instr s1 i) ++ t) s3
+  | MTEseq : forall (s1 s2 s3 : svmap) (i : minstr) (c : mcmd) (t: trace),
+           mtsem_I s1 i s2 -> mtsem s2 c t s3 -> mtsem s1 (i :: c) ((trace_instr s1 i) ++ t) s3
   with mtsem_I : svmap -> minstr -> svmap -> Prop :=
   | MTEassgn : forall (s1 s2 : svmap) (r : mrval) (e : mexpr),
     Let v := msem_mexpr s1 e in mwrite_rval r v s1 = ok s2 ->
@@ -288,7 +290,7 @@ Module Leakage_Instr.
     mtsem s c t s' →
     match c with
     | [::] => s' = s /\ t = [::]
-    | i :: c' => ∃ s1 t1, mtsem_I s i s1 ∧ mtsem s1 c' t1 s' /\ t = (Trace.trace_instr s i) ++ t1
+    | i :: c' => ∃ s1 t1, mtsem_I s i s1 ∧ mtsem s1 c' t1 s' /\ t = (trace_instr s i) ++ t1
   end.
   Proof. by case; eauto. Qed.
 
@@ -308,7 +310,7 @@ Module Leakage_Instr.
   + exists s; exists [::]; exists t; split=> //; exact: MTEskip.
   + move=> /mtsem_inv [s1 [t1 [Hi [Hc Ht]]]].
     move: (IH _ _ Hc)=> [s2 [t2 [t3 [Hc1 [Hc2 Ht2]]]]].
-    exists s2; exists (Trace.trace_instr s a ++ t2); exists t3; split.
+    exists s2; exists (trace_instr s a ++ t2); exists t3; split.
     apply: MTEseq; [exact: Hi|exact: Hc1].
     split=> //.
     by rewrite Ht Ht2 catA.
@@ -377,6 +379,7 @@ Module ArrAlloc.
    * Try with Leakage_Ex
    *)
   Module Ex_Proof.
+  Import Leakage_Ex.
   Lemma arralloc_i_ct i:
     constant_time_ex P [:: i]
     -> constant_time_ex P (arralloc_i i).
@@ -384,14 +387,14 @@ Module ArrAlloc.
     case: i=> r e Hsrc /=.
     elim: e Hsrc=> /= [v|w|b|e1 IH1 e2 IH2| |] Hsrc; try (
     move=> s1 s2 s1' s2' H H' Hpub;
-    rewrite /Leakage_Ex.leakage /=;
+    rewrite /leakage /=;
     move: H=> /msem_inv [s1'' [Hi1 /msem_inv [s1''' [Hc1 Hskip1]]]];
     move: H'=> /msem_inv [s2'' [Hi2 /msem_inv [s2''' [Hc2 Hskip2]]]] //).
     move=> s1 s2 s1' s2' H H' Hpub.
-    rewrite /Leakage_Ex.leakage /=.
+    rewrite /leakage /=.
     move: H=> /msem_inv [s1'' [Hi1 Hc1]] /=.
     move: H'=> /msem_inv [s2'' [Hi2 Hc2]] /=.
-    move: (Leakage_Ex.leakage_cat Hc2)=> [s2''' [p' [p'' H2]]].
+    move: (leakage_cat Hc2)=> [s2''' [p' [p'' H2]]].
   Admitted.
 
   Lemma ct_head a l:
@@ -411,20 +414,21 @@ Module ArrAlloc.
     elim=> // a l IH Hsrc.
     rewrite /=.
     move=> s1 s2 s1' s2' H H' Hpub.
-    move: (Leakage_Ex.leakage_cat H)=> [s1'' [p'1 [p''1 ->]]].
-    move: (Leakage_Ex.leakage_cat H')=> [s2'' [p'2 [p''2 ->]]].
-    congr (Leakage_Ex.trace_cat _ _).
+    move: (leakage_cat H)=> [s1'' [p'1 [p''1 ->]]].
+    move: (leakage_cat H')=> [s2'' [p'2 [p''2 ->]]].
+    congr (trace_cat _ _).
     apply: arralloc_i_ct=> //.
 
     move=> s1'0 s2'0 s1'1 s2'1 H0 H'0 Hpub'.
 
-    rewrite /Leakage_Ex.leakage /=.
+    rewrite /leakage /=.
     move: H0=> /msem_inv [s1'2 [Hs1'2 Hskip1]].
     rewrite /=.
   Admitted.
   End Ex_Proof.
 
   Module Instr_Proof.
+  Import Leakage_Instr.
   Lemma arralloc_i_ct i:
     constant_time_instr P [:: i]
     -> constant_time_instr P (arralloc_i i).
@@ -432,15 +436,15 @@ Module ArrAlloc.
     case: i=> r e Hsrc /=.
     elim: e Hsrc=> /= [v|w|b|e1 IH1 e2 IH2| |] Hsrc; try (
     move=> s1 s2 s1' s2' t1 t2 Hpub;
-    move=> /Leakage_Instr.mtsem_inv /= [s1_1 [t1_1 [Hi1 [Hc1 Ht1]]]];
-    move: Hc1=> /Leakage_Instr.mtsem_inv /= [s1_2 [t1_2 [Hi1' [Hc1 Ht1']]]];
+    move=> /mtsem_inv /= [s1_1 [t1_1 [Hi1 [Hc1 Ht1]]]];
+    move: Hc1=> /mtsem_inv /= [s1_2 [t1_2 [Hi1' [Hc1 Ht1']]]];
     rewrite -{}Ht1' in Hc1;
-    move: Hc1=> /Leakage_Instr.mtsem_inv [_ Ht1'2];
+    move: Hc1=> /mtsem_inv [_ Ht1'2];
     rewrite {}Ht1'2 in Ht1;
-    move=> /Leakage_Instr.mtsem_inv /= [s2_1 [t2_1 [Hi2 [Hc2 Ht2]]]];
-    move: Hc2=> /Leakage_Instr.mtsem_inv /= [s2_2 [t2_2 [Hi2' [Hc2 Ht2']]]];
+    move=> /mtsem_inv /= [s2_1 [t2_1 [Hi2 [Hc2 Ht2]]]];
+    move: Hc2=> /mtsem_inv /= [s2_2 [t2_2 [Hi2' [Hc2 Ht2']]]];
     rewrite -{}Ht2' in Hc2;
-    move: Hc2=> /Leakage_Instr.mtsem_inv [_ Ht2'2];
+    move: Hc2=> /mtsem_inv [_ Ht2'2];
     rewrite {}Ht2'2 in Ht2;
     by rewrite Ht2 Ht1).
     move=> s1 s2 s1' s2' t1 t2 Hpub.
@@ -457,9 +461,9 @@ Module ArrAlloc.
     apply: IH.
     move=> s1 s2 s1' s2' t1 t2 Hpub.
     rewrite /constant_time_instr in H.
-    move=> /Leakage_Instr.mtsem_inv [s1'' [t1' [Hi1 [Hc1 Ht1]]]].
-    move=> /Leakage_Instr.mtsem_inv [s2'' [t2' [Hi2 [Hc2 Ht2]]]].
-    have H1: Leakage_Instr.mtsem s1 [:: a, a' & l] (Trace.trace_instr s1 a ++ Trace.trace_instr s1'' a' ++ t1') s1'.
+    move=> /mtsem_inv [s1'' [t1' [Hi1 [Hc1 Ht1]]]].
+    move=> /mtsem_inv [s2'' [t2' [Hi2 [Hc2 Ht2]]]].
+    have H1: mtsem s1 [:: a, a' & l] (trace_instr s1 a ++ trace_instr s1'' a' ++ t1') s1'.
       apply: MTEseq.
       exact: Hi1.
       apply: MTEseq.
@@ -474,8 +478,8 @@ Module ArrAlloc.
     elim=> // a l IH Hsrc.
     rewrite /=.
     move=> s1 s2 s1' s2' t1 t2 Hpub.
-    move=> /Leakage_Instr.mtsem_cat_inv [s1'' [t1' [t1'' [Ht1c1 [Ht1c2 ->]]]]].
-    move=> /Leakage_Instr.mtsem_cat_inv [s2'' [t2' [t2'' [Ht2c1 [Ht2c2 ->]]]]].
+    move=> /mtsem_cat_inv [s1'' [t1' [t1'' [Ht1c1 [Ht1c2 ->]]]]].
+    move=> /mtsem_cat_inv [s2'' [t2' [t2'' [Ht2c1 [Ht2c2 ->]]]]].
     congr (_ ++ _).
     apply: arralloc_i_ct.
     admit.
