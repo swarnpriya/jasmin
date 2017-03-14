@@ -371,7 +371,14 @@ Module ArrAlloc.
     end.
 
   Definition arralloc_cmd (c:mcmd) : mcmd :=
-    List.fold_right (fun i c' => arralloc_i i ++ c') [::] c.
+    foldr (fun i c' => arralloc_i i ++ c') [::] c.
+
+  Lemma arralloc_cat (c1 c2: mcmd) :
+    arralloc_cmd (c1 ++ c2) = (arralloc_cmd c1) ++ (arralloc_cmd c2).
+  Proof.
+    elim: c1=> // a l IH /=.
+    by rewrite IH catA.
+  Qed.
 
   Variable P: prog.
 
@@ -451,38 +458,46 @@ Module ArrAlloc.
     admit. (* Annoying! *)
   Admitted.
 
-  Import Leakage_Instr.
-
   Lemma ct_head a l:
-    constant_time_instr P (a :: l)
-    -> constant_time_instr P [:: a].
+    (forall s, exists s' t, mtsem s (l ++ [:: a]) t s') ->
+    constant_time_instr P (l ++ [:: a]) -> constant_time_instr P l.
   Proof.
-    elim: l=> // a' l IH H.
-    apply: IH.
-    move=> s1 s2 s1' s2' t1 t2 Hpub.
+    move=> Hsem H s1 s2 s1' s2' t1 t2 Hpub H1 H2.
     rewrite /constant_time_instr in H.
-    move=> /mtsem_inv [s1'' [t1' [Hi1 [Hc1 Ht1]]]].
-    move=> /mtsem_inv [s2'' [t2' [Hi2 [Hc2 Ht2]]]].
-    have H1: mtsem s1 [:: a, a' & l] (trace_instr s1 a ++ trace_instr s1'' a' ++ t1') s1'.
-      apply: MTEseq.
-      exact: Hi1.
-      apply: MTEseq.
-      admit. (* Does a' actually have semantics? -> missing hypothesis *)
-      exact: Hc1.
+    move: (Hsem s1)=> [s1'' [t1' Hs1]].
+    move: (Hsem s2)=> [s2'' [t2' Hs2]].
+    move: H=> /(_ _ _ _ _ _ _ Hpub Hs1 Hs2) H.
+    move: Hs1=> /mtsem_cat_inv [s1'_ [t1_ [t1'' [Hc1 [Hi1 Ht1]]]]].
+    move: Hi1=> /mtsem_inv [s1''_ [t1'_ [Hi1 [Hskip1 Ht1'_]]]].
+    move: Hs2=> /mtsem_cat_inv [s2'_ [t2_ [t2'' [Hc2 [Hi2 Ht2]]]]].
+    move: Hi2=> /mtsem_inv [s2''_ [t2'_ [Hi2 [Hskip2 Ht2'_]]]].
+    have: t1_ = t2_.
+      rewrite {}Ht2'_ in Ht2.
+      rewrite {}Ht1'_ in Ht1.
+      rewrite {}Ht2 {}Ht1 in H.
   Admitted.
 
   Theorem preserve_ct: forall c,
     constant_time_instr P c
     -> constant_time_instr P (arralloc_cmd c).
   Proof.
-    elim=> // a l IH Hsrc.
-    rewrite /=.
+    elim/List.rev_ind=> // a l IH Hsrc.
+    rewrite arralloc_cat.
     move=> s1 s2 s1' s2' t1 t2 Hpub.
-    move=> /mtsem_cat_inv [s1'' [t1' [t1'' [Ht1c1 [Ht1c2 ->]]]]].
-    move=> /mtsem_cat_inv [s2'' [t2' [t2'' [Ht2c1 [Ht2c2 ->]]]]].
+    move=> /mtsem_cat_inv [s1'' [t1_1 [t1_2 [Hc1 [/= Hi1 ->]]]]].
+    rewrite cats0 in Hi1.
+    move=> /mtsem_cat_inv [s2'' [t2_1 [t2_2 [Hc2 [/= Hi2 ->]]]]].
+    rewrite cats0 in Hi2.
     congr (_ ++ _).
-    apply: arralloc_i_ct.
-    admit.
+    have Hl: constant_time_instr P l.
+      apply: (ct_head _ Hsrc).
+      admit.
+    exact: (IH Hl _ _ _ _ _ _ Hpub Hc1 Hc2).
+    case: a Hsrc Hi1 Hi2=> r e Hsrc /= Hi1 Hi2.
+    move: Hi1=> /mtsem_inv [s1_3 [t1_3 [Hi1 [Hc1' ->]]]].
+    move: Hi2=> /mtsem_inv [s2_3 [t2_3 [Hi2 [Hc2' ->]]]].
+    rewrite /=.
+    congr (_ :: _).
     admit.
   Admitted.
   End Instr_Proof.
