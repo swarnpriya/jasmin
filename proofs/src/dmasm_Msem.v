@@ -91,21 +91,6 @@ Fixpoint msem_mexpr (s: svmap) (e: mexpr) : exec svalue :=
     ok (SVword (FArray.get t i))
   end.
 
-Fixpoint trace_expr (s: svmap) (e: mexpr) :=
-  match e with
-  | Mvar v => [::]
-  | Mbool b => [::]
-  | Mconst z => [::]
-  | Madd e1 e2 => (trace_expr s e1) ++ (trace_expr s e2)
-  | Mand e1 e2 => (trace_expr s e1) ++ (trace_expr s e2)
-  | Mget x e => [:: msem_mexpr s e]
-  end.
-
-Definition trace_instr (s: svmap) (c: minstr) :=
-  match c with
-  | MCassgn _ e => trace_expr s e
-  end.
-
 Definition mwrite_rval (l: mrval) (v: svalue) (s: svmap) : exec svmap :=
   match l with
   | MRvar x => sset_var s x v
@@ -143,33 +128,87 @@ Proof.
   by case=> s1 s2 x e H; case: (bindW H); eauto.
 Qed.
 
-Fixpoint foo (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p} : seq mrval.
+Lemma msem_cat_inv s c1 c2 s': msem s (c1 ++ c2) s' -> exists s1, msem s c1 s1 /\ msem s1 c2 s'.
+Proof.
+elim: c1 s=> [|a l IH] s /=.
++ exists s; split=> //; exact: MEskip.
++ move=> /msem_inv [s1 [Hi Hc]].
+  move: (IH _ Hc)=> [s2 [Hc1 Hc2]].
+  exists s2; split=> //.
+  apply: MEseq; [exact: Hi|exact: Hc1].
+Qed.
+
+Lemma msem_I_det s s1 s2 i: msem_I s i s1 -> msem_I s i s2 -> s1 = s2.
+Proof.
+  case: i=> r e.
+  move=> /msem_I_inv [v1 [Hv1 Hr1]].
+  move=> /msem_I_inv [v2 []].
+  rewrite {}Hv1 => -[] <-.
+  by rewrite Hr1=> -[] <-.
+Qed.
+
+(*
+ * Define the trace of instructions
+ *)
+
+Module Trace.
+Fixpoint trace_expr (s: svmap) (e: mexpr) :=
+  match e with
+  | Mvar v => [::]
+  | Mbool b => [::]
+  | Mconst z => [::]
+  | Madd e1 e2 => (trace_expr s e1) ++ (trace_expr s e2)
+  | Mand e1 e2 => (trace_expr s e1) ++ (trace_expr s e2)
+  | Mget x e => [:: msem_mexpr s e]
+  end.
+
+Definition trace_instr (s: svmap) (c: minstr) :=
+  match c with
+  | MCassgn _ e => trace_expr s e
+  end.
+End Trace.
+
+(*
+ * Definition 1/4: use a fixpoint
+ *)
+Module Leakage_Fix.
+Fixpoint leakage_fix (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p} : seq (exec svalue).
   refine
-  (match c return msem s c s' -> seq mrval with
+  (match c as c0 return c = c0 -> seq (exec svalue) with
   | [::] => fun _ => [::]
-  | i :: c =>
-    match i return msem s (i :: c) s' -> seq mrval with
-    | MCassgn r e => _
-    end
-  end p).
-  move=> p'.
-  case He: (msem_mexpr s e)=> [v|].
-  case Hs: (mwrite_rval r v s)=> [s1|].
-  refine (r :: (foo s1 c s' _)).
-  move: (msem_inv p')=> [s1' [Hi1 Hc1]].
-  move: (msem_I_inv Hi1)=> [v' [Hv' Hs']].
-  congruence.
-  all: (exfalso;
-  move: (msem_inv p')=> [s1' [Hi1 Hc1]];
-  move: (msem_I_inv Hi1)=> [v' [Hv' Hs']];
-  congruence).
-Fail Defined.
-Abort.
+  | i :: c' => fun (Hc: c = i::c') =>
+    (Trace.trace_instr s i) ++
+    (match i as i0 return i = i0 -> seq (exec svalue) with
+    | MCassgn r e => fun (Hi: i = MCassgn r e) =>
+      match msem_mexpr s e as e0 return msem_mexpr s e = e0 -> seq (exec svalue) with
+      | Ok v => fun (He : msem_mexpr s e = ok v) =>
+        match mwrite_rval r v s as s0 return mwrite_rval r v s = s0 -> seq (exec svalue) with
+        | Ok s1 => fun (Hs: mwrite_rval r v s = ok s1) => (leakage_fix s1 c' s' _)
+        | Error err => _
+        end (erefl _)
+      | Error err => _
+      end (erefl _)
+    end (erefl _))
+  end (erefl _)).
+  + case: p Hc He Hs;first by done.
+    move=> s0 s2 s3 i0 c0 H1 H2 H.
+    move: H H1 H2 => [-> ->] H1.
+    case: H1 Hi => ???? H Heq.
+    move: Heq H=> [-> ->] H1 H2 H3 H4.
+    move: H1;rewrite H3 /= H4 => -[->];exact H2.
+  + by move=> _;exact [::].
+  by move=> _;exact [::].
+Defined.
+End Leakage_Fix.
 
-Variant ex_trace : Prop :=
-  ExT : seq (exec svalue) -> ex_trace.
+(*
+ * Definition 2/4: put the trace in Prop to make it simpler
+ *)
+Module Leakage_Ex.
+Variant trace : Prop :=
+  ExT : seq (exec svalue) -> trace.
 
-Definition ex_trace_cat t1 t2 :=
+Definition trace_cat t1 t2 :=
   match t1 with
   | ExT s1 =>
     match t2 with
@@ -177,44 +216,57 @@ Definition ex_trace_cat t1 t2 :=
     end
   end.
 
-Definition ex_leakage (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') : ex_trace.
+Definition trace_cons l t :=
+  match t with
+  | ExT s => ExT (l :: s)
+  end.
+
+Definition leakage (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') : trace.
 Proof.
   elim: c s p=> [s H|i c H s].
   exact (ExT [::]).
   move => /msem_inv [s1 [Hi /H [] q]].
-  exact (ExT ((trace_instr s i) ++ q)).
+  exact (ExT ((Trace.trace_instr s i) ++ q)).
 Defined.
 
-Lemma ex_leakage_cat s c1 c2 s' (p: msem s (c1 ++ c2) s') s1 p' p'':
-  @ex_leakage s (c1 ++ c2) s' p = ex_trace_cat (@ex_leakage s c1 s1 p') (@ex_leakage s1 c2 s' p'').
+Lemma leakage_irr (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') (p': msem s c s'):
+  leakage p = leakage p'.
 Proof.
+  case: c p p'=> [p p'|a l IH].
 Admitted.
 
-Module LEAKAGE.
-Fixpoint leakage s c s' (p: msem s c s') : seq mrval.
+Lemma leakage_cat s c1 c2 s' (p: msem s (c1 ++ c2) s'):
+  exists s1 p' p'',
+  @leakage s (c1 ++ c2) s' p = trace_cat (@leakage s c1 s1 p') (@leakage s1 c2 s' p'').
 Proof.
-  refine
-    (match c return msem s c s' → seq mrval with
-     | [::] => λ _, [::]
-     | MCassgn x e :: c' =>
-       λ p',
-       match msem_mexpr s e as r
-       return msem_mexpr s e = r → seq mrval
-       with
-       | Error _ => λ K, False_rect _ _
-       | Ok v =>
-         λ Hv,
-         match mwrite_rval x v s as r
-         return mwrite_rval x v s = r → seq mrval
-         with
-         | Error _ => λ K, False_rect _ _
-         | Ok s1 => λ Hs1, x :: leakage s1 c' s' _
-         end Logic.eq_refl
-       end Logic.eq_refl
-     end p);
-  case: (msem_inv p') => s1' [/msem_I_inv [v' [X Y]] Z]; congruence.
-Defined.
-End LEAKAGE.
+  move: (msem_cat_inv p)=> [s1 [p' p'']].
+  exists s1; exists p'; exists p''.
+  elim: c1 s p p'=> /= [s p p'|a l IH s p p'].
+  move: p'=> /msem_inv H.
+  admit.
+  move: p=> /msem_inv [s2 [Hs2 Hs2']].
+  move: p'=> /msem_inv [s3 [Hs3 Hs3']].
+  move: (IH _ Hs2').
+Admitted.
+End Leakage_Ex.
+
+(*
+ * Definition 3/4: instrumented big step semantics
+ *)
+Module Leakage_Instr.
+  (* TODO *)
+End Leakage_Instr.
+
+(*
+ * Definition 4/4: using small step semantics (two possibilities?)
+ *)
+Module Leakage_Smallstep.
+  (* TODO *)
+End Leakage_Smallstep.
+
+(*
+ * Define the constant time property (here, associated with Leakage_Ex)
+ *)
 
 Definition seq_on (s : Sv.t) (vm1 vm2 : svmap) :=
   forall x, Sv.In x s -> vm1.[x]%vmap = vm2.[x]%vmap.
@@ -222,7 +274,7 @@ Definition seq_on (s : Sv.t) (vm1 vm2 : svmap) :=
 Section ConstantTime.
   Variable P: prog.
 
-  Variable leakage: forall s c s', msem s c s' -> ex_trace.
+  Variable leakage: forall s c s', msem s c s' -> Leakage_Ex.trace.
 
   Definition is_pub (v: var_i) := (var_info_to_attr v.(v_info)).(va_pub).
 
@@ -260,17 +312,13 @@ Section ArrAlloc.
     List.fold_right (fun i c' => arralloc_i i ++ c') [::] c.
 
   Variable P: prog.
-  (*Variable leakage: forall s c s', msem s c s' -> ex_trace.*)
 
   Theorem preserve_ct: forall c,
-    constant_time P leakage c
-    -> constant_time P leakage (arralloc_cmd c).
+    constant_time P Leakage_Ex.leakage c
+    -> constant_time P Leakage_Ex.leakage (arralloc_cmd c).
   Proof.
     elim=> // a l IH Hsrc.
     rewrite /=.
     move=> s1 s2 s1' s2' H H' Hpub.
-    rewrite /leakage /=.
-    cbv.
-    move=> s1 s1'.
   Admitted.
 End ArrAlloc.
