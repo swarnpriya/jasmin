@@ -12,8 +12,10 @@ Local Open Scope Z_scope.
 Import dmasm_utils.
 Import dmasm_type.
 Import dmasm_var.
+Import dmasm_sem.
 Import dmasm_Ssem.
 Import dmasm_Msem.
+Import memory.
 
 Definition hpred : Type :=
   svmap → Prop.
@@ -50,13 +52,13 @@ Lemma hoare_assgn (P: hpred) x e :
   hoare
     (λ s, ∀ v s',
         msem_mexpr s e = ok v →
-        sset_var s x v = ok s' →
+        mwrite_rval x v s = ok s' →
         P s')
     [:: MCassgn x e] P.
 Proof.
   move=> s s1 / msem_inv [ s' [Hi /msem_inv]] ->.
   case: (msem_I_inv Hi) => v [ Hv Hs' ].
-  firstorder.
+  exact (λ H, H _ _ Hv Hs').
 Qed.
 
 (* WP *)
@@ -132,12 +134,16 @@ Proof.
   rewrite Fv.get0 Mv.get0.
 Qed.
 
+Remark ffalse_denote (P: Prop) s : ⟦ ffalse ⟧ s → P.
+Proof. easy. Qed.
+
 Inductive texpr : stype → Type :=
-| Tvar v : texpr (vtype v)
-| Tconst `(Z) : texpr sint
+| Tvar x : texpr (vtype x)
+| Tconst `(word) : texpr sword
 | Tbool `(bool) : texpr sbool
-| Tadd (_ _: texpr sint) : texpr sint
+| Tadd (_ _: texpr sword) : texpr sword
 | Tand (_ _: texpr sbool) : texpr sbool
+| Tget `(positive) `(Ident.ident) `(texpr sword) : texpr sword
 .
 
 Section SEM_TEXPR.
@@ -147,8 +153,12 @@ Section SEM_TEXPR.
     | Tvar x => m.[x]
     | Tconst z => z
     | Tbool b => b
-    | Tadd p q => sem_texpr sint p + sem_texpr sint q
+    | Tadd p q => I64.add (sem_texpr sword p) (sem_texpr sword q)
     | Tand p q => sem_texpr sbool p && sem_texpr sbool q
+    | Tget n x e =>
+      let a := m.[{| vtype := sarr n; vname := x |}] in
+      let i := sem_texpr sword e in
+      FArray.get a i
     end%mv.
 End SEM_TEXPR.
 
@@ -162,7 +172,7 @@ Qed.
 
 Definition stype_eq_dec (ty ty': stype) : { ty = ty' } + { True } :=
   match ty, ty' with
-  | sint, sint => left Logic.eq_refl
+  | sword, sword => left Logic.eq_refl
   | sbool, sbool => left Logic.eq_refl
   | _, _ => right I
   end.
@@ -174,13 +184,13 @@ Fixpoint type_check_mexpr (e: mexpr) (ty: stype) : option (texpr ty) :=
     | left EQ => Some (eq_rect _ _ (Tvar x) _ EQ)
     | right _ => None
     end
-  | Mconst z => match ty with sint => Some (Tconst z) | _ => None end
+  | Mconst z => match ty with sword => Some (Tconst z) | _ => None end
   | Mbool b => match ty with sbool => Some (Tbool b) | _ => None end
   | Madd p q =>
-    match type_check_mexpr p sint with
+    match type_check_mexpr p sword with
     | Some tp =>
-    match type_check_mexpr q sint with
-    | Some tq => match ty with sint => Some (Tadd tp tq) | _ => None end
+    match type_check_mexpr q sword with
+    | Some tq => match ty with sword => Some (Tadd tp tq) | _ => None end
     | None => None end
     | None => None end
   | Mand p q =>
@@ -190,6 +200,13 @@ Fixpoint type_check_mexpr (e: mexpr) (ty: stype) : option (texpr ty) :=
     | Some tq => match ty with sbool => Some (Tand tp tq) | _ => None end
     | None => None end
     | None => None end
+  | Mget x e =>
+    match x with
+    | Var (sarr n) t =>
+    match type_check_mexpr e sword with
+    | Some te => match ty with sword => Some (Tget n t te) | _ => None end
+    | None => None end
+    | _ => None end
   end.
 
 Definition Some_inj {A} (a a': A) (H: Some a = Some a') : a = a' :=
@@ -202,6 +219,11 @@ Lemma of_sval_to_sval ty x :
   of_sval ty (to_sval x) = ok x.
 Proof. by move: x; case ty. Qed.
 
+Lemma sto_word_inv x i :
+  sto_word x = ok i →
+  x = i.
+Proof. case: x => // i' H; apply ok_inj in H. congruence. Qed.
+
 Lemma sto_int_inv x i :
   sto_int x = ok i →
   x = i.
@@ -211,6 +233,15 @@ Lemma sto_bool_inv x b :
   sto_bool x = ok b →
   x = b.
 Proof. case: x => // i' H; apply ok_inj in H. congruence. Qed.
+
+Lemma of_sval_arr_inv ty n f y :
+  of_sval ty (SVarr n f) = ok y →
+  ∃ n (Ty : sarr n = ty), y = eq_rect (sarr n) ssem_t f _ Ty.
+Proof.
+  case: ty y => // n' f' H.
+  apply ok_inj in H; subst f'.
+  exists n', Logic.eq_refl. reflexivity.
+Qed.
 
 Lemma type_check_mexprP {e ty te} :
   type_check_mexpr e ty = Some te →
@@ -234,10 +265,10 @@ Proof.
     reflexivity.
   - move=> p IHp q IHq ty te.
     simpl.
-    move: (IHp sint). clear IHp.
+    move: (IHp sword). clear IHp.
     case: (type_check_mexpr p _) => // tp IHp.
     specialize (IHp _ Logic.eq_refl).
-    move: (IHq sint). clear IHq.
+    move: (IHq sword). clear IHq.
     case: (type_check_mexpr q _) => // tq IHq.
     specialize (IHq _ Logic.eq_refl).
     move: te. case: ty => // te H; apply Some_inj in H; subst.
@@ -250,10 +281,10 @@ Proof.
     move=> s' E. simpl.
     specialize (IHp _ _ Ep _ E).
     specialize (IHq _ _ Eq _ E).
-    apply sto_int_inv in IHp.
-    apply sto_int_inv in IHq.
-    apply sto_int_inv in Tp.
-    apply sto_int_inv in Tq. congruence.
+    apply sto_word_inv in IHp.
+    apply sto_word_inv in IHq.
+    apply sto_word_inv in Tp.
+    apply sto_word_inv in Tq. congruence.
   - move=> p IHp q IHq ty te.
     simpl.
     move: (IHp sbool). clear IHp.
@@ -276,9 +307,24 @@ Proof.
     apply sto_bool_inv in IHq.
     apply sto_bool_inv in Tp.
     apply sto_bool_inv in Tq. congruence.
+  - move=> [[]] // n t e IH ty te.
+    simpl.
+    move: (IH sword). clear IH.
+    case: (type_check_mexpr _ _) => // tt IH.
+    specialize (IH _ Logic.eq_refl).
+    move: te. case: ty => // te H; apply Some_inj in H; subst.
+    move=> s v.
+    move=> H; case: (bindW H) => vp Ep. clear H.
+    case: (bindW Ep) => i Ei Ti. clear Ep.
+    move=> H; apply ok_inj in H; subst.
+    move=> s' E. simpl.
+    specialize (IH _ _ Ei _ E).
+    apply sto_word_inv in IH.
+    apply sto_word_inv in Ti.
+    congruence.
 Qed.
 
-Definition wp_assgn (x: var) (e: mexpr) (f: formula) : formula.
+Definition wp_set (x: var) (e: mexpr) (f: formula) : formula.
   refine
   match type_check_mexpr e (vtype x) with
   | Some te =>
@@ -295,15 +341,78 @@ Proof.
   apply X; etransitivity; [ apply sem_texpr_m, E | exact V ]).
 Defined.
 
+Definition has_array_type (x: var) : { n | vtype x = sarr n } + { True } :=
+  match vtype x with
+  | sarr n => inleft (exist _ n Logic.eq_refl)
+  | _ => inright I
+  end.
+
+Definition wp_store (x: var) (e e': mexpr) (f: formula) : formula.
+  refine
+  match has_array_type x with
+  | inleft (exist n Tx as Tx') =>
+  match type_check_mexpr e sword with
+  | Some te =>
+  match type_check_mexpr e' sword with
+  | Some te' =>
+    existT _ (
+    λ s,
+    ∀ i v,
+      let t := eq_rect _ _  s.[x]%mv _ Tx in
+      sem_texpr s sword te = i →
+      sem_texpr s sword te' = v →
+      let a : ssem_t (vtype x) := eq_rect _ _ (FArray.set t i v) _ (Logic.eq_sym Tx) in
+      projT1 f (s.[x <- a])%mv) _
+  | None => ffalse end
+  | None => ffalse end
+  | inright _ => ffalse end.
+Proof.
+  abstract (
+  apply formula_m;
+  move=> s s' E X i v /= Hi Hv;
+  rewrite (projT2 f); [| apply env_ext_set, env_ext_sym, E ];
+  specialize (X i v);
+  rewrite ! (sem_texpr_m _ _ E) in X;
+  specialize (X Hi Hv);
+  rewrite E in X;
+  exact X
+  ).
+Defined.
+
+Definition wp_assgn (x: mrval) : mexpr → formula → formula :=
+  match x with
+  | MRvar x => wp_set x
+  | MRaset x i => wp_store x i
+  end.
+
+Lemma mlet_inv {A} s x (f: _ → _ → exec A) y :
+  MLet (n, t) := s.[x] in f n t = ok y →
+  ∃ n (Tx: vtype x = sarr n), f n (eq_rect _ _ s.[x]%vmap _ Tx) = ok y.
+Proof.
+  unfold mon_arr_var.
+  generalize (s.[x])%vmap.
+  case: (vtype x) => // n t E.
+  exists n, Logic.eq_refl. exact E.
+Qed.
+
+Lemma eq_rect_eq {K} (T T1 T2: K) F (x1: F T1) (x2: F T2) (H1: T1 = T) (H2: T2 = T):
+  (∀ E, x1 = eq_rect _ _ x2 _ E) →
+  eq_rect T1 F x1 T H1 = eq_rect T2 F x2 T H2.
+Proof.
+  subst. exact (λ H, H Logic.eq_refl).
+Qed.
+
 Lemma wp_assgn_sound x e f :
   hoare ⟦wp_assgn x e f⟧ [:: MCassgn x e] ⟦f⟧.
 Proof.
   move=> s s1 /msem_inv [s' [H' /msem_inv]] ->.
   case: (msem_I_inv H') => v [Hv H]. clear H'.
+  case: x H => [ x | x e' ] /= H.
+
   case: (bindW H) => [u Hu Hs']. clear H.
   apply ok_inj in Hs'. subst s'.
-  unfold wp_assgn.
-  case (type_check_mexpr _ _) eqn: EQ. 2: firstorder.
+  unfold wp_set.
+  case (type_check_mexpr _ _) eqn: EQ. 2: apply: ffalse_denote.
   move: (type_check_mexprP EQ _ _ Hv) => R.
   unfold formula_denote. simpl.
   move=> X.
@@ -316,6 +425,38 @@ Proof.
   apply: ok_inj. etransitivity. 2: apply Hu.
   symmetry. apply R.
   auto.
+
+  unfold wp_store.
+  case: has_array_type => [ [n Tx] | _ ]. 2: apply: ffalse_denote.
+  apply mlet_inv in H. move: H => [n' [Tx' H]].
+  case: (bindW H) => [i Hi' H']. clear H.
+  case: (bindW Hi') => [i' Hi H]. clear Hi'.
+  apply sto_word_inv in H. subst i'.
+  case: (bindW H') => [v' Hv' H]. clear H'.
+  apply sto_word_inv in Hv'. subst v.
+  case: (bindW H) => [q Hq H']. clear H.
+  apply ok_inj in H'. subst s'.
+  case (type_check_mexpr _ _) eqn: EQ. 2: apply: ffalse_denote.
+  case (type_check_mexpr e _) eqn: EQ'. 2: apply: ffalse_denote.
+  move: (type_check_mexprP EQ _ _ Hi) => R. clear EQ Hi.
+  move: (type_check_mexprP EQ' _ _ Hv) => R'. clear EQ' Hv.
+  apply of_sval_arr_inv in Hq. move: Hq => [n'' [Tx'' ->]].
+  unfold formula_denote. simpl.
+  move=> X.
+  rewrite (projT2 f). apply X; clear X.
+  apply (@ok_inj error). rewrite <- R by apply Mv.get0. reflexivity.
+  apply (@ok_inj error). rewrite <- R' by apply Mv.get0. reflexivity.
+  clear X.
+  move=> y. rewrite Mv.get0.
+  case: (x =P y).
+  move=> <-. rewrite ! (Fv.setP_eq, Mv.setP_eq, Mv.get0).
+  apply eq_rect_eq. clear.
+  assert (n = n'). congruence. subst n'. move=> E.
+  assert (n = n''). congruence. subst n''.
+  move: (Eqdep_dec.UIP_dec dmasm_type.stype_eq_dec E Logic.eq_refl) ->. simpl. f_equal.
+  apply eq_rect_eq. clear. move=> E.
+  move: (Eqdep_dec.UIP_dec dmasm_type.stype_eq_dec E Logic.eq_refl) ->. reflexivity.
+  move=> NE. rewrite ! (Fv.setP_neq, Mv.setP_neq) //; case: eqP => //.
 Qed.
 
 Definition wp_minstr (i: minstr) (f: formula) : formula :=
@@ -353,27 +494,46 @@ Proof.
 Qed.
 
 Section Example.
-  Let x : var := Var sint "x".
-  Let y : var := Var sint "y".
+  Let x : var := Var sword "x".
+  Let y : var := Var sword "y".
 
   Let p : mcmd :=
-    MCassgn x (Mconst 1)
- :: MCassgn x (Madd (Mvar x) (Mconst 1))
- :: MCassgn y (Madd (Mvar x) (Mvar x))
- :: MCassgn x (Madd (Mvar y) (Mvar y))
- :: MCassgn y (Madd (Mvar x) (Mvar x))
- :: MCassgn x (Madd (Mvar y) (Mvar y))
- :: MCassgn y (Madd (Mvar x) (Mvar x))
- :: MCassgn x (Madd (Mvar y) (Mvar y))
+    MCassgn (MRvar x) (Mconst (I64.repr 1))
+ :: MCassgn (MRvar x) (Madd (Mvar x) (Mconst (I64.repr 1)))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar x))
+ :: MCassgn (MRvar x) (Madd (Mvar y) (Mvar y))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar x))
+ :: MCassgn (MRvar x) (Madd (Mvar y) (Mvar y))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar x))
+ :: MCassgn (MRvar x) (Madd (Mvar y) (Mvar y))
  :: nil.
 
-  Goal hoare (λ _, True) p (λ e, Z.even e.[x]%vmap).
+  Goal hoare (λ _, True) p (λ e, Z.even (I64.unsigned (e.[x]%vmap))).
   Proof.
     apply hoare_by_wp. move=> q _.
-    simpl. setoid_rewrite Mv.setP_eq.
+    Opaque I64.add Z.even I64.repr I64.unsigned.
+    compute.
+    Transparent I64.add Z.even I64.repr I64.unsigned.
     intuition subst.
     reflexivity.
   Abort.
+
+  Let t : var := Var (sarr 1) "t".
+
+  Let q : mcmd :=
+    MCassgn (MRaset t (Mconst I64.zero)) (Mconst (I64.repr 33))
+ :: MCassgn (MRvar x) (Madd (Mconst (I64.repr 9)) (Mget t (Mconst I64.zero)))
+ :: nil.
+
+  Goal hoare (λ _, True) q (λ e, 42 = I64.unsigned e.[x]%vmap).
+  Proof.
+    apply hoare_by_wp. move=> z _.
+    Opaque Z.eqb I64.add I64.repr I64.unsigned.
+    compute.
+    Transparent Z.eqb I64.add I64.repr I64.unsigned.
+    intuition subst. vm_compute.
+  Abort.
+
 
 End Example.
 
@@ -435,7 +595,7 @@ Definition abstract_var (x: var) (f: formula) :
 Section Example0.
   Local Open Scope Z_scope.
   Let x : var := Var sbool "x".
-  Let y : var := Var sint "y".
+  Let y : var := Var sword "y".
 
   Let P (b: bool) (n: Z) : Prop :=
     if b then Z.gcd n 4 = 2 else 0 < n.
