@@ -50,12 +50,72 @@ Inductive mexpr : Type :=
   | Mand : mexpr -> mexpr -> mexpr
   | Mget : var -> mexpr -> mexpr.
 
+Fixpoint mexpr_beq (e1 e2: mexpr) :=
+  match e1, e2 with
+  | Mvar v1, Mvar v2 => v1 == v2
+  | Mconst w1, Mconst w2 => w1 == w2
+  | Mbool b1, Mbool b2 => b1 == b2
+  | Madd e1 f1, Madd e2 f2 => (mexpr_beq e1 e2) && (mexpr_beq f1 f2)
+  | Mand e1 f1, Mand e2 f2 => (mexpr_beq e1 e2) && (mexpr_beq f1 f2)
+  | Mget v1 e1, Mget v2 e2 => (v1 == v2) && (mexpr_beq e1 e2)
+  | _, _ => false
+  end.
+
+Lemma mexpr_beq_axiom: Equality.axiom mexpr_beq.
+Proof.
+  elim=> [v1|v1|v1|e1 He1 f1 Hf1|e1 He1 f1 Hf1|v1 e1 H1] [v2|v2|v2|e2 f2|e2 f2|v2 e2] //=;
+  try (apply: (@equivP (v1 = v2)); [exact: eqP|split=> [->|[]->] //]);
+  try exact: ReflectF;
+  try (apply: (@equivP (mexpr_beq e1 e2 /\ mexpr_beq f1 f2)); [apply/andP|split=> [[H11 H12]|]];
+  [apply: (equivP (He1 e2))=> [|//]; split; [|by move=>[] ->];
+  by move=> ->; congr (_ _); apply: (equivP (Hf1 f2))|
+  move=> [] <- <-; split; [by apply/He1|by apply/Hf1]]).
+  apply: (@equivP ((v1 == v2) /\ mexpr_beq e1 e2)); [apply/andP|split].
+  move=> [/eqP -> ?].
+  apply: (equivP (H1 e2))=> //; split=> [->|[] ->] //.
+  by move=> [] <- <-; split; [exact: eq_refl|apply/H1].
+Qed.
+
+Definition mexpr_eqMixin := Equality.Mixin mexpr_beq_axiom.
+Canonical mexpr_eqType := Eval hnf in EqType mexpr mexpr_eqMixin.
+
 Variant mrval : Type :=
     MRvar : var -> mrval
   | MRaset : var -> mexpr -> mrval.
 
+Definition mrval_beq (x1:mrval) (x2:mrval) :=
+  match x1, x2 with
+  | MRvar  x1   , MRvar  x2    => x1 == x2
+  | MRaset x1 e1, MRaset x2 e2 => (x1 == x2) && (e1 == e2)
+  | _          , _           => false
+  end.
+
+Lemma mrval_eq_axiom : Equality.axiom mrval_beq.
+Proof.
+  case=> [v1|v1 e1] [v2|v2 e2] /=; try exact: ReflectF.
+  by apply: (@equivP (v1 = v2)); [by apply: eqP|split=> [->|[] ->]].
+  by apply: (@equivP ((v1 == v2) /\ (e1 == e2))); [apply/andP|split=> [[] /eqP -> /eqP ->|[] -> ->]].
+Qed.
+
+Definition mrval_eqMixin     := Equality.Mixin mrval_eq_axiom.
+Canonical  mrval_eqType      := Eval hnf in EqType mrval mrval_eqMixin.
+
 Variant minstr : Type :=
   MCassgn : mrval -> mexpr -> minstr.
+
+Fixpoint minstr_beq i1 i2 :=
+  match i1, i2 with
+  | MCassgn r1 e1, MCassgn r2 e2 => (r1 == r2) && (e1 == e2)
+  end.
+
+Lemma minstr_eq_axiom : Equality.axiom minstr_beq.
+Proof.
+  case=> [r1 e1] [r2 e2] /=.
+  by apply: (@equivP ((r1 == r2) /\ (e1 == e2))); [apply/andP|split=> [[] /eqP -> /eqP ->|[] -> ->]].
+Qed.
+
+Definition minstr_eqMixin     := Equality.Mixin minstr_eq_axiom.
+Canonical  minstr_eqType      := Eval hnf in EqType minstr minstr_eqMixin.
 
 Notation mcmd := (seq minstr).
 
@@ -321,7 +381,91 @@ End Leakage_Instr.
  * Definition 4/4: using small step semantics (two possibilities?)
  *)
 Module Leakage_Smallstep.
-  (* TODO *)
+  Definition state := (svmap * mcmd)%type.
+
+  Variant outcome :=
+  | Next : exec state -> outcome.
+
+  Definition step_instr (s: svmap) (i: minstr) :=
+    match i with
+    | MCassgn r e =>
+      Let v := msem_mexpr s e in
+      Let s' := mwrite_rval r v s in
+      ok s'
+    end.
+
+  Definition step (s: state) : outcome :=
+    match s with
+    | (m, [::]) => Next (ok s)
+    | (m, h :: q) =>
+      Next (Let m' := step_instr m h in ok (m', q))
+    end.
+
+  Definition finished (s: state) := (s.2 == [::]).
+
+  Fixpoint stepn n (s: state) : outcome :=
+    match n with
+    | 0 => Next (ok s)
+    | n'.+1 =>
+      match (step s) with
+      | Next (Ok v) => stepn n' v
+      | e => e
+      end
+    end.
+
+  Definition stepR (a b: state) : Prop := step a = Next (ok b).
+
+  Definition stepRn n (a b: state) := stepn n a = Next (ok b).
+
+  Definition exec (s: svmap) (c: mcmd) (s': svmap) :=
+    exists n, stepRn n (s, c) (s', [::]).
+
+  Lemma eq_step1 s s' i:
+    msem_I s i s' -> step_instr s i = ok s'.
+  Proof.
+    case: i=> r e /=.
+    by move=> /msem_I_inv [v [-> /= -> /=]].
+  Qed.
+
+  Lemma eq_step2 s s' i:
+    step_instr s i = ok s' -> msem_I s i s'.
+  Proof.
+    case: i=> r e /= H.
+    apply: MEassgn; move: H.
+    apply: rbindP=> v -> /=.
+    by apply: rbindP=> w -> ->.
+  Qed.
+
+  Lemma eq_bigstep1 s s' c: msem s c s' -> exec s c s'.
+  Proof.
+    rewrite /exec.
+    elim; clear.
+    move=> s; exists 42=> //.
+    move=> s1 s2 s3 i c Hi Hsem [n Hn].
+    exists n.+1.
+    rewrite /stepRn /=.
+    rewrite (eq_step1 Hi) /=.
+    exact: Hn.
+  Qed.
+
+  Lemma eq_bigstep2 s s' c: exec s c s' -> msem s c s'.
+  Proof.
+    elim: c s=> [|a l IH] s [n Hn].
+    have ->: s = s'.
+      elim: n Hn=> //=.
+      by rewrite /stepRn /stepn=> -[] ->.
+    exact: MEskip.
+    case: n Hn=> // n Hn.
+    rewrite /stepRn /= in Hn.
+    case Heq: (Let m' := step_instr s a in ok (m', l)) Hn=> [m'|] //=.
+    case: (bindW Heq)=> m Hm [] <- Hstep.
+    apply: MEseq; [apply: eq_step2; exact: Hm|apply: IH; exists n; exact: Hstep].
+  Qed.
+
+  Theorem eq_bigstep : forall s s' c, msem s c s' <-> exec s c s'.
+  Proof.
+    split; [exact: eq_bigstep1|exact: eq_bigstep2].
+  Qed.
 End Leakage_Smallstep.
 
 (*
