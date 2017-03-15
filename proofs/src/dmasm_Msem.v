@@ -119,10 +119,10 @@ Canonical  minstr_eqType      := Eval hnf in EqType minstr minstr_eqMixin.
 
 Notation mcmd := (seq minstr).
 
-Definition mon_arr_var A (s:svmap) (x:var) (f:forall n, FArray.array word -> A) :=
-  match vtype x as t return ssem_t t -> A with
+Definition mon_arr_var A (s: svmap) (x: var) (f: positive → FArray.array word → exec A) :=
+  match vtype x as t return ssem_t t → exec A with
   | sarr n => f n
-  | _ => fun _ => f xH (FArray.cnst (n2w 0))
+  | _ => λ _, type_error
   end  (s.[ x ]%vmap).
 
 Notation "'MLet' ( n , t ) ':=' s '.[' x ']' 'in' body" :=
