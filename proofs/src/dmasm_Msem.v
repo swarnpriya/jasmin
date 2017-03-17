@@ -212,7 +212,7 @@ Qed.
  *)
 
 Module Trace.
-Definition trace := seq (exec svalue).
+Definition trace := seq (exec word).
 
 Fixpoint trace_expr (s: svmap) (e: mexpr) : trace :=
   match e with
@@ -221,7 +221,7 @@ Fixpoint trace_expr (s: svmap) (e: mexpr) : trace :=
   | Mconst z => [::]
   | Madd e1 e2 => (trace_expr s e1) ++ (trace_expr s e2)
   | Mand e1 e2 => (trace_expr s e1) ++ (trace_expr s e2)
-  | Mget x e => [:: msem_mexpr s e]
+  | Mget x e => [:: msem_mexpr s e >>= sto_word]
   end.
 
 Definition trace_instr (s: svmap) (c: minstr) : trace :=
@@ -236,17 +236,17 @@ Import Trace.
  * Definition 1/4: use a fixpoint
  *)
 Module Leakage_Fix.
-Fixpoint leakage_fix (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p} : seq (exec svalue).
+Fixpoint leakage_fix (s: svmap) (c: mcmd) (s': svmap) (p: msem s c s') {struct p} : trace.
   refine
-  (match c as c0 return c = c0 -> seq (exec svalue) with
+  (match c as c0 return c = c0 -> trace with
   | [::] => fun _ => [::]
   | i :: c' => fun (Hc: c = i::c') =>
     (trace_instr s i) ++
-    (match i as i0 return i = i0 -> seq (exec svalue) with
+    (match i as i0 return i = i0 -> trace with
     | MCassgn r e => fun (Hi: i = MCassgn r e) =>
-      match msem_mexpr s e as e0 return msem_mexpr s e = e0 -> seq (exec svalue) with
+      match msem_mexpr s e as e0 return msem_mexpr s e = e0 -> trace with
       | Ok v => fun (He : msem_mexpr s e = ok v) =>
-        match mwrite_rval r v s as s0 return mwrite_rval r v s = s0 -> seq (exec svalue) with
+        match mwrite_rval r v s as s0 return mwrite_rval r v s = s0 -> trace with
         | Ok s1 => fun (Hs: mwrite_rval r v s = ok s1) => (leakage_fix s1 c' s' _)
         | Error err => _
         end (erefl _)
@@ -270,7 +270,7 @@ End Leakage_Fix.
  *)
 Module Leakage_Ex.
 Variant trace : Prop :=
-  ExT : seq (exec svalue) -> trace.
+  ExT : Trace.trace -> trace.
 
 Definition trace_cat t1 t2 :=
   match t1 with
@@ -543,11 +543,17 @@ Module Leakage_Smallstep.
       by rewrite Hn=> -[] -> ->.
   Qed.
 
-  Lemma leakage_plusn s c t s': leakage s c t s' -> exists n, forall d, leak_stepRn (n + d) t (s, c) (s', [::]).
+  Lemma leakage_plusn s c t s': leakage s c t s' -> exists n, forall d, leak_stepRn (d + n) t (s, c) (s', [::]).
   Proof.
     move=> [n Hn]; exists n=> d.
     apply: (leak_step_cont _ Hn).
-    exact: leq_addr.
+    exact: leq_addl.
+  Qed.
+
+  Lemma leakage_forn s c t s' n t1 s1:
+    leak_stepn n (s, c) [::] = (Next (ok (s1, [::])), t1) -> s' = s1 -> t = t1 -> leakage s c t s'.
+  Proof.
+    move=> H -> ->; exists n; exact: H.
   Qed.
 
   Lemma leak_stepn_end n s t:
@@ -570,8 +576,7 @@ Module Leakage_Smallstep.
         exists [::].
         move: Hs=> /(_ [::]) Hs.
         rewrite leak_stepn_end cats0 in Hs.
-        have H': (Next (ok (s, [::])), [::]) = (r, t1) by exact: Hs.
-        move: H'=> -[] <- Ht.
+        move: Hs=> -[] <- Ht.
         rewrite -Ht in Ht1.
         split=> // t0.
         by rewrite leak_stepn_end.
@@ -882,12 +887,12 @@ Module ArrAlloc.
     elim: e n=> [v|w|b|e1 He1 e2 He2|e1 He1 e2 He2|v e He] n s1 s2 s1' s2' t1 t2 Hpub H1 H2; try (
       rewrite /= in H1, H2;
       move: H1=> /leakage_plusn [n1] /(_ 1) H1;
-      rewrite addn1 /= /leak_stepRn /= in H1;
+      rewrite /= /leak_stepRn /= in H1;
       case: (MLet (n, t):= s1.[glob_arr] in _) H1=> [a1 /=|//] H1;
       rewrite leak_stepn_end in H1;
       move: H1=> -[] _ <-;
       move: H2=> /leakage_plusn [n2] /(_ 1) H2;
-      rewrite addn1 /= /leak_stepRn /= in H2;
+      rewrite /= /leak_stepRn /= in H2;
       case: (MLet (n, t):= s2.[glob_arr] in _) H2=> [a2 /=|//] H2;
       rewrite leak_stepn_end in H2;
       by move: H2=> -[] _ <-).
@@ -904,10 +909,64 @@ Module ArrAlloc.
     admit.
   Admitted.
 
+  (*
+  Lemma ct_head l:
+    constant_time_ss P l -> forall l' l'', l = l' ++ l'' -> constant_time_ss P l'.
+  Proof.
+    elim/List.rev_ind: l=> //=.
+    + move=> H.
+      case; case=> //.
+    + move=> x l IH H l' l''.
+      case: l''=> [|x' l'' Hl''].
+      + rewrite cats0 => <- //.
+      + apply: IH.
+  *)
+    (**)
   Lemma ct_head a l:
     constant_time_ss P (l ++ [:: a]) -> constant_time_ss P l.
   Proof.
+    move=> H s1 s2 s1' s2' t1 t2 Hpub H1 H2.
+    move: H=> /(_ s1 s2 s1' s2' (t1 ++ (trace_instr s1' a)) (t2 ++ (trace_instr s2' a)) Hpub) H.
+    have H': t1 ++ trace_instr s1' a = t2 ++ trace_instr s2' a.
+    admit.
+    have Hsize: size t1 = size t2.
+      have Hx: size (trace_instr s1' a) = size (trace_instr s2' a).
+        by admit.
+      admit.
+    admit. (* Use eqseq_cat *)
   Admitted.
+(*
+    
+    rewrite /=.
+    elim/List.rev_ind: l=> //=.
+    + move=> _ .
+      move=> s1 s2 s1' s2' t1 t2 _.
+      move=> /leakage_plusn [n1] /(_ 1).
+      rewrite /leak_stepRn /=.
+      rewrite leak_stepn_end=> -[] _ <-.
+      move=> /leakage_plusn [n2] /(_ 1).
+      rewrite /leak_stepRn /=.
+      by rewrite leak_stepn_end=> -[] _ <-.
+    + move=> x l IH l'.
+      rewrite /=.
+      Print List.
+    (**)
+    + case: a=> e r /= H s1 s2 s1' s2' t1 t2 Hpub H1 H2.
+      
+      apply: H.
+      exact: Hpub.
+      apply: (@leakage_forn _ _ _ _ 1)=> /=.
+      case Heq: (Let m' := _ in _)=> [a|//].
+      case: (bindW Heq)=> m' {Heq}Heq.
+      case: (bindW Heq)=> v Hv {Heq}Heq.
+      case: (bindW Heq)=> s' Hs' [] <- [] <-.
+      reflexivity.
+
+      rewrite /leakage.
+      move: H=> /(_ s1 s2 s1' s2' t1 t2 Hpub).
+    move=> H s1 s2 s1' s2' t1 t2 Hpub H1 H2.
+  Admitted.
+*)
 
   Theorem preserve_ct: forall c,
     constant_time_ss P c ->
@@ -921,12 +980,12 @@ Module ArrAlloc.
     congr (_ ++ _).
     case: a Hsrc H1' H2'=> r e Hsrc H1' H2'.
     move: H1'=> /leakage_plusn [n1] /(_ 1) H1'.
-    rewrite addn1 /= /leak_stepRn /= in H1'.
+    rewrite /= /leak_stepRn /= in H1'.
     case: (MLet (_, t) := s1''.[glob_arr] in _) H1'=> [v1 /=|//].
     case: (mwrite_rval r v1 s1'')=> [s'1 /=|//].
     rewrite cats0=> H1'.
     move: H2'=> /leakage_plusn [n2] /(_ 1) H2'.
-    rewrite addn1 /= /leak_stepRn /= in H2'.
+    rewrite /= /leak_stepRn /= in H2'.
     case: (MLet (_, t) := s2''.[glob_arr] in _) H2'=> [v2 /=|//].
     case: (mwrite_rval r v2 s2'')=> [s'2 /=|//].
     rewrite cats0=> H2'.
@@ -934,6 +993,7 @@ Module ArrAlloc.
     move: H2'=> /leak_stepn_trace [t''2 [-> Ht''2]].
     congr (_ ++ _)=> //.
     rewrite /=.
+    rewrite /constant_time_ss in Hsrc.
     apply: preserve_ct_expr.
     exact: Hpub. (* cheating! *)
     admit.
