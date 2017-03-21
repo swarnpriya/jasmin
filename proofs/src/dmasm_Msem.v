@@ -100,6 +100,12 @@ Qed.
 Definition mrval_eqMixin     := Equality.Mixin mrval_eq_axiom.
 Canonical  mrval_eqType      := Eval hnf in EqType mrval mrval_eqMixin.
 
+Definition mvrv (rv:mrval) :=
+  match rv with
+  | MRvar  x    => Sv.singleton x
+  | MRaset x _  => Sv.singleton x
+  end.
+
 Variant minstr : Type :=
   MCassgn : mrval -> mexpr -> minstr.
 
@@ -127,6 +133,30 @@ Definition mon_arr_var A (s: svmap) (x: var) (f: positive → FArray.array word 
 
 Notation "'MLet' ( n , t ) ':=' s '.[' x ']' 'in' body" :=
   (@mon_arr_var _ s x (fun n (t:FArray.array word) => body)) (at level 25, s at level 0).
+
+(*
+Lemma mon_arr_varP A (f : forall n : positive, FArray.array word -> exec A) v s x P:
+  (forall n t, vtype x = sarr n ->
+               sget_var s x = @SVarr n t ->
+               f n t = ok v -> P) ->
+  mon_arr_var s x f = ok v -> P.
+Proof.
+  rewrite /mon_arr_var.
+  rewrite /sget_var.
+  rewrite /mon_arr_var=> H;apply: rbindP => vx.
+  rewrite /get_var;case: x H => -[ | | n | ] nx H; apply:rbindP => ? Hnx [] <- //.
+  by apply H;rewrite // /get_var Hnx.
+Qed.
+*)
+
+(* TODO: move *)
+Lemma svmap_eq_exceptT:
+  ∀ (vm2 : svmap) (s : Sv.t) (vm1 vm3 : svmap), vm1 = vm2 [\s] → vm2 = vm3 [\s] → vm1 = vm3 [\s].
+Proof.
+  move=> vm2 s vm1 vm3 H1 H2 z Hz.
+  rewrite H1=> //.
+  by rewrite H2.
+Qed.
 
 Fixpoint msem_mexpr (s: svmap) (e: mexpr) : exec svalue :=
   match e with
@@ -161,6 +191,17 @@ Definition mwrite_rval (l: mrval) (v: svalue) (s: svmap) : exec svmap :=
     let t := FArray.set t i v in
     sset_var s x (@to_sval (sarr n) t)
   end.
+
+Lemma mvrvP: ∀ (x : mrval) (v : svalue) (s1 s2 : svmap), mwrite_rval x v s1 = ok s2 → s1 = s2 [\mvrv x].
+Proof.
+  case=> [x|x e] v s1 s2.
+  + rewrite /= /sset_var.
+    apply: rbindP=> sv Hsv [] <- z Hz.
+    rewrite Fv.setP_neq=> //.
+    apply/eqP; SvD.fsetdec.
+  + rewrite /=.
+    admit.
+Admitted.
 
 Inductive msem : svmap -> mcmd -> svmap -> Prop :=
     MEskip : forall s : svmap, msem s [::] s
@@ -996,17 +1037,26 @@ Module ArrAlloc.
 
   Module Smallstep_Proof.
   Import Leakage_Smallstep.
-  Lemma correct e n s s' s'':
+
+  Lemma correct_e e n s s':
     exec s (arralloc_e e n) s' ->
-    Let v := msem_mexpr s e in (Let s' := mwrite_rval (glob_acc_l n) v s in ok s') = ok s'' ->
-    s' = s''.
+    Let v := msem_mexpr s e in (Let s' := mwrite_rval (glob_acc_l n) v s in ok s') = ok s'.
   Admitted.
 
-  Lemma preserve_ct_expr e n s1 s2 s1' s2' t1 t2:
-    (forall e' v, e = Mget v e' -> msem_mexpr s1 e' = msem_mexpr s2 e') →
-    leakage s1 (arralloc_e e n) t1 s1' → leakage s2 (arralloc_e e n) t2 s2' → t1 = t2.
+  Lemma correct_e' e n s s': exec s (arralloc_e e n) s' -> s = s' [\ Sv.singleton glob_arr].
   Proof.
-    elim: e n s1 s2 s1' s2' t1 t2=> [v|w|b|e1 He1 e2 He2|e1 He1 e2 He2|v e He] n s1 s2 s1' s2' t1 t2 Hs1s2 H1 H2; try (
+    move=> /correct_e.
+    apply: rbindP=> v Hv.
+    apply: rbindP=> w Hw [] <-.
+    exact: (mvrvP Hw).
+  Qed.
+
+  Lemma preserve_ct_expr e n s_1 s_2 s1 s2:
+    s_1 = s1 [\ Sv.singleton glob_arr] → s_2 = s2 [\ Sv.singleton glob_arr] →
+    (trace_expr s_1 e = trace_expr s_2 e) →
+    forall s1' s2' t1 t2, leakage s1 (arralloc_e e n) t1 s1' → leakage s2 (arralloc_e e n) t2 s2' → t1 = t2.
+  Proof.
+    elim: e n s_1 s_2 s1 s2=> [v|w|b|e1 He1 e2 He2|e1 He1 e2 He2|v e He] n s_1 s_2 s1 s2 Hs1 Hs2 Hts1s2 s1' s2' t1 t2 H1 H2; try (
       rewrite /= in H1, H2;
       move: H1=> /leakage_plusn [n1] /(_ 1) H1;
       rewrite /= /leak_stepRn /= in H1;
@@ -1018,11 +1068,18 @@ Module ArrAlloc.
       case: (MLet (n, t):= s2.[glob_arr] in _) H2=> [a2 /=|//] H2;
       rewrite leak_stepn_end in H2;
       by move: H2=> -[] _ <-).
+    (***)
     rewrite /= in H1, H2.
     move: H1=> /leakage_cat_inv [s11 [t11 [t11' [H11 [H1 ->]]]]].
     move: H1=> /leakage_cat_inv [s12 [t12 [t12' [H12 [H1 ->]]]]].
     move: H2=> /leakage_cat_inv [s21 [t21 [t21' [H21 [H2 ->]]]]].
     move: H2=> /leakage_cat_inv [s22 [t22 [t22' [H22 [H2 ->]]]]].
+    rewrite /= in Hts1s2.
+    have Ht: trace_expr s_1 e1 = trace_expr s_2 e1 /\ trace_expr s_1 e2 = trace_expr s_2 e2.
+      move: Hts1s2=> /eqP Hts1s2.
+      rewrite eqseq_cat in Hts1s2.
+      by move: Hts1s2=> /andP [/eqP -> /eqP ->].
+      exact: size_trace_expr.
     congr ((_ ++ _) ++ _).
     + move: H1=> /leakage_plusn [n1] /(_ 1) H1.
       rewrite /= /leak_stepRn /= in H1.
@@ -1036,17 +1093,52 @@ Module ArrAlloc.
       case: (MLet (n0, t) := s22.[glob_arr] in _) H2=> [a22 /=|//] H2.
       rewrite leak_stepn_end in H2.
       by move: H2=> -[] _ <-.
-    + apply: (He2 _ _ _ _ _ _ _ _ H12 H22).
-      admit.
-    + apply: (He1 _ _ _ _ _ _ _ _ H11 H21).
-      admit.
-    admit. (* same *)
-    have H1' := H1.
-    move: H1'=> /leak_imp_step /correct.
-    move=> /(_ s1) H1'.
-    have H2' := H2.
-    move: H2'=> /leak_imp_step /correct.
-    move=> /(_ s2) H2'.
+    + apply: (He2 _ _ _ _ _ _ _ _ _ _ _ _ H12 H22).
+      apply: (svmap_eq_exceptT Hs1).
+      exact: (correct_e' (leak_imp_step H11)).
+      apply: (svmap_eq_exceptT Hs2).
+      exact: (correct_e' (leak_imp_step H21)).
+      exact: Ht.2.
+    + apply: (He1 _ _ _ _ _ _ _ _ _ _ _ _ H11 H21).
+      exact: Hs1.
+      exact: Hs2.
+      exact: Ht.1.
+    (*** TODO: fix copypaste *)
+    rewrite /= in H1, H2.
+    move: H1=> /leakage_cat_inv [s11 [t11 [t11' [H11 [H1 ->]]]]].
+    move: H1=> /leakage_cat_inv [s12 [t12 [t12' [H12 [H1 ->]]]]].
+    move: H2=> /leakage_cat_inv [s21 [t21 [t21' [H21 [H2 ->]]]]].
+    move: H2=> /leakage_cat_inv [s22 [t22 [t22' [H22 [H2 ->]]]]].
+    rewrite /= in Hts1s2.
+    have Ht: trace_expr s_1 e1 = trace_expr s_2 e1 /\ trace_expr s_1 e2 = trace_expr s_2 e2.
+      move: Hts1s2=> /eqP Hts1s2.
+      rewrite eqseq_cat in Hts1s2.
+      by move: Hts1s2=> /andP [/eqP -> /eqP ->].
+      exact: size_trace_expr.
+    congr ((_ ++ _) ++ _).
+    + move: H1=> /leakage_plusn [n1] /(_ 1) H1.
+      rewrite /= /leak_stepRn /= in H1.
+      case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H1=> [a11 /=|//] H1.
+      case: (MLet (n0, t) := s12.[glob_arr] in _) H1=> [a12 /=|//] H1.
+      rewrite leak_stepn_end in H1.
+      move: H1=> -[] _ <-.
+      move: H2=> /leakage_plusn [n2] /(_ 1) H2.
+      rewrite /= /leak_stepRn /= in H2.
+      case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H2=> [a21 /=|//] H2.
+      case: (MLet (n0, t) := s22.[glob_arr] in _) H2=> [a22 /=|//] H2.
+      rewrite leak_stepn_end in H2.
+      by move: H2=> -[] _ <-.
+    + apply: (He2 _ _ _ _ _ _ _ _ _ _ _ _ H12 H22).
+      apply: (svmap_eq_exceptT Hs1).
+      exact: (correct_e' (leak_imp_step H11)).
+      apply: (svmap_eq_exceptT Hs2).
+      exact: (correct_e' (leak_imp_step H21)).
+      exact: Ht.2.
+    + apply: (He1 _ _ _ _ _ _ _ _ _ _ _ _ H11 H21).
+      exact: Hs1.
+      exact: Hs2.
+      exact: Ht.1.
+    (***)
     rewrite /= in H1, H2.
     move: H1=> /leakage_plusn [n1] /(_ 1) H1.
     rewrite /= /leak_stepRn /= in H1.
@@ -1058,8 +1150,10 @@ Module ArrAlloc.
     case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H2=> [a2 /=|//] H2.
     rewrite leak_stepn_end in H2.
     move: H2=> -[] _ <-.
-    congr [:: Let _ := _ in _].
-    exact: Hs1s2.
+    rewrite /= in Hts1s2.
+    have H1: msem_mexpr s_1 e = msem_mexpr s1 e by admit. (* Assumption: "glob_arr does not appear in e" *)
+    have H2: msem_mexpr s_2 e = msem_mexpr s2 e by admit.
+    by rewrite H1 H2 in Hts1s2.
   Admitted.
 
   Lemma ct_head a l:
@@ -1111,7 +1205,9 @@ Module ArrAlloc.
       exists n1; exact: Ht''1.
     have Hl2: leakage s'2 (arralloc_e e 0) t''2 s2'.
       exists n2; exact: Ht''2.
-    apply: (preserve_ct_expr _ Hl1 Hl2).
+    apply: (preserve_ct_expr _ _ _ Hl1 Hl2).
+    admit.
+    admit.
     admit.
     apply: IH.
     move=> s.
