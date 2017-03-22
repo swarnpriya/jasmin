@@ -79,6 +79,15 @@ Qed.
 Definition mexpr_eqMixin := Equality.Mixin mexpr_beq_axiom.
 Canonical mexpr_eqType := Eval hnf in EqType mexpr mexpr_eqMixin.
 
+Fixpoint var_in (v: var) (e: mexpr) :=
+  match e with
+  | Mvar v' => v == v'
+  | Madd e1 e2 => (var_in v e1) || (var_in v e2)
+  | Mand e1 e2 => (var_in v e1) || (var_in v e2)
+  | Mget v' e => (v == v') || (var_in v e)
+  | _ => false
+  end.
+
 Variant mrval : Type :=
     MRvar : var -> mrval
   | MRaset : var -> mexpr -> mrval.
@@ -125,6 +134,13 @@ Canonical  minstr_eqType      := Eval hnf in EqType minstr minstr_eqMixin.
 
 Notation mcmd := (seq minstr).
 
+Definition var_in_instr (v: var) (i: minstr) :=
+  match i with
+  | MCassgn _ e => var_in v e
+  end.
+
+Definition var_in_cmd (v: var) (c: mcmd) := foldl (fun b i => b || (var_in_instr v i)) false c.
+
 Definition mon_arr_var A (s: svmap) (x: var) (f: positive → FArray.array word → exec A) :=
   match vtype x as t return ssem_t t → exec A with
   | sarr n => f n
@@ -150,12 +166,16 @@ Qed.
 *)
 
 (* TODO: move *)
-Lemma svmap_eq_exceptT:
-  ∀ (vm2 : svmap) (s : Sv.t) (vm1 vm3 : svmap), vm1 = vm2 [\s] → vm2 = vm3 [\s] → vm1 = vm3 [\s].
+Lemma svmap_eq_exceptS vm1 s vm2 : vm1 = vm2 [\s] -> vm2 = vm1 [\s].
+Proof. by move=> Heq x Hin;rewrite Heq. Qed.
+Lemma svmap_eq_exceptT vm2 s vm1 vm3: vm1 = vm2 [\s] → vm2 = vm3 [\s] → vm1 = vm3 [\s].
+Proof. by move=> H1 H2 x Hin;rewrite H1 ?H2. Qed.
+
+Global Instance equiv_svmap_eq_except s: Equivalence (svmap_eq_except s).
 Proof.
-  move=> vm2 s vm1 vm3 H1 H2 z Hz.
-  rewrite H1=> //.
-  by rewrite H2.
+  constructor=> //.
+  move=> ??;apply: svmap_eq_exceptS.
+  move=> ???;apply: svmap_eq_exceptT.
 Qed.
 
 Fixpoint msem_mexpr (s: svmap) (e: mexpr) : exec svalue :=
@@ -180,6 +200,43 @@ Fixpoint msem_mexpr (s: svmap) (e: mexpr) : exec svalue :=
     Let i := msem_mexpr s e >>= sto_word in
     ok (SVword (FArray.get t i))
   end.
+
+Lemma var_in_eq x e s s': ¬ var_in x e ->
+  s = s' [\Sv.singleton x] ->
+  msem_mexpr s e = msem_mexpr s' e.
+Proof.
+  elim: e=> [v|w|b|e1 He1 e2 He2|e1 He1 e2 He2|x' e He] //= Hin Hss'.
+  + rewrite /sget_var.
+    suff ->: s.[v]%vmap = s'.[v]%vmap=> //.
+    apply: Hss'.
+    move=> Habs.
+    move: (SvD.F.singleton_1 Habs)=> H'.
+    by rewrite H' in Hin.
+  + rewrite He1 ?He2 //.
+    move=> Habs.
+    apply: Hin.
+    by rewrite Habs orbT.
+    move=> Habs.
+    apply: Hin.
+    by rewrite Habs.
+  + rewrite He1 ?He2 //.
+    move=> Habs.
+    apply: Hin.
+    by rewrite Habs orbT.
+    move=> Habs.
+    apply: Hin.
+    by rewrite Habs.
+  + rewrite He.
+    rewrite /mon_arr_var.
+    suff ->: s.[x']%vmap = s'.[x']%vmap=> //.
+    apply: Hss'.
+    move=> Habs.
+    move: (SvD.F.singleton_1 Habs)=> H'.
+    by rewrite H' eq_refl in Hin.
+    move=> Habs.
+    by rewrite Habs orbT in Hin.
+    by [].
+Qed.
 
 Definition mwrite_rval (l: mrval) (v: svalue) (s: svmap) : exec svmap :=
   match l with
@@ -1071,6 +1128,12 @@ Module ArrAlloc.
   Module Smallstep_Proof.
   Import Leakage_Smallstep.
 
+  Lemma correct c s s'1 s'2:
+    exec s c s'1 ->
+    exec s (arralloc_cmd c) s'2 ->
+    s'1 = s'2 [\Sv.singleton glob_arr].
+  Admitted.
+
   Lemma correct_e e n s s':
     exec s (arralloc_e e n) s' ->
     Let v := msem_mexpr s e in (Let s' := mwrite_rval (glob_acc_l n) v s in ok s') = ok s'.
@@ -1085,11 +1148,12 @@ Module ArrAlloc.
   Qed.
 
   Lemma preserve_ct_expr e n s_1 s_2 s1 s2:
+    ~ var_in glob_arr e ->
     s_1 = s1 [\ Sv.singleton glob_arr] → s_2 = s2 [\ Sv.singleton glob_arr] →
     (trace_expr s_1 e = trace_expr s_2 e) →
     forall s1' s2' t1 t2, leakage s1 (arralloc_e e n) t1 s1' → leakage s2 (arralloc_e e n) t2 s2' → t1 = t2.
   Proof.
-    elim: e n s_1 s_2 s1 s2=> [v|w|b|e1 He1 e2 He2|e1 He1 e2 He2|v e He] n s_1 s_2 s1 s2 Hs1 Hs2 Hts1s2 s1' s2' t1 t2 H1 H2; try (
+    elim: e n s_1 s_2 s1 s2=> [v|w|b|e1 He1 e2 He2|e1 He1 e2 He2|v e He] n s_1 s_2 s1 s2 Hglob Hs1 Hs2 Hts1s2 s1' s2' t1 t2 H1 H2; try (
       rewrite /= in H1, H2;
       move: H1=> /leakage_plusn [n1] /(_ 1) H1;
       rewrite /= /leak_stepRn /= in H1;
@@ -1126,13 +1190,19 @@ Module ArrAlloc.
       case: (MLet (n0, t) := s22.[glob_arr] in _) H2=> [a22 /=|//] H2.
       rewrite leak_stepn_end in H2.
       by move: H2=> -[] _ <-.
-    + apply: (He2 _ _ _ _ _ _ _ _ _ _ _ _ H12 H22).
+    + apply: (He2 _ _ _ _ _ _ _ _ _ _ _ _ _ H12 H22).
+      move=> Habs.
+      apply: Hglob.
+      by rewrite /= Habs orbT.
       apply: (svmap_eq_exceptT Hs1).
       exact: (correct_e' (leak_imp_step H11)).
       apply: (svmap_eq_exceptT Hs2).
       exact: (correct_e' (leak_imp_step H21)).
       exact: Ht.2.
-    + apply: (He1 _ _ _ _ _ _ _ _ _ _ _ _ H11 H21).
+    + apply: (He1 _ _ _ _ _ _ _ _ _ _ _ _ _ H11 H21).
+      move=> Habs.
+      apply: Hglob.
+      by rewrite /= Habs.
       exact: Hs1.
       exact: Hs2.
       exact: Ht.1.
@@ -1161,13 +1231,19 @@ Module ArrAlloc.
       case: (MLet (n0, t) := s22.[glob_arr] in _) H2=> [a22 /=|//] H2.
       rewrite leak_stepn_end in H2.
       by move: H2=> -[] _ <-.
-    + apply: (He2 _ _ _ _ _ _ _ _ _ _ _ _ H12 H22).
+    + apply: (He2 _ _ _ _ _ _ _ _ _ _ _ _ _ H12 H22).
+      move=> Habs.
+      apply: Hglob.
+      by rewrite /= Habs orbT.
       apply: (svmap_eq_exceptT Hs1).
       exact: (correct_e' (leak_imp_step H11)).
       apply: (svmap_eq_exceptT Hs2).
       exact: (correct_e' (leak_imp_step H21)).
       exact: Ht.2.
-    + apply: (He1 _ _ _ _ _ _ _ _ _ _ _ _ H11 H21).
+    + apply: (He1 _ _ _ _ _ _ _ _ _ _ _ _ _ H11 H21).
+      move=> Habs.
+      apply: Hglob.
+      by rewrite /= Habs.
       exact: Hs1.
       exact: Hs2.
       exact: Ht.1.
@@ -1184,10 +1260,12 @@ Module ArrAlloc.
     rewrite leak_stepn_end in H2.
     move: H2=> -[] _ <-.
     rewrite /= in Hts1s2.
-    have H1: msem_mexpr s_1 e = msem_mexpr s1 e by admit. (* Assumption: "glob_arr does not appear in e" *)
-    have H2: msem_mexpr s_2 e = msem_mexpr s2 e by admit.
-    by rewrite H1 H2 in Hts1s2.
-  Admitted.
+    rewrite /= in Hglob.
+    move: Hglob=> /negP Hglob.
+    rewrite negb_or in Hglob.
+    move: Hglob=> /andP [_ /negP Hglob'].
+    rewrite (@var_in_eq glob_arr _ s1 s_1) ?(@var_in_eq glob_arr _ s2 s_2)=> //; by symmetry.
+  Qed.
 
   Lemma ct_head a l:
     (forall s, exists s'', exec s (l ++ [:: a]) s'') ->
@@ -1208,17 +1286,18 @@ Module ArrAlloc.
   Qed.
 
   Theorem preserve_ct: forall c,
+    ~ var_in_cmd glob_arr c ->
     (forall s, exists s', exec s c s') ->
     constant_time_ss P c ->
     constant_time_ss P (arralloc_cmd c).
   Proof.
-    elim/List.rev_ind=> // a l IH Hsem Hsrc.
+    elim/List.rev_ind=> // a l IH Hglob Hsem Hsrc.
     rewrite arralloc_cat.
     move=> s1 s2 s1' s2' t1 t2 Hpub.
     move=> /leakage_cat_inv [s1'' [t1' [t1'' [H1 [H1' ->]]]]].
     move=> /leakage_cat_inv [s2'' [t2' [t2'' [H2 [H2' ->]]]]].
     congr (_ ++ _).
-    case: a Hsem Hsrc H1' H2'=> r e Hsem Hsrc H1' H2'.
+    case: a Hglob Hsem Hsrc H1' H2'=> r e Hglob Hsem Hsrc H1' H2'.
     (**)
     rewrite /= cats0 in H1', H2'.
     rewrite -cat1s in H1', H2'.
@@ -1239,9 +1318,17 @@ Module ArrAlloc.
     congr (_ ++ _).
     move: (Hsem s1)=> [s'_1 /exec_cat_inv [s''_1 [Hsrc11 Hsrc12]]].
     move: (Hsem s2)=> [s'_2 /exec_cat_inv [s''_2 [Hsrc21 Hsrc22]]].
-    apply: (preserve_ct_expr _ _ _ H1_2 H2_2).
+    apply: (preserve_ct_expr _ _ _ _ H1_2 H2_2).
+    move=> Habs.
+    apply: Hglob.
+    rewrite /var_in_cmd foldl_cat /=.
+    by rewrite Habs orbT.
     have Hbla1: s''_1 = s'1 [\Sv.singleton glob_arr].
-      admit. (* Correctness of the transformation *)
+      apply: (@svmap_eq_exceptT s1'').
+      apply: correct.
+      exact: Hsrc11.
+      exact: (leak_imp_step H1).
+      admit.
     exact: Hbla1.
     have Hbla2: s''_2 = s'2 [\Sv.singleton glob_arr].
       admit. (* Correctness of the transformation *)
@@ -1278,6 +1365,10 @@ Module ArrAlloc.
       by move: Hok=> /andP [/eqP -> _].
       exact: size_trace_expr.
     apply: IH.
+    move=> Habs.
+    apply: Hglob.
+    rewrite /var_in_cmd foldl_cat /=.
+    by rewrite -[foldl _ _ _]/(var_in_cmd _ _) Habs.
     move=> s.
     by move: Hsem=> /(_ s) [s' /exec_cat_inv [s'' [Hs' _]]]; exists s''.
     apply: (ct_head _ Hsrc)=> //.
