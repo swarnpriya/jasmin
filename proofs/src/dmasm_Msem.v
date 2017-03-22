@@ -990,7 +990,7 @@ Module ArrAlloc.
 
   Fixpoint arralloc_i (i:minstr) : mcmd :=
     match i with
-    | MCassgn x e => (MCassgn x (glob_acc_r 0)) :: (arralloc_e e 0)
+    | MCassgn x e => (arralloc_e e 0) ++ [:: MCassgn x (glob_acc_r 0)]
     end.
 
   Definition arralloc_cmd (c:mcmd) : mcmd :=
@@ -1008,6 +1008,7 @@ Module ArrAlloc.
   (*
    * Try with Leakage_Ex
    *)
+  (*
   Module Ex_Proof.
   Import Leakage_Ex.
   Lemma arralloc_i_ct i:
@@ -1056,7 +1057,9 @@ Module ArrAlloc.
     rewrite /=.
   Admitted.
   End Ex_Proof.
+  *)
 
+  (*
   Module Instr_Proof.
   Import Leakage_Instr.
   Lemma arralloc_i_ct i:
@@ -1124,6 +1127,7 @@ Module ArrAlloc.
     admit.
   Admitted.
   End Instr_Proof.
+  *)
 
   Module Smallstep_Proof.
   Import Leakage_Smallstep.
@@ -1134,18 +1138,9 @@ Module ArrAlloc.
     s'1 = s'2 [\Sv.singleton glob_arr].
   Admitted.
 
-  Lemma correct_e e n s s':
-    exec s (arralloc_e e n) s' ->
-    Let v := msem_mexpr s e in (Let s' := mwrite_rval (glob_acc_l n) v s in ok s') = ok s'.
-  Admitted.
-
   Lemma correct_e' e n s s': exec s (arralloc_e e n) s' -> s = s' [\ Sv.singleton glob_arr].
   Proof.
-    move=> /correct_e.
-    apply: rbindP=> v Hv.
-    apply: rbindP=> w Hw [] <-.
-    exact: (mvrvP Hw).
-  Qed.
+  Admitted.
 
   Lemma preserve_ct_expr e n s_1 s_2 s1 s2:
     ~ var_in glob_arr e ->
@@ -1300,38 +1295,38 @@ Module ArrAlloc.
     case: a Hglob Hsem Hsrc H1' H2'=> r e Hglob Hsem Hsrc H1' H2'.
     (**)
     rewrite /= cats0 in H1', H2'.
-    rewrite -cat1s in H1', H2'.
     move: H1'=> /leakage_cat_inv [s'1 [t1_1 [t1_2 [H1_1 [H1_2 ->]]]]].
     move: H2'=> /leakage_cat_inv [s'2 [t2_1 [t2_2 [H2_1 [H2_2 ->]]]]].
-    have H1'' := H1_1.
+    have H1'' := H1_2.
     move: H1''=> /leakage_plusn [n1] /(_ 1) H1''.
     rewrite /= /leak_stepRn /= in H1''.
-    case: (MLet (_, t) := s1''.[glob_arr] in _) H1''=> [v1 /=|//].
-    case: (mwrite_rval r v1 s1'')=> [s1'_ /=|//].
+    case: (MLet (_, t) := s'1.[glob_arr] in _) H1''=> [v1 /=|//].
+    case: (mwrite_rval r v1 s'1)=> [s1'_ /=|//].
     rewrite leak_stepn_end=> -[] Hs1 <-.
-    have H2'' := H2_1.
+    have H2'' := H2_2.
     move: H2''=> /leakage_plusn [n2] /(_ 1) H2''.
     rewrite /= /leak_stepRn /= in H2''.
-    case: (MLet (_, t) := s2''.[glob_arr] in _) H2''=> [v2 /=|//].
-    case: (mwrite_rval r v2 s2'')=> [s2'_ /=|//].
+    case: (MLet (_, t) := s'2.[glob_arr] in _) H2''=> [v2 /=|//].
+    case: (mwrite_rval r v2 s'2)=> [s2'_ /=|//].
     rewrite leak_stepn_end=> -[] Hs2 <-.
-    congr (_ ++ _).
+    rewrite /=.
+    congr (_ :: _).
     move: (Hsem s1)=> [s'_1 /exec_cat_inv [s''_1 [Hsrc11 Hsrc12]]].
     move: (Hsem s2)=> [s'_2 /exec_cat_inv [s''_2 [Hsrc21 Hsrc22]]].
-    apply: (preserve_ct_expr _ _ _ _ H1_2 H2_2).
+    apply: (preserve_ct_expr _ _ _ _ H1_1 H2_1).
     move=> Habs.
     apply: Hglob.
     rewrite /var_in_cmd foldl_cat /=.
     by rewrite Habs orbT.
-    have Hbla1: s''_1 = s'1 [\Sv.singleton glob_arr].
-      apply: (@svmap_eq_exceptT s1'').
+    have Hbla1: s''_1 = s1'' [\Sv.singleton glob_arr].
       apply: correct.
       exact: Hsrc11.
       exact: (leak_imp_step H1).
-      admit.
     exact: Hbla1.
-    have Hbla2: s''_2 = s'2 [\Sv.singleton glob_arr].
-      admit. (* Correctness of the transformation *)
+    have Hbla2: s''_2 = s2'' [\Sv.singleton glob_arr].
+      apply: correct.
+      exact: Hsrc21.
+      exact: (leak_imp_step H2).
     exact: Hbla2.
     move: Hsrc11=> /step_imp_leak [t11' Hsrc11'].
     move: Hsrc21=> /step_imp_leak [t21' Hsrc21'].
@@ -1375,6 +1370,6 @@ Module ArrAlloc.
     exact: Hpub.
     exact: H1.
     exact: H2.
-  Admitted.
+  Qed.
   End Smallstep_Proof.
 End ArrAlloc.
