@@ -674,13 +674,6 @@ Module Leakage_Smallstep.
       exact: IH.
   Qed.
 
-  Lemma leakage_plusn s c t s': leakage s c t s' -> exists n, forall d, leak_stepRn (d + n) t (s, c) (s', [::]).
-  Proof.
-    move=> [n Hn]; exists n=> d.
-    apply: (leak_stepn_end_cont _ Hn).
-    exact: leq_addl.
-  Qed.
-
   Lemma leak_stepn_end n s:
     leak_stepn n (s, [::]) = (Next (ok (s, [::])), [::]).
   Proof.
@@ -820,17 +813,18 @@ Module Leakage_Smallstep.
   Lemma leakage_instr_inv s s' a t:
     leakage s [:: a] t s' -> t = (trace_instr s a) /\ step_instr s a = ok s'.
   Proof.
-    move=> /leakage_plusn [n] /(_ 1) H.
-    rewrite /leak_stepRn /= in H.
-    case Hstep: (step_instr s a) H=> [v|//].
-    rewrite /= leak_stepn_end /=.
+    move=> [n Hn].
+    have := (leak_stepn_end_cont _ Hn).
+    move=> /(_ n.+1 (ltnW (ltnSn n))) /=.
+    case Hstep: (step_instr s a)=> [v /=|//].
+    rewrite leak_stepn_end /=.
     by move=> [] <- <-.
   Qed.
 
   Lemma leakage_instr s s' a t:
     t = (trace_instr s a) -> step_instr s a = ok s' -> leakage s [:: a] t s'.
   Proof.
-    move=> [Ht Hs].
+    move=> Ht Hs.
     exists 1.
     by rewrite /leak_stepRn /= Hs /= Ht.
   Qed.
@@ -1057,22 +1051,12 @@ Module ArrAlloc.
     forall s1' s2' t1 t2, leakage s1 (arralloc_e e n) t1 s1' → leakage s2 (arralloc_e e n) t2 s2' → t1 = t2.
   Proof.
     elim: e n s_1 s_2 s1 s2=> [v|w|b|e1 He1 e2 He2|e1 He1 e2 He2|v e He] n s_1 s_2 s1 s2 Hglob Hs1 Hs2 Hts1s2 s1' s2' t1 t2 H1 H2; try (
-      rewrite /= in H1, H2;
-      move: H1=> /leakage_plusn [n1] /(_ 1) H1;
-      rewrite /= /leak_stepRn /= in H1;
-      case: (MLet (n, t):= s1.[glob_arr] in _) H1=> [a1 /=|//] H1;
-      rewrite leak_stepn_end in H1;
-      move: H1=> -[] _ <-;
-      move: H2=> /leakage_plusn [n2] /(_ 1) H2;
-      rewrite /= /leak_stepRn /= in H2;
-      case: (MLet (n, t):= s2.[glob_arr] in _) H2=> [a2 /=|//] H2;
-      rewrite leak_stepn_end in H2;
-      by move: H2=> -[] _ <-).
+      move: H1=> /leakage_instr_inv [-> _];
+      by move: H2=> /leakage_instr_inv [-> _]).
     (***)
-    rewrite /= in H1, H2.
-    move: H1=> /leakage_cat_inv [s11 [t11 [t11' [H11 [H1 ->]]]]].
+    move: H1=> /= /leakage_cat_inv [s11 [t11 [t11' [H11 [H1 ->]]]]].
     move: H1=> /leakage_cat_inv [s12 [t12 [t12' [H12 [H1 ->]]]]].
-    move: H2=> /leakage_cat_inv [s21 [t21 [t21' [H21 [H2 ->]]]]].
+    move: H2=> /= /leakage_cat_inv [s21 [t21 [t21' [H21 [H2 ->]]]]].
     move: H2=> /leakage_cat_inv [s22 [t22 [t22' [H22 [H2 ->]]]]].
     rewrite /= in Hts1s2.
     have Ht: trace_expr s_1 e1 = trace_expr s_2 e1 /\ trace_expr s_1 e2 = trace_expr s_2 e2.
@@ -1081,18 +1065,8 @@ Module ArrAlloc.
       by move: Hts1s2=> /andP [/eqP -> /eqP ->].
       exact: size_trace_expr.
     congr ((_ ++ _) ++ _).
-    + move: H1=> /leakage_plusn [n1] /(_ 1) H1.
-      rewrite /= /leak_stepRn /= in H1.
-      case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H1=> [a11 /=|//] H1.
-      case: (MLet (n0, t) := s12.[glob_arr] in _) H1=> [a12 /=|//] H1.
-      rewrite leak_stepn_end in H1.
-      move: H1=> -[] _ <-.
-      move: H2=> /leakage_plusn [n2] /(_ 1) H2.
-      rewrite /= /leak_stepRn /= in H2.
-      case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H2=> [a21 /=|//] H2.
-      case: (MLet (n0, t) := s22.[glob_arr] in _) H2=> [a22 /=|//] H2.
-      rewrite leak_stepn_end in H2.
-      by move: H2=> -[] _ <-.
+    + move: H1=> /leakage_instr_inv [-> _].
+      by move: H2=> /leakage_instr_inv [-> _].
     + apply: (He2 _ _ _ _ _ _ _ _ _ _ _ _ _ H12 H22).
       move=> Habs.
       apply: Hglob.
@@ -1110,10 +1084,9 @@ Module ArrAlloc.
       exact: Hs2.
       exact: Ht.1.
     (*** TODO: fix copypaste *)
-    rewrite /= in H1, H2.
-    move: H1=> /leakage_cat_inv [s11 [t11 [t11' [H11 [H1 ->]]]]].
+    move: H1=> /= /leakage_cat_inv [s11 [t11 [t11' [H11 [H1 ->]]]]].
     move: H1=> /leakage_cat_inv [s12 [t12 [t12' [H12 [H1 ->]]]]].
-    move: H2=> /leakage_cat_inv [s21 [t21 [t21' [H21 [H2 ->]]]]].
+    move: H2=> /= /leakage_cat_inv [s21 [t21 [t21' [H21 [H2 ->]]]]].
     move: H2=> /leakage_cat_inv [s22 [t22 [t22' [H22 [H2 ->]]]]].
     rewrite /= in Hts1s2.
     have Ht: trace_expr s_1 e1 = trace_expr s_2 e1 /\ trace_expr s_1 e2 = trace_expr s_2 e2.
@@ -1122,18 +1095,8 @@ Module ArrAlloc.
       by move: Hts1s2=> /andP [/eqP -> /eqP ->].
       exact: size_trace_expr.
     congr ((_ ++ _) ++ _).
-    + move: H1=> /leakage_plusn [n1] /(_ 1) H1.
-      rewrite /= /leak_stepRn /= in H1.
-      case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H1=> [a11 /=|//] H1.
-      case: (MLet (n0, t) := s12.[glob_arr] in _) H1=> [a12 /=|//] H1.
-      rewrite leak_stepn_end in H1.
-      move: H1=> -[] _ <-.
-      move: H2=> /leakage_plusn [n2] /(_ 1) H2.
-      rewrite /= /leak_stepRn /= in H2.
-      case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H2=> [a21 /=|//] H2.
-      case: (MLet (n0, t) := s22.[glob_arr] in _) H2=> [a22 /=|//] H2.
-      rewrite leak_stepn_end in H2.
-      by move: H2=> -[] _ <-.
+    + move: H1=> /leakage_instr_inv [-> _].
+      by move: H2=> /leakage_instr_inv [-> _].
     + apply: (He2 _ _ _ _ _ _ _ _ _ _ _ _ _ H12 H22).
       move=> Habs.
       apply: Hglob.
@@ -1152,18 +1115,8 @@ Module ArrAlloc.
       exact: Ht.1.
     (***)
     rewrite /= in H1, H2.
-    move: H1=> /leakage_plusn [n1] /(_ 1) H1.
-    rewrite /= /leak_stepRn /= in H1.
-    case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H1=> [a1 /=|//] H1.
-    rewrite leak_stepn_end in H1.
-    move: H1=> -[] _ <-.
-    move: H2=> /leakage_plusn [n2] /(_ 1) H2.
-    rewrite /= /leak_stepRn /= in H2.
-    case: (Let x1 := (MLet (_, t) := _.[_] in _) in _) H2=> [a2 /=|//] H2.
-    rewrite leak_stepn_end in H2.
-    move: H2=> -[] _ <-.
-    rewrite /= in Hts1s2.
-    rewrite /= in Hglob.
+    move: H1=> /leakage_instr_inv [-> _].
+    move: H2=> /leakage_instr_inv [-> _] /=.
     move: Hglob=> /negP Hglob.
     rewrite negb_or in Hglob.
     move: Hglob=> /andP [_ /negP Hglob'].
@@ -1201,7 +1154,6 @@ Module ArrAlloc.
     move=> /leakage_cat_inv [s2'' [t2' [t2'' [H2 [H2' ->]]]]].
     congr (_ ++ _).
     case: a Hglob Hsem Hsrc H1' H2'=> r e Hglob Hsem Hsrc H1' H2'.
-    (**)
     rewrite /= cats0 in H1', H2'.
     move: H1'=> /leakage_cat_inv [s'1 [t1_1 [t1_2 [H1_1 [H1_2 ->]]]]].
     move: H2'=> /leakage_cat_inv [s'2 [t2_1 [t2_2 [H2_1 [H2_2 ->]]]]].
