@@ -508,14 +508,23 @@ Section Example.
  :: MCassgn (MRvar x) (Madd (Mvar y) (Mvar y))
  :: nil.
 
+  Ltac mv_get_set :=
+    repeat
+    match goal with
+    | H : context[ @Mv.get ?to (@Mv.set ?to ?m ?x ?v) ?x ] |- _ =>
+      change (@Mv.get to (@Mv.set to m x v) x) with v in H
+    | |- context[ @Mv.get ?to (@Mv.set ?to ?m ?x ?v) ?x ] =>
+      change (@Mv.get to (@Mv.set to m x v) x) with v
+    end.
+
+  Tactic Notation "post_wp" := simpl; unfold Fv.get; simpl; intros; mv_get_set.
+
   Goal hoare (λ _, True) p (λ e, Z.even (I64.unsigned (e.[x]%vmap))).
   Proof.
     apply hoare_by_wp. move=> q _.
-    Opaque I64.add Z.even I64.repr I64.unsigned.
-    compute.
-    Transparent I64.add Z.even I64.repr I64.unsigned.
-    intuition subst.
-    reflexivity.
+    post_wp.
+    subst.
+    vm_compute.
   Abort.
 
   Let t : var := Var (sarr 1) "t".
@@ -528,12 +537,10 @@ Section Example.
   Goal hoare (λ _, True) q (λ e, 42 = I64.unsigned e.[x]%vmap).
   Proof.
     apply hoare_by_wp. move=> z _.
-    Opaque Z.eqb I64.add I64.repr I64.unsigned.
-    compute.
-    Transparent Z.eqb I64.add I64.repr I64.unsigned.
-    intuition subst. vm_compute.
+    post_wp.
+    subst.
+    vm_compute.
   Abort.
-
 
 End Example.
 
