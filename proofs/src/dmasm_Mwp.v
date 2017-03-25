@@ -496,30 +496,59 @@ Qed.
 Section Example.
   Let x : var := Var sword "x".
   Let y : var := Var sword "y".
+  Let z : var := Var sword "y".
+  Let w : var := Var sword "w".
 
   Let p : mcmd :=
     MCassgn (MRvar x) (Mconst (I64.repr 1))
- :: MCassgn (MRvar x) (Madd (Mvar x) (Mconst (I64.repr 1)))
- :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar x))
- :: MCassgn (MRvar x) (Madd (Mvar y) (Mvar y))
- :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar x))
- :: MCassgn (MRvar x) (Madd (Mvar y) (Mvar y))
- :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar x))
- :: MCassgn (MRvar x) (Madd (Mvar y) (Mvar y))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mconst (I64.repr 1)))
+ :: MCassgn (MRvar z) (Madd (Mvar x) (Mvar y))
+ :: MCassgn (MRvar w) (Madd (Mvar x) (Mvar z))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar w))
+ :: MCassgn (MRvar z) (Madd (Mvar x) (Mvar y))
+ :: MCassgn (MRvar w) (Madd (Mvar x) (Mvar z))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar w))
+ :: MCassgn (MRvar z) (Madd (Mvar x) (Mvar y))
+ :: MCassgn (MRvar w) (Madd (Mvar x) (Mvar z))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar w))
+ :: MCassgn (MRvar z) (Madd (Mvar x) (Mvar y))
+ :: MCassgn (MRvar w) (Madd (Mvar x) (Mvar z))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar w))
+ :: MCassgn (MRvar z) (Madd (Mvar x) (Mvar y))
+ :: MCassgn (MRvar w) (Madd (Mvar x) (Mvar z))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar w))
+ :: MCassgn (MRvar z) (Madd (Mvar x) (Mvar y))
+ :: MCassgn (MRvar w) (Madd (Mvar x) (Mvar z))
+ :: MCassgn (MRvar y) (Madd (Mvar x) (Mvar w))
+ :: MCassgn (MRvar z) (Madd (Mvar x) (Mvar y))
+ :: MCassgn (MRvar w) (Madd (Mvar x) (Mvar z))
  :: nil.
+
+  Ltac find_in_map_set m x :=
+    match m with
+    | @Mv.set _ ?m' ?y ?v =>
+      let t := constr: (x == y) in
+      let d := eval vm_compute in t in
+      match d with
+      | true => constr:(v)
+      | false => find_in_map_set m' x
+      end
+    end.
 
   Ltac mv_get_set :=
     repeat
     match goal with
-    | H : context[ @Mv.get ?to (@Mv.set ?to ?m ?x ?v) ?x ] |- _ =>
-      change (@Mv.get to (@Mv.set to m x v) x) with v in H
-    | |- context[ @Mv.get ?to (@Mv.set ?to ?m ?x ?v) ?x ] =>
-      change (@Mv.get to (@Mv.set to m x v) x) with v
+    | H : context[ @Mv.get ?to ?m ?x ] |- _ =>
+      let v := find_in_map_set m x in
+      change (@Mv.get to m x) with v in H
+    | |- context[ @Mv.get ?to ?m ?x ] =>
+      let v := find_in_map_set m x in
+      change (@Mv.get to m x) with v
     end.
 
   Tactic Notation "post_wp" := simpl; unfold Fv.get; simpl; intros; mv_get_set.
 
-  Goal hoare (λ _, True) p (λ e, Z.even (I64.unsigned (e.[x]%vmap))).
+  Goal hoare (λ _, True) p (λ e, I64.eq (I64.add I64.one e.[z]) e.[w] = true)%vmap.
   Proof.
     apply hoare_by_wp. move=> q _.
     post_wp.
@@ -536,7 +565,7 @@ Section Example.
 
   Goal hoare (λ _, True) q (λ e, 42 = I64.unsigned e.[x]%vmap).
   Proof.
-    apply hoare_by_wp. move=> z _.
+    apply hoare_by_wp. move=> zz _.
     post_wp.
     subst.
     vm_compute.
