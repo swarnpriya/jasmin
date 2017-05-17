@@ -47,18 +47,17 @@ Unset Printing Implicit Defensive.
 
 Variant cmp_kind :=
   | Cmp_int
-  | Cmp_sw
-  | Cmp_uw.
+  | Cmp_sw of wsize
+  | Cmp_uw of wsize.
 
 Variant op_kind :=
   | Op_int
-  | Op_w.
+  | Op_w of wsize.
 
 Variant sop1 :=
 | Onot
-| Olnot
-| Oneg
-.
+| Olnot of wsize
+| Oneg  of wsize.
 
 Variant sop2 :=
 | Oand                        (* const : sbool -> sbool -> sbool *)
@@ -68,12 +67,12 @@ Variant sop2 :=
 | Omul  of op_kind
 | Osub  of op_kind
 
-| Oland
-| Olor
-| Olxor
-| Olsr
-| Olsl
-| Oasr
+| Oland of wsize
+| Olor  of wsize
+| Olxor of wsize
+| Olsr  of wsize
+| Olsl  of wsize
+| Oasr  of wsize
 
 | Oeq   of cmp_kind
 | Oneq  of cmp_kind
@@ -84,36 +83,37 @@ Variant sop2 :=
 
 Variant sopn : Set :=
 (* Generic operation *)
-| Omulu        (* cpu   : [sword; sword]        -> [sword;sword] *)
-| Oaddcarry    (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
-| Osubcarry    (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
+| Omulu        `(wsize) (* cpu   : [sword; sword]        -> [sword;sword] *)
+| Omuls        `(wsize) (* cpu   : [sword; sword]        -> [sword;sword] *)
+| Oaddcarry    `(wsize) (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
+| Osubcarry    `(wsize) (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
 
 (* Low level x86 operations *)
-| Ox86_MOV	(* copy *)
-| Ox86_CMOVcc  (* conditional copy *)
-| Ox86_ADD     (* add unsigned / signed *)
-| Ox86_SUB     (* sub unsigned / signed *)
-| Ox86_MUL     (* mul unsigned *)
-| Ox86_IMUL    (* excat multiplication *)
-| Ox86_IMUL64    (* truncated multiplication *)
-| Ox86_DIV     (* div unsigned *)
-| Ox86_IDIV    (* div   signed *)
-| Ox86_ADC     (* add with carry *)
-| Ox86_SBB     (* sub with borrow *)
-| Ox86_NEG	(* negation *)
-| Ox86_INC     (* increment *)
-| Ox86_DEC     (* decrement *)
-| Ox86_SETcc   (* Set byte on condition *)
-| Ox86_LEA     (* Load Effective Address *)
-| Ox86_TEST    (* Bit-wise logical and CMP *)
-| Ox86_CMP     (* Signed sub CMP *)
-| Ox86_AND     (* bit-wise and *)
-| Ox86_OR      (* bit-wise or  *)
-| Ox86_XOR     (* bit-wise xor *)
-| Ox86_NOT     (* bit-wise not *)
-| Ox86_SHL     (* unsigned / left  *)
-| Ox86_SHR     (* unsigned / right *)
-| Ox86_SAR     (*   signed / right *)
+| Ox86_MOV     `(wsize) (* copy *)
+| Ox86_CMOVcc  `(wsize) (* conditional copy *)
+| Ox86_ADD     `(wsize) (* add unsigned / signed *)
+| Ox86_SUB     `(wsize) (* sub unsigned / signed *)
+| Ox86_MUL     `(wsize) (* mul unsigned *)
+| Ox86_IMUL    `(wsize) (* exact multiplication *)
+| Ox86_IMUL64  `(wsize) (* truncated multiplication *)
+| Ox86_DIV     `(wsize) (* div unsigned *)
+| Ox86_IDIV    `(wsize) (* div   signed *)
+| Ox86_ADC     `(wsize) (* add with carry *)
+| Ox86_SBB     `(wsize) (* sub with borrow *)
+| Ox86_NEG     `(wsize)	(* negation *)
+| Ox86_INC     `(wsize) (* increment *)
+| Ox86_DEC     `(wsize) (* decrement *)
+| Ox86_SETcc   `(wsize) (* Set byte on condition *)
+| Ox86_LEA              (* Load Effective Address *)
+| Ox86_TEST    `(wsize) (* Bit-wise logical and CMP *)
+| Ox86_CMP     `(wsize) (* Signed sub CMP *)
+| Ox86_AND     `(wsize) (* bit-wise and *)
+| Ox86_OR      `(wsize) (* bit-wise or  *)
+| Ox86_XOR     `(wsize) (* bit-wise xor *)
+| Ox86_NOT     `(wsize) (* bit-wise not *)
+| Ox86_SHL     `(wsize) (* unsigned / left  *)
+| Ox86_SHR     `(wsize) (* unsigned / right *)
+| Ox86_SAR     `(wsize) (*   signed / right *)
 .
 
 Scheme Equality for sop1.
@@ -156,34 +156,35 @@ Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 
 Definition string_of_sopn o : string :=
   match o with
-  | Omulu       => "Omulu      "
-  | Oaddcarry   => "Oaddcarry  "
-  | Osubcarry   => "Osubcarry  "
-  | Ox86_MOV    => "Ox86_MOV   "
-  | Ox86_CMOVcc => "Ox86_CMOVcc"
-  | Ox86_ADD    => "Ox86_ADD   "
-  | Ox86_SUB    => "Ox86_SUB   "
-  | Ox86_MUL    => "Ox86_MUL   "
-  | Ox86_IMUL   => "Ox86_IMUL  "
-  | Ox86_IMUL64   => "Ox86_IMUL64  "
-  | Ox86_DIV    => "Ox86_DIV   "
-  | Ox86_IDIV   => "Ox86_IDIV  "
-  | Ox86_ADC    => "Ox86_ADC   "
-  | Ox86_SBB    => "Ox86_SBB   "
-  | Ox86_NEG	=> "Ox86_NEG	"
-  | Ox86_INC    => "Ox86_INC   "
-  | Ox86_DEC    => "Ox86_DEC   "
-  | Ox86_SETcc  => "Ox86_SETcc "
-  | Ox86_LEA    => "Ox86_LEA   "
-  | Ox86_TEST   => "Ox86_TEST  "
-  | Ox86_CMP    => "Ox86_CMP   "
-  | Ox86_AND    => "Ox86_AND   "
-  | Ox86_OR     => "Ox86_OR    "
-  | Ox86_XOR    => "Ox86_XOR   "
-  | Ox86_NOT    => "Ox86_NOT   "
-  | Ox86_SHL    => "Ox86_SHL   "
-  | Ox86_SHR    => "Ox86_SHR   "
-  | Ox86_SAR    => "Ox86_SAR   "
+  | Omulu       _ => "Omulu      "
+  | Omuls       _ => "Omuls      "
+  | Oaddcarry   _ => "Oaddcarry  "
+  | Osubcarry   _ => "Osubcarry  "
+  | Ox86_MOV    _ => "Ox86_MOV   "
+  | Ox86_CMOVcc _ => "Ox86_CMOVcc"
+  | Ox86_ADD    _ => "Ox86_ADD   "
+  | Ox86_SUB    _ => "Ox86_SUB   "
+  | Ox86_MUL    _ => "Ox86_MUL   "
+  | Ox86_IMUL   _ => "Ox86_IMUL  "
+  | Ox86_IMUL64 _ => "Ox86_IMUL64"
+  | Ox86_DIV    _ => "Ox86_DIV   "
+  | Ox86_IDIV   _ => "Ox86_IDIV  "
+  | Ox86_ADC    _ => "Ox86_ADC   "
+  | Ox86_SBB    _ => "Ox86_SBB   "
+  | Ox86_NEG	_ => "Ox86_NEG	 "
+  | Ox86_INC    _ => "Ox86_INC   "
+  | Ox86_DEC    _ => "Ox86_DEC   "
+  | Ox86_SETcc  _ => "Ox86_SETcc "
+  | Ox86_LEA      => "Ox86_LEA   "
+  | Ox86_TEST   _ => "Ox86_TEST  "
+  | Ox86_CMP    _ => "Ox86_CMP   "
+  | Ox86_AND    _ => "Ox86_AND   "
+  | Ox86_OR     _ => "Ox86_OR    "
+  | Ox86_XOR    _ => "Ox86_XOR   "
+  | Ox86_NOT    _ => "Ox86_NOT   "
+  | Ox86_SHL    _ => "Ox86_SHL   "
+  | Ox86_SHR    _ => "Ox86_SHR   "
+  | Ox86_SAR    _ => "Ox86_SAR   "
   end.
 
 (* ** Expressions
@@ -209,10 +210,10 @@ Definition var_info_to_attr (vi: var_info) :=
 Inductive pexpr : Type :=
 | Pconst :> Z -> pexpr
 | Pbool  :> bool -> pexpr
-| Pcast  : pexpr -> pexpr              (* int -> word *)
+| Pcast  : wsize -> pexpr -> pexpr  (* int -> word *)
 | Pvar   :> var_i -> pexpr
 | Pget   : var_i -> pexpr -> pexpr
-| Pload  : var_i -> pexpr -> pexpr
+| Pload  : wsize -> var_i -> pexpr -> pexpr
 | Papp1  : sop1 -> pexpr -> pexpr
 | Papp2  : sop2 -> pexpr -> pexpr -> pexpr
 | Pif    : pexpr -> pexpr -> pexpr -> pexpr.
@@ -235,39 +236,42 @@ Definition var_i_eqMixin     := Equality.Mixin var_i_eq_axiom.
 Canonical  var_i_eqType      := Eval hnf in EqType var_i var_i_eqMixin.
 
 Module Eq_pexpr.
-Fixpoint eqb (e1 e2:pexpr) : bool :=
-  match e1, e2 with
-  | Pconst n1   , Pconst n2    => n1 == n2
-  | Pbool  b1   , Pbool  b2    => b1 == b2
-  | Pcast  e1   , Pcast  e2    => eqb e1 e2
-  | Pvar   x1   , Pvar   x2    => (x1 == x2)
-  | Pget   x1 e1, Pget   x2 e2 => (x1 == x2) && eqb e1 e2
-  | Pload  x1 e1, Pload  x2 e2 => (x1 == x2) && eqb e1 e2
-  | Papp1 o1 e1 , Papp1  o2 e2 => (o1 == o2) && eqb e1 e2
-  | Papp2 o1 e11 e12, Papp2 o2 e21 e22  =>
-     (o1 == o2) && eqb e11 e21 && eqb e12 e22
-  | Pif t1 e11 e12, Pif t2 e21 e22  =>
-     eqb t1 t2 && eqb e11 e21 && eqb e12 e22
-  | _, _ => false
-  end.
+
+  Fixpoint eqb (e1 e2:pexpr) : bool :=
+    match e1, e2 with
+    | Pconst n1   , Pconst n2    => n1 == n2
+    | Pbool  b1   , Pbool  b2    => b1 == b2
+    | Pcast  w1 e1, Pcast  w2 e2 => (w1 == w2) && eqb e1 e2
+    | Pvar   x1   , Pvar   x2    => (x1 == x2)
+    | Pget   x1 e1, Pget   x2 e2 => (x1 == x2) && eqb e1 e2
+    | Pload w1 x1 e1, Pload w2 x2 e2 => (w1 == w2) && (x1 == x2) && eqb e1 e2
+    | Papp1 o1 e1 , Papp1  o2 e2 => (o1 == o2) && eqb e1 e2
+    | Papp2 o1 e11 e12, Papp2 o2 e21 e22  =>
+      (o1 == o2) && eqb e11 e21 && eqb e12 e22
+    | Pif t1 e11 e12, Pif t2 e21 e22  =>
+      eqb t1 t2 && eqb e11 e21 && eqb e12 e22
+    | _, _ => false
+    end.
 
   Lemma eq_axiom : Equality.axiom eqb.
   Proof.
-    elim => [n1|b1|e1 He1|x1|x1 e1 He1|x1 e1 He1
+    elim => [n1|b1|w1 e1 He1|x1|x1 e1 He1|w1 x1 e1 He1
             |o1 e1 He1|o1 e11 He11 e12 He12 | t1 Ht1 e11 He11 e12 He12]
-            [n2|b2|e2|x2|x2 e2|x2 e2|o2 e2|o2 e21 e22 | t2 e21 e22] /=;
+            [n2|b2|w2 e2|x2|x2 e2|w2 x2 e2|o2 e2|o2 e21 e22 | t2 e21 e22] /=;
         try by constructor.
     + apply (@equivP (n1 = n2));first by apply: eqP.
       by split => [->|[]->].
     + apply (@equivP (b1 = b2));first by apply: eqP.
       by split => [->|[]->].
-    + by apply: (equivP (He1 e2)); split => [->|[]->].
-    + apply (@equivP (x1 = x2));first by apply: eqP.
+    + apply (@equivP ((w1 == w2) /\ eqb e1 e2));first by apply andP.
+      split=> [[/eqP -> /He1 ->]|[] -> /He1 ->] //.
+     + apply (@equivP (x1 = x2));first by apply: eqP.
       by split => [->|[]->].
     + apply (@equivP ((x1 == x2) /\ eqb e1 e2));first by apply andP.
       by split=> [ [] /eqP -> /He1 -> | [] -> <- ] //;split => //;apply /He1.
-    + apply (@equivP ((x1 == x2) /\ eqb e1 e2));first by apply andP.
-      by split=> [ [] /eqP -> /He1 -> | [] -> <- ] //;split => //;apply /He1.
+    + apply (@equivP (((w1 == w2) && (x1 == x2)) /\ eqb e1 e2));first by apply andP.
+      split=> [ []/andP[] /eqP -> /eqP -> /He1 -> | [] <- <- /He1] //.
+      by rewrite !eq_refl. 
     + apply (@equivP ((o1 == o2) /\ eqb e1 e2));first by apply andP.
       by split=> [ [] /eqP -> /He1 -> | [] -> <- ] //;split => //;apply /He1.
     + apply (@equivP (((o1 == o2) && eqb e11 e21) /\ eqb e12 e22));first by apply andP.
@@ -291,7 +295,7 @@ Export Eq_pexpr.Exports.
 Variant lval : Type :=
 | Lnone `(var_info) `(stype)
 | Lvar `(var_i)
-| Lmem `(var_i) `(pexpr)
+| Lmem `(wsize) `(var_i) `(pexpr)
 | Laset `(var_i) `(pexpr).
 
 Coercion Lvar : var_i >-> lval.
@@ -300,22 +304,23 @@ Notation lvals := (seq lval).
 
 Definition lval_beq (x1:lval) (x2:lval) :=
   match x1, x2 with
-  | Lnone i1 t1, Lnone i2 t2 => (i1 == i2) && (t1 == t2)
-  | Lvar  x1   , Lvar  x2    => x1 == x2
-  | Lmem  x1 e1, Lmem  x2 e2 => (x1 == x2) && (e1 == e2)
-  | Laset x1 e1, Laset x2 e2 => (x1 == x2) && (e1 == e2)
-  | _          , _           => false
+  | Lnone i1 t1   , Lnone i2 t2    => (i1 == i2) && (t1 == t2)
+  | Lvar  x1      , Lvar  x2       => x1 == x2
+  | Lmem  w1 x1 e1, Lmem  w2 x2 e2 => (w1 == w2) && (x1 == x2) && (e1 == e2)
+  | Laset x1 e1   , Laset x2 e2    => (x1 == x2) && (e1 == e2)
+  | _             , _              => false
   end.
 
 Lemma lval_eq_axiom : Equality.axiom lval_beq.
 Proof.
-  case=> [i1 t1|x1|x1 e1|x1 e1] [i2 t2|x2|x2 e2|x2 e2] /=;try by constructor.
+  case=> [i1 t1|x1|w1 x1 e1|x1 e1] [i2 t2|x2|w2 x2 e2|x2 e2] /=;try by constructor.
   + apply (@equivP ((i1 == i2) /\ t1 == t2));first by apply andP.
     by split=> [ [] /eqP -> /eqP -> | [] -> <- ] //.
   + apply (@equivP (x1 = x2));first by apply: eqP.
     by split => [->|[]->].
-  + apply (@equivP ((x1 == x2) /\ e1 == e2));first by apply andP.
-    by split=> [ [] /eqP -> /eqP -> | [] -> <- ] //.
+  + apply (@equivP (((w1 == w2) && (x1 == x2)) /\ e1 == e2));first by apply andP.
+    split=> [ []/andP[]/eqP -> /eqP -> /eqP ->| [] -> -> ->] //.
+    by rewrite !eq_refl.
   apply (@equivP ((x1 == x2) /\ e1 == e2));first by apply andP.
   by split=> [ [] /eqP -> /eqP -> | [] -> <- ] //.
 Qed.
@@ -634,7 +639,7 @@ Definition vrv_rec (s:Sv.t) (rv:lval) :=
   match rv with
   | Lnone _ _  => s
   | Lvar  x    => Sv.add x s
-  | Lmem  _ _  => s
+  | Lmem  _ _ _  => s
   | Laset x _  => Sv.add x s
   end.
 
@@ -676,7 +681,7 @@ Proof. by []. Qed.
 Lemma vrv_var x: Sv.Equal (vrv (Lvar x)) (Sv.singleton x).
 Proof. rewrite /vrv /=;SvD.fsetdec. Qed.
 
-Lemma vrv_mem x e : vrv (Lmem x e) = Sv.empty.
+Lemma vrv_mem w x e : vrv (Lmem w x e) = Sv.empty.
 Proof. by []. Qed.
 
 Lemma vrv_aset x e : Sv.Equal (vrv (Laset x e)) (Sv.singleton x).
@@ -771,10 +776,10 @@ Fixpoint read_e_rec (s:Sv.t) (e:pexpr) : Sv.t :=
   match e with
   | Pconst _       => s
   | Pbool  _       => s
-  | Pcast  e       => read_e_rec s e
+  | Pcast  _ e     => read_e_rec s e
   | Pvar   x       => Sv.add x s
   | Pget   x e     => read_e_rec (Sv.add x s) e
-  | Pload  x e     => read_e_rec (Sv.add x s) e
+  | Pload  w x e   => read_e_rec (Sv.add x s) e
   | Papp1  _ e     => read_e_rec s e
   | Papp2  _ e1 e2 => read_e_rec (read_e_rec s e2) e1
   | Pif    t e1 e2 => read_e_rec (read_e_rec (read_e_rec s e2) e1) t
@@ -786,10 +791,10 @@ Definition read_es := read_es_rec Sv.empty.
 
 Definition read_rv_rec  (s:Sv.t) (r:lval) :=
   match r with
-  | Lnone _ _ => s
-  | Lvar  _   => s
-  | Lmem  x e => read_e_rec (Sv.add x s) e
-  | Laset x e => read_e_rec (Sv.add x s) e
+  | Lnone _ _  => s
+  | Lvar  _    => s
+  | Lmem w x e => read_e_rec (Sv.add x s) e
+  | Laset x e  => read_e_rec (Sv.add x s) e
   end.
 
 Definition read_rv := read_rv_rec Sv.empty.
@@ -828,7 +833,7 @@ Definition read_c := read_c_rec Sv.empty.
 
 Lemma read_eE e s : Sv.Equal (read_e_rec s e) (Sv.union (read_e e) s).
 Proof.
-  elim: e s => //= [v | v e He | v e He | o e1 He1 e2 He2 | e He e1 He1 e2 He2] s;
+  elim: e s => //= [v | v e He | w v e He | o e1 He1 e2 He2 | e He e1 He1 e2 He2] s;
    rewrite /read_e /= ?He ?He1 ?He2; by SvD.fsetdec.
 Qed.
 
@@ -846,7 +851,7 @@ Proof. by rewrite /read_es /= !read_esE read_eE;SvD.fsetdec. Qed.
 
 Lemma read_rvE s x: Sv.Equal (read_rv_rec s x) (Sv.union s (read_rv x)).
 Proof.
-  case: x => //= [_|_|x e|x e]; rewrite /read_rv /= ?read_eE;SvD.fsetdec.
+  case: x => //= [_|_|w x e|x e]; rewrite /read_rv /= ?read_eE;SvD.fsetdec.
 Qed.
 
 Lemma read_rvsE s xs:  Sv.Equal (read_rvs_rec s xs) (Sv.union s (read_rvs xs)).
@@ -938,18 +943,21 @@ Definition is_bool (e:pexpr) :=
   | _ => None
   end.
 
-Definition wconst n:= Pcast (Pconst n).
+Definition wconst wn:= Pcast wn.1 (Pconst wn.2).
 
 Definition is_wconst e :=
   match e with
-  | Pcast e => is_const e
-  | _       => None
+  | Pcast w e => 
+    match is_const e with 
+    | Some z => Some (w, z)
+    | None   => None
+    end
+  | _         => None
   end.
 
-Inductive is_reflect (A:Type) (P:A -> pexpr) : pexpr -> option A -> Prop :=
+Inductive is_reflect (A B:Type) (P:A -> B) : B -> option A -> Prop :=
  | Is_reflect_some : forall a, is_reflect P (P a) (Some a)
  | Is_reflect_none : forall e, is_reflect P e None.
-
 
 Lemma is_boolP e : is_reflect Pbool e (is_bool e).
 Proof. by case e=> *;constructor. Qed.
@@ -960,8 +968,8 @@ Proof. by case: e=>*;constructor. Qed.
 Lemma is_wconstP e : is_reflect wconst e (is_wconst e).
 Proof.
   case e => //=;auto using Is_reflect_none.
-  move=> e1; case: (is_constP e1);auto using Is_reflect_none.
-  move=> z;apply: Is_reflect_some.
+  move=> w e1; case: (is_constP e1);auto using Is_reflect_none.
+  move=> z;apply: (Is_reflect_some wconst (w,z)).
 Qed.
 
 (* --------------------------------------------------------------------- *)
@@ -971,10 +979,10 @@ Fixpoint eq_expr e e' :=
   | Pconst z      , Pconst z'         => z == z'
   | Pbool  b      , Pbool  b'         => b == b'
   (* FIXME if e1, e2 = Pconst we can compute the cast *)
-  | Pcast  e      , Pcast  e'         => eq_expr e e'
+  | Pcast  w e    , Pcast  w' e'      => (w == w') && eq_expr e e'
   | Pvar   x      , Pvar   x'         => v_var x == v_var x'
   | Pget   x e    , Pget   x' e'      => (v_var x == v_var x') && eq_expr e e'
-  | Pload  x e    , Pload  x' e'      => (v_var x == v_var x') && eq_expr e e'
+  | Pload  w x e  , Pload  w' x' e'   => (w == w') && (v_var x == v_var x') && eq_expr e e'
   | Papp1  o e    , Papp1  o' e'      => (o == o') && eq_expr e e'
   | Papp2  o e1 e2, Papp2  o' e1' e2' => (o == o') && eq_expr e1 e1' && eq_expr e2 e2'
   | Pif    e e1 e2, Pif    e' e1' e2' => eq_expr e e' && eq_expr e1 e1' && eq_expr e2 e2'

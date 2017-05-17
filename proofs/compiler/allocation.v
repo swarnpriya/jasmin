@@ -1134,10 +1134,14 @@ Module CBAreg.
       if n1 == n2 then cok m else cerror (Cerr_neqexpr e1 e2 salloc) 
     | Pbool  b1, Pbool  b2 => 
       if b1 == b2 then cok m else cerror (Cerr_neqexpr e1 e2 salloc)
-    | Pcast  e1, Pcast  e2 => check_e e1 e2 m 
+    | Pcast w1 e1', Pcast w2  e2' => 
+      if (w1 == w2) then check_e e1' e2' m 
+      else cerror (Cerr_neqexpr e1 e2 salloc)
     | Pvar   x1, Pvar   x2 => check_v x1 x2 m
     | Pget x1 e1, Pget x2 e2 => check_v x1 x2 m >>= check_e e1 e2
-    | Pload x1 e1, Pload x2 e2 => check_v x1 x2 m >>= check_e e1 e2
+    | Pload w1 x1 e1', Pload w2 x2 e2' => 
+      if (w1 == w2) then check_v x1 x2 m >>= check_e e1' e2'
+      else cerror (Cerr_neqexpr e1 e2 salloc)
     | Papp1 o1 e1, Papp1 o2 e2 => 
       if o1 == o2 then check_e e1 e2 m
       else cerror (Cerr_neqop1 o1 o2 salloc)
@@ -1174,7 +1178,9 @@ Module CBAreg.
         else check_var x1 x2 m
       | _               => check_var x1 x2 m
       end
-    | Lmem x1 e1 , Lmem x2 e2  => check_v x1 x2 m >>= check_e e1 e2
+    | Lmem w1 x1' e1, Lmem w2 x2' e2 => 
+      if w1 == w2 then check_v x1' x2' m >>= check_e e1 e2
+      else cerror (Cerr_neqrval x1 x2 salloc)
     | Laset x1 e1, Laset x2 e2 => check_v x1 x2 m >>= check_e e1 e2 >>= check_var x1 x2
     | _          , _           => cerror (Cerr_neqrval x1 x2 salloc)
     end.
@@ -1246,14 +1252,14 @@ Module CBAreg.
   Admitted.
 (*
     elim : e1 e2 r re vm1 =>
-      [z1 | b1 | e1 He1 | x1 | x1 e1 He1 | x1 e1 He1 | o1 e1 He1 | o1 e11 He11 e12 He12 | e He e11 He11 e12 He12 ]
-      [z2 | b2 | e2 | x2 | x2 e2 | x2 e2 | o2 e2 | o2 e21 e22 | e' e21 e22] //= r re s.
+      [z1 | b1 | ws1 e1 He1 | x1 | x1 e1 He1 | ws1 x1 e1 He1 | o1 e1 He1 | o1 e11 He11 e12 He12 | e He e11 He11 e12 He12 ]
+      [z2 | b2 | ws2 e2 | x2 | x2 e2 | ws2 x2 e2 | o2 e2 | o2 e21 e22 | e' e21 e22] //= r re s.
     + by case: ifPn => // /eqP <- [->] ?;split=> // ?? [] <-; exists z1.
     + by case: ifPn => // /eqP <- [->] ?;split=> // ?? [] <-; exists b1.
-    + move=> /He1 H /H [? {He1}He1];split=>// m v1.
+    + case:ifPn => // /eqP <- /He1 H /H [? {He1}He1];split=>// m v1.
       apply: rbindP => z;apply:rbindP => v1' /He1 [v2 [-> /=]] Uv Hto [] <-.
       have [_ -> /=]:= value_uincl_int Uv Hto.
-      by exists (Vword (I64.repr z)).
+      by exists (Vword (wrepr ws1 z)).
     + by move=> /check_vP Hv /Hv [Hea H].
     + apply: rbindP => r' Hcv Hce Hea. 
       have [Hea' Hget]:= check_vP Hcv Hea.
@@ -1263,7 +1269,7 @@ Module CBAreg.
       apply: rbindP => w;apply: rbindP => ve /Hse1 [v2 [-> U2 Hto]].
       have [_ -> /=]:= value_uincl_int U2 Hto.
       by apply: rbindP => w' /Ht -> [] <-;exists (Vword w').
-    + apply: rbindP => r' Hcv Hce Hea. 
+    + case:ifPn => // /eqP <-;apply: rbindP => r' Hcv Hce Hea. 
       have [Hea' Hget]:= check_vP Hcv Hea.
       have [Hre Hse1]:= He1 _ _ _ _ Hce Hea';split=>// m v1.
       apply: rbindP => w1;apply: rbindP => ve1 /Hget [ve1' [->]]. 
@@ -1371,7 +1377,7 @@ Module CBAreg.
   Proof.
   Admitted.
 (*
-    case: x1 x2 => /= [ii1 t1 | x1 | x1 p1 | x1 p1] [ii2 t2 | x2 | x2 p2 | x2 p2] //=.
+    case: x1 x2 => /= [ii1 t1 | x1 | ws1 x1 p1 | x1 p1] [ii2 t2 | x2 | ws2 x2 p2 | x2 p2] //=.
     + case:ifP => //= /eqP <- [] <- ? Hv H.
       have [-> _]:= write_noneP H.
       by rewrite (uincl_write_none _ Hv H);exists vm1.
@@ -1388,7 +1394,7 @@ Module CBAreg.
       by apply eval_uincl_undef.
     + rewrite /write_var=> Hc Hvm1 Hv;apply rbindP => vm1' Hset [<-] /=.
       by have [vm2 [-> Hr1']/=]:= check_varP Hvm1 Hc Hset Hv; exists vm2.
-    + apply: rbindP => r2 Hcv Hce Hvm1 Hv.
+    + case:ifPn => // /eqP <-;apply: rbindP => r2 Hcv Hce Hvm1 Hv.
       apply: rbindP => wx;apply:rbindP => vx.
       have [Hr2 H/H{H} [vx' [-> Hvx /=]]]:= check_vP Hcv Hvm1.
       move=> /(value_uincl_word Hvx) [_ ->] /=.
@@ -1398,21 +1404,21 @@ Module CBAreg.
       move=> /(value_uincl_word Hve) [_ ->] /=.
       apply: rbindP => w /(value_uincl_word Hv) [_ ->] /=.
       by apply: rbindP => ? -> -[<-];exists vm1.
-     apply: rbindP => r2;apply:rbindP=> r3 Hcv Hce Hcva Hvm1 Hv.
-     apply: on_arr_varP => n t Htx;rewrite /on_arr_var /=.
-     have [Hr3 H/H{H} [vx2 [->]]]:= check_vP Hcv Hvm1.
-     case: vx2 => //= n0 t2 [? Ht];subst n0.
-     apply: rbindP => we;apply:rbindP => ve.
-     case: s1 Hvm1 Hr3 => sm1 svm1 /= Hvm1 Hr3.
-     have [Hr1' H/H{H} [ve' [-> Hve]]]:= check_eP Hce Hr3.
-     move=> /(value_uincl_int Hve) [_ ->] /=.
-     apply: rbindP => w /(value_uincl_word Hv) [_ ->] /=.
-     apply: rbindP => t1' Ht1'.
-     have [t2' [-> Ht2']]:= Array_set_uincl Ht Ht1'. 
-     apply: rbindP => vm2 Hvm2 [<-] /=.
-     have Ut' : value_uincl (Varr t1') (Varr t2') by done.
-     by have [vm2' [-> ?] /=]:= check_varP Hr1' Hcva Hvm2 Ut';exists vm2'.
-   Qed.
+    apply: rbindP => r2;apply:rbindP=> r3 Hcv Hce Hcva Hvm1 Hv.
+    apply: on_arr_varP => n t Htx;rewrite /on_arr_var /=.
+    have [Hr3 H/H{H} [vx2 [->]]]:= check_vP Hcv Hvm1.
+    case: vx2 => //= n0 t2 [? Ht];subst n0.
+    apply: rbindP => we;apply:rbindP => ve.
+    case: s1 Hvm1 Hr3 => sm1 svm1 /= Hvm1 Hr3.
+    have [Hr1' H/H{H} [ve' [-> Hve]]]:= check_eP Hce Hr3.
+    move=> /(value_uincl_int Hve) [_ ->] /=.
+    apply: rbindP => w /(value_uincl_word Hv) [_ ->] /=.
+    apply: rbindP => t1' Ht1'.
+    have [t2' [-> Ht2']]:= Array_set_uincl Ht Ht1'. 
+    apply: rbindP => vm2 Hvm2 [<-] /=.
+    have Ut' : value_uincl (Varr t1') (Varr t2') by done.
+    by have [vm2' [-> ?] /=]:= check_varP Hr1' Hcva Hvm2 Ut';exists vm2'.
+  Qed.
 *)
 End CBAreg.
 

@@ -36,9 +36,6 @@ Unset Printing Implicit Defensive.
 
 Local Open Scope Z_scope.
 
-(* ** Interpretation of types
- * -------------------------------------------------------------------- *)
-
 Module FArray.
 
   Definition array (T:Type) := Z -> T.
@@ -105,6 +102,20 @@ Module Array.
 
 End Array.
 
+Inductive value : Type :=
+  | Vbool  :> bool -> value
+  | Vint   :> Z    -> value
+  | Varr   : forall n, Array.array n word -> value
+  | Vword  :> word -> value
+  | Vundef : stype -> value.
+
+Definition undef_b := Vundef sbool.
+
+Definition values := seq value.
+
+(* ** Interpretation of types
+ * -------------------------------------------------------------------- *)
+
 Definition sem_t (t : stype) : Type :=
   match t with
   | sbool  => bool
@@ -129,17 +140,6 @@ Definition rdflt_ (t : stype) e (r : result e (sem_t t)) : sem_t t :=
 
 (* ** Values
   * -------------------------------------------------------------------- *)
-
-Inductive value : Type :=
-  | Vbool  :> bool -> value
-  | Vint   :> Z    -> value
-  | Varr   : forall n, Array.array n word -> value
-  | Vword  :> word -> value
-  | Vundef : stype -> value.
-
-Definition undef_b := Vundef sbool.
-
-Definition values := seq value.
 
 Definition undef_error {t} := @Error error t ErrAddrUndef.
 
@@ -298,23 +298,11 @@ Definition sem_op2_w  := @mk_sem_sop2 sword sword sword.
 Definition sem_op2_ib := @mk_sem_sop2 sint  sint  sbool.
 Definition sem_op2_wb := @mk_sem_sop2 sword sword sbool.
 
-Definition sem_lsr (v i:word) :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then v else I64.shru v i.
-
-Definition sem_lsl (v i:word) :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then v else I64.shl v i.
-
-Definition sem_asr (v i:word) :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then v else I64.shr v i.
-
 Definition sem_sop1 (o:sop1) :=
   match o with
-  | Onot   => sem_op1_b negb
-  | Olnot  => sem_op1_w I64.not
-  | Oneg  => sem_op1_w I64.neg
+  | Onot    => sem_op1_b negb
+  | Olnot w => sem_op1_w (wlnot w)
+  | Oneg  w => sem_op1_w (wneg w)
   end.
 
 Definition sem_sop2 (o:sop2) :=
@@ -322,36 +310,36 @@ Definition sem_sop2 (o:sop2) :=
   | Oand => sem_op2_b andb
   | Oor  => sem_op2_b orb
 
-  | Oadd Op_int  => sem_op2_i Z.add
-  | Oadd Op_w    => sem_op2_w I64.add
-  | Omul Op_int  => sem_op2_i Z.mul
-  | Omul Op_w    => sem_op2_w I64.mul
-  | Osub Op_int  => sem_op2_i Z.sub
-  | Osub Op_w    => sem_op2_w I64.sub
+  | Oadd Op_int   => sem_op2_i Z.add
+  | Oadd (Op_w w) => sem_op2_w (wadd w)
+  | Omul Op_int   => sem_op2_i Z.mul
+  | Omul (Op_w w) => sem_op2_w (wmul w)
+  | Osub Op_int   => sem_op2_i Z.sub
+  | Osub (Op_w w) => sem_op2_w (wsub w)
 
-  | Oland        => sem_op2_w I64.and
-  | Olor         => sem_op2_w I64.or
-  | Olxor        => sem_op2_w I64.xor
-  | Olsr         => sem_op2_w sem_lsr
-  | Olsl         => sem_op2_w sem_lsl
-  | Oasr         => sem_op2_w sem_asr
+  | Oland w      => sem_op2_w (wland w)
+  | Olor  w      => sem_op2_w (wlor  w)
+  | Olxor w      => sem_op2_w (wlxor w)
+  | Olsr  w      => sem_op2_w (wlsr w)
+  | Olsl  w      => sem_op2_w (wlsl w)
+  | Oasr  w      => sem_op2_w (wasr w)
 
   | Oeq Cmp_int  => sem_op2_ib Z.eqb
-  | Oeq _        => sem_op2_wb weq
+  | Oeq (Cmp_sw w | Cmp_uw w) => sem_op2_wb (weq w)
   | Oneq Cmp_int => sem_op2_ib (fun x y => negb (Z.eqb x y))
-  | Oneq _       => sem_op2_wb (fun x y => negb (weq x y))
-  | Olt Cmp_int  => sem_op2_ib Z.ltb
-  | Ole Cmp_int  => sem_op2_ib Z.leb
-  | Ogt Cmp_int  => sem_op2_ib Z.gtb
-  | Oge Cmp_int  => sem_op2_ib Z.geb
-  | Olt Cmp_sw   => sem_op2_wb wslt
-  | Ole Cmp_sw   => sem_op2_wb wsle
-  | Ogt Cmp_sw   => sem_op2_wb (fun x y => wslt y x)
-  | Oge Cmp_sw   => sem_op2_wb (fun x y => wsle y x)
-  | Olt Cmp_uw   => sem_op2_wb wult
-  | Ole Cmp_uw   => sem_op2_wb wule
-  | Ogt Cmp_uw   => sem_op2_wb (fun x y => wult y x)
-  | Oge Cmp_uw   => sem_op2_wb (fun x y => wule y x)
+  | Oneq  (Cmp_sw w | Cmp_uw w) => sem_op2_wb (wneq w)
+  | Olt Cmp_int    => sem_op2_ib Z.ltb
+  | Ole Cmp_int    => sem_op2_ib Z.leb
+  | Ogt Cmp_int    => sem_op2_ib Z.gtb
+  | Oge Cmp_int    => sem_op2_ib Z.geb
+  | Olt (Cmp_sw w) => sem_op2_wb (wslt w)
+  | Ole (Cmp_sw w) => sem_op2_wb (wsle w)
+  | Ogt (Cmp_sw w) => sem_op2_wb (wsgt w)
+  | Oge (Cmp_sw w) => sem_op2_wb (wsge w)
+  | Olt (Cmp_uw w) => sem_op2_wb (wult w)
+  | Ole (Cmp_uw w) => sem_op2_wb (wule w)
+  | Ogt (Cmp_uw w) => sem_op2_wb (wugt w)
+  | Oge (Cmp_uw w) => sem_op2_wb (wuge w)
   end.
 
 Import Memory.
@@ -392,24 +380,27 @@ Definition Varr_inj n n' t t' : @Varr n t = @Varr n' t' -> n = n' /\ t = t' :=
 Lemma Varr_inj1 n t t' : @Varr n t = @Varr n t' -> t = t'.
 Proof. by move=> /Varr_inj []. Qed.
 
+Definition wrepr ws z := 
+  w_to_word (@select_op (fun ws => Z -> i_wsize ws) I8.repr I16.repr I32.repr I64.repr ws z).
+
 Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
   match e with
   | Pconst z => ok (Vint z)
   | Pbool b  => ok (Vbool b)
-  | Pcast e  =>
+  | Pcast ws e  =>
     Let z := sem_pexpr s e >>= to_int in
-    ok (Vword (I64.repr z))
+    ok (Vword (wrepr ws z))
   | Pvar v => get_var s.(evm) v
   | Pget x e =>
       Let (n,t) := s.[x] in
       Let i := sem_pexpr s e >>= to_int in
       Let w := Array.get t i in
       ok (Vword w)
-  | Pload x e =>
+  | Pload ws x e =>
     Let w1 := get_var s.(evm) x >>= to_word in
     Let w2 := sem_pexpr s e >>= to_word in
-    Let w  := read_mem s.(emem) (I64.add w1 w2) in
-    ok (@to_val sword w)
+    Let w  := read_mem s.(emem) (I64.add w1 w2) ws in
+    ok (@to_val sword (w_to_word w))
   | Papp1 o e1 =>
     Let v1 := sem_pexpr s e1 in
     sem_sop1 o v1
@@ -443,12 +434,12 @@ Definition write_lval (l:lval) (v:value) (s:estate) : exec estate :=
   match l with
   | Lnone _ ty => write_none s ty v
   | Lvar x => write_var x v s
-  | Lmem x e =>
+  | Lmem ws x e =>
     Let vx := get_var (evm s) x >>= to_word in
     Let ve := sem_pexpr s e >>= to_word in
-    let p := wadd vx ve in (* should we add the size of value, i.e vx + sz * se *)
+    let p := I64.add vx ve in 
     Let w := to_word v in
-    Let m :=  write_mem s.(emem) p w in
+    Let m :=  write_mem s.(emem) p ws (of_word ws w) in
     ok {|emem := m;  evm := s.(evm) |}
   | Laset x i =>
     Let (n,t) := s.[x] in
@@ -479,249 +470,205 @@ Fixpoint app_sopn ts : sem_prod ts (exec values) -> values -> exec values :=
   end.
 Arguments app_sopn ts o l:clear implicits.
 
-Definition pval t1 t2 (p: sem_t t1 * sem_t t2) :=
-  [::to_val p.1; to_val p.2].
+Definition f5 (f:rflags5) : values :=
+  map (oapp Vbool undef_b) [:: f.(f5_OF); f.(f5_CF); f.(f5_SF); f.(f5_PF); f.(f5_ZF)].
 
-Definition SF_of_word (w : word) :=
-  msb w.
+Definition f4 (f:rflags4) : values :=
+  map (oapp Vbool undef_b) [:: f.(f4_OF); f.(f4_SF); f.(f4_PF); f.(f4_ZF)].
+  
+Definition f5_w ws (fw:rflags5 * i_wsize ws) :=
+  f5 fw.1 ++ [:: Vword (w_to_word fw.2)].
 
-Definition PF_of_word (w : word) :=
-  lsb w.
+Definition f5_ww ws (fw:rflags5 * i_wsize ws * i_wsize ws) :=
+  f5 fw.1.1 ++ [:: Vword (w_to_word fw.1.2); Vword (w_to_word fw.2)].
 
-Definition ZF_of_word (w : word) :=
-  I64.eq w I64.zero.
-
-(* -------------------------------------------------------------------- *)
-(*  OF; CF ;SF; PF; ZF  *)
-Definition rflags_of_bwop (w : word) :=
-  (*  OF   ; CF   ; SF          ; PF          ; ZF          ] *)
-  [:: false; false; SF_of_word w; PF_of_word w; ZF_of_word w].
-
-(* -------------------------------------------------------------------- *)
-(*  OF; CF ;SF; PF; ZF  *)
-Definition rflags_of_aluop (w : word) (vu vs : Z) :=
-  (*  OF                  ; CF                    *)
-  [:: I64.signed   w != vs; I64.unsigned w != vu;
-  (*  SF          ; PF          ; ZF          ] *)
-      SF_of_word w; PF_of_word w; ZF_of_word w ].
-
-(* -------------------------------------------------------------------- *)
-(*  OF; CF ;SF; PF; ZF  *)
-Definition rflags_of_mul (ov : bool) :=
-  (*  OF      ; CF                    *)
-  [:: Vbool ov;  Vbool ov;
-  (*  SF      ; PF       ; ZF         *)
-     undef_b  ; undef_b   ; undef_b ].
+Definition f4_w ws (fw:rflags4 * i_wsize ws) :=
+  f4 fw.1 ++ [:: Vword (w_to_word fw.2)].
 
 (* -------------------------------------------------------------------- *)
 
-Definition rflags_of_div :=
-  (*  OF      ; CF                    *)
-  [:: undef_b  ; undef_b  ;
-  (*  SF      ; PF       ; ZF         *)
-      undef_b  ; undef_b   ; undef_b ].
+Definition wmulu ws (v1 v2:word) : exec values :=
+  let hl := 
+    @select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws * i_wsize ws)
+      I8.wmulu I16.wmulu I32.wmulu I64.wmulu ws (of_word ws v1) (of_word ws v2) in
+  ok [:: Vword (w_to_word hl.1); Vword (w_to_word hl.2)].
 
-(* -------------------------------------------------------------------- *)
-(*  OF; SF; PF; ZF  *)
-Definition rflags_of_aluop_nocf (w : word) (vs : Z) :=
-  (*  OF                  *)
-  [:: I64.signed   w != vs;
-  (*  SF          ; PF          ; ZF          ] *)
-      SF_of_word w; PF_of_word w; ZF_of_word w ].
+Definition wmuls ws (v1 v2:word) : exec values :=
+  let hl := 
+    @select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws * i_wsize ws)
+      I8.wmuls I16.wmuls I32.wmuls I64.wmuls ws (of_word ws v1) (of_word ws v2) in
+  ok [:: Vword (w_to_word hl.1); Vword (w_to_word hl.2)].
 
-Definition flags_w (bs:seq bool) (w:word) : exec values :=
-  ok ((map Vbool bs) ++ [:: Vword w]).
+Definition waddcarry ws (v1 v2:word) (b:bool) : exec values :=
+  let bw := 
+    @select_op (fun ws => i_wsize ws -> i_wsize ws -> bool -> bool * i_wsize ws)
+      I8.waddcarry I16.waddcarry I32.waddcarry I64.waddcarry ws
+      (of_word ws v1) (of_word ws v2) b in
+  ok [:: Vbool bw.1; Vword (w_to_word bw.2)].
 
-Definition rflags_of_aluop_w (w : word) (vu vs : Z) : exec values :=
-  flags_w (rflags_of_aluop w vu vs) w.
+Definition wsubcarry ws (v1 v2:word) (b:bool) : exec values :=
+  let bw := 
+    @select_op (fun ws => i_wsize ws -> i_wsize ws -> bool -> bool * i_wsize ws)
+      I8.wsubcarry I16.wsubcarry I32.wsubcarry I64.wsubcarry ws
+      (of_word ws v1) (of_word ws v2) b in
+  ok [:: Vbool bw.1; Vword (w_to_word bw.2)].
 
-Definition rflags_of_aluop_nocf_w (w : word) (vs : Z) : exec values :=
-  flags_w (rflags_of_aluop_nocf w vs) w.
+Definition x86_MOV ws (x:word) : exec values :=
+  ok [:: Vword (w_to_word (of_word ws x))].
 
-Definition rflags_of_bwop_w (w : word) : exec values :=
-  flags_w (rflags_of_bwop w) w.
+Definition x86_CMOVcc ws (b:bool) (x y:word) : exec values :=
+  ok [:: Vword (w_to_word (of_word ws (if b then x else y)))].
 
-Definition vbools bs : exec values := ok (List.map Vbool bs).
+Definition x86_neg ws (v1:word) : exec values := 
+  ok (f5_w (@select_op (fun ws => i_wsize ws -> rflags5 * i_wsize ws)
+               I8.x86_neg I16.x86_neg I32.x86_neg I64.x86_neg ws (of_word ws v1))).
 
-(* -------------------------------------------------------------------- *)
-Definition x86_MOV (x:word) : exec values :=
-  ok [:: Vword x].
+Definition x86_add ws v1 v2 : exec values :=
+  ok (f5_w (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws)
+      I8.x86_add I16.x86_add I32.x86_add I64.x86_add ws
+      (of_word ws v1) (of_word ws v2)))).
 
-Definition x86_CMOVcc (b:bool) (x y:word) : exec values :=
-  ok [:: Vword (if b then x else y)].
+Definition x86_sub ws v1 v2 : exec values :=
+  ok (f5_w (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws)
+      I8.x86_sub I16.x86_sub I32.x86_sub I64.x86_sub ws
+      (of_word ws v1) (of_word ws v2)))).
 
-Definition x86_add (v1 v2 : word) :=
-  rflags_of_aluop_w
-    (I64.add v1 v2)
-    (I64.unsigned v1 + I64.unsigned v2)%Z
-    (I64.signed   v1 + I64.signed   v2)%Z.
+Definition x86_mul ws v1 v2 : exec values :=
+  ok (f5_ww (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws * i_wsize ws)
+      I8.x86_mul I16.x86_mul I32.x86_mul I64.x86_mul ws
+      (of_word ws v1) (of_word ws v2)))).
 
-Definition x86_sub (v1 v2 : word) :=
-  rflags_of_aluop_w
-    (I64.sub v1 v2)
-    (I64.unsigned v1 - I64.unsigned v2)%Z
-    (I64.signed   v1 - I64.signed   v2)%Z.
+Definition x86_imul ws v1 v2 : exec values :=
+  ok (f5_ww (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws * i_wsize ws)
+      I8.x86_imul I16.x86_imul I32.x86_imul I64.x86_imul ws
+      (of_word ws v1) (of_word ws v2)))).
 
-Definition x86_mul (v1 v2:word): exec values :=
-  let lo := I64.mul v1 v2 in
-  let hi := I64.mulhu v1 v2 in
-  let ov := dwordu hi lo in
-  let ov := (ov >? I64.max_unsigned)%Z in
-  ok (rflags_of_mul ov ++ [::Vword hi; Vword lo]).
+Definition x86_imul64 ws v1 v2 : exec values :=
+  ok (f5_w (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws)
+      I8.x86_imul64 I16.x86_imul64 I32.x86_imul64 I64.x86_imul64 ws
+      (of_word ws v1) (of_word ws v2)))).
 
-Definition x86_imul (v1 v2:word) : exec values:=
-  let lo := I64.mul v1 v2 in
-  let hi := I64.mulhs v1 v2 in
-  let ov := dwords hi lo in
-  let ov := (ov <? I64.min_signed)%Z || (ov >? I64.max_unsigned)%Z in
-  ok (rflags_of_mul ov ++ [::Vword hi; Vword lo]).
+Definition x86_div ws hi lo dv :=
+  Let fww := 
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws -> 
+                           exec (rflags5 * i_wsize ws * i_wsize ws))
+        I8.x86_div I16.x86_div I32.x86_div I64.x86_div ws
+        (of_word ws hi) (of_word ws lo) (of_word ws dv)) in
+  ok (f5_ww fww).
 
-Definition x86_imul64 (v1 v2:word) : exec values:=
-  let lo := I64.mul v1 v2 in
-  let hi := I64.mulhs v1 v2 in
-  let ov := dwords hi lo in
-  let ov := (ov <? I64.min_signed)%Z || (ov >? I64.max_unsigned)%Z in
-  ok (rflags_of_mul ov ++ [::Vword lo]).
+Definition x86_idiv ws hi lo dv : exec values :=
+  Let fww := 
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws -> 
+                           exec (rflags5 * i_wsize ws * i_wsize ws))
+        I8.x86_idiv I16.x86_idiv I32.x86_idiv I64.x86_idiv ws
+        (of_word ws hi) (of_word ws lo) (of_word ws dv)) in
+  ok (f5_ww fww).
 
-Definition x86_div (hi lo dv:word) : exec values:=
-  let dd := dwordu hi lo in
-  let dv := I64.unsigned dv in
-  let q  := (dd  /  dv)%Z in
-  let r  := (dd mod dv)%Z in
-  let ov := (q >? I64.max_unsigned)%Z in
+Definition x86_adc ws (v1 v2 : word) (c:bool) : exec values :=
+  ok (f5_w (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> bool -> rflags5 * i_wsize ws)
+      I8.x86_adc I16.x86_adc I32.x86_adc I64.x86_adc ws
+      (of_word ws v1) (of_word ws v2) c))).
 
-  if (dv == 0)%Z || ov then type_error else
+Definition x86_sbb ws (v1 v2 : word) (c:bool) : exec values :=
+  ok (f5_w (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> bool -> rflags5 * i_wsize ws)
+      I8.x86_sbb I16.x86_sbb I32.x86_sbb I64.x86_sbb ws
+      (of_word ws v1) (of_word ws v2) c))).
 
-  ok (rflags_of_div ++ [:: Vword (I64.repr q); Vword (I64.repr r)]).
+Definition x86_inc ws (v1:word) : exec values :=
+  ok (f4_w (
+    (@select_op (fun ws => i_wsize ws -> rflags4 * i_wsize ws)
+      I8.x86_inc I16.x86_inc I32.x86_inc I64.x86_inc ws
+      (of_word ws v1)))).
 
-Definition x86_idiv (hi lo dv:word) : exec values :=
-  let dd := dwords hi lo in
-  let dv := I64.signed dv in
-  let q  := (Z.quot dd dv)%Z in
-  let r  := (Z.rem  dd dv)%Z in
-  let ov := (q <? I64.min_signed)%Z || (q >? I64.max_signed)%Z in
+Definition x86_dec ws (v1:word) : exec values :=
+  ok (f4_w (
+    (@select_op (fun ws => i_wsize ws -> rflags4 * i_wsize ws)
+      I8.x86_dec I16.x86_dec I32.x86_dec I64.x86_dec ws
+      (of_word ws v1)))).
 
-  if (dv == 0)%Z || ov then type_error else
-
-  ok (rflags_of_div ++ [:: Vword (I64.repr q); Vword (I64.repr r)]).
-
-Definition x86_adc (v1 v2 : word) (c:bool) :=
-  let c := b_to_w c in
-  rflags_of_aluop_w
-    (I64.add_carry v1 v2 c)
-    (I64.unsigned v1 + I64.unsigned v2 + c)%Z
-    (I64.signed   v1 + I64.signed   v2 + c)%Z.
-
-Definition x86_sbb (v1 v2 : word) (c:bool) :=
-  let c := b_to_w c in
-  rflags_of_aluop_w
-    (I64.sub_borrow v1 v2 c)
-    (I64.unsigned v1 - (I64.unsigned v2 + c))%Z
-    (I64.signed   v1 - (I64.signed   v2 + c))%Z.
-
-Definition x86_neg (w:word) :=
-  let vs := (- I64.signed w)%Z in
-  let v := I64.neg w in
-  flags_w
-  [:: I64.signed   v != vs; negb (I64.eq w I64.zero);
-      SF_of_word v; PF_of_word v; ZF_of_word v ]
-  v.
-
-Definition x86_inc (w:word) :=
-  rflags_of_aluop_nocf_w
-    (I64.add w I64.one)
-    (I64.signed w + 1)%Z.
-
-Definition x86_dec (w:word) :=
-  rflags_of_aluop_nocf_w
-    (I64.sub w I64.one)
-    (I64.signed w - 1)%Z.
-
-Definition x86_setcc (b:bool) : exec values := ok [:: Vword (b_to_w b)].
+Definition x86_setcc ws (b:bool) : exec values := 
+  ok [:: Vword (w_to_word (@select_op (fun ws => bool -> i_wsize ws)
+                  I8.x86_setcc I16.x86_setcc I32.x86_setcc I64.x86_setcc ws b))].
 
 Definition check_scale (s:Z) :=
   (s == 1%Z) || (s == 2%Z) || (s == 4%Z) || (s == 8%Z).
 
 Definition x86_lea (disp base:word) (scale:word) (offset:word) : exec values :=
-  if check_scale scale then
-    ok [::Vword (I64.add disp (I64.add base (I64.mul (I64.repr scale) offset)))]
+  if check_scale (I64.unsigned scale) then
+    ok [::Vword (I64.add disp (I64.add base (I64.mul scale offset)))]
   else type_error.
 
-Definition x86_test (x y: word) : exec values :=
-  vbools (rflags_of_bwop (I64.and x y)).
+Definition x86_test ws (v1 v2: word) : exec values :=
+  ok (f5 (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5)
+      I8.x86_test I16.x86_test I32.x86_test I64.x86_test ws
+      (of_word ws v1) (of_word ws v2) ))).
 
-Definition x86_cmp (x y: word) :=
-  vbools
-    (rflags_of_aluop (I64.sub x y)
-       (I64.unsigned x - I64.unsigned y)%Z (I64.signed x - I64.signed y)%Z).
+Definition x86_cmp ws (v1 v2: word) : exec values :=
+  ok (f5 (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5)
+      I8.x86_cmp I16.x86_cmp I32.x86_cmp I64.x86_cmp ws
+      (of_word ws v1) (of_word ws v2) ))).
 
-Definition x86_and (v1 v2: word) :=
-  rflags_of_bwop_w
-    (I64.and v1 v2).
+Definition x86_and ws (v1 v2: word) : exec values :=
+   ok (f5_w (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws)
+      I8.x86_and I16.x86_and I32.x86_and I64.x86_and ws
+      (of_word ws v1) (of_word ws v2) ))).
 
-Definition x86_or (v1 v2: word) :=
-  rflags_of_bwop_w
-    (I64.or v1 v2).
+Definition x86_or ws (v1 v2: word) : exec values :=
+   ok (f5_w (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws)
+      I8.x86_or I16.x86_or I32.x86_or I64.x86_or ws
+      (of_word ws v1) (of_word ws v2) ))).
 
-Definition x86_xor (v1 v2: word) :=
-  rflags_of_bwop_w
-    (I64.xor v1 v2).
+Definition x86_xor ws (v1 v2: word) : exec values :=
+   ok (f5_w (
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws)
+      I8.x86_xor I16.x86_xor I32.x86_xor I64.x86_xor ws
+      (of_word ws v1) (of_word ws v2) ))).
 
-Definition x86_not (v:word) : exec values:=
-  ok [:: Vword (I64.not v)].
+Definition x86_not ws (v1:word) : exec values := 
+  ok [:: Vword (w_to_word (@select_op (fun ws => i_wsize ws -> i_wsize ws)
+                  I8.x86_not I16.x86_not I32.x86_not I64.x86_not ws (of_word ws v1)))].
 
-Definition x86_shl (v i: word) : exec values :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then
-    let u := Vundef sbool in
-    ok [:: u; u; u; u; u; Vword v]
-  else
-    let rc := msb (I64.shl v (I64.sub i I64.one)) in
-    let r  := I64.shl v i in
-    let OF :=
-      if i == I64.one then Vbool (msb r (+) rc)
-      else undef_b in
-    let CF := Vbool rc in
-    let SF := Vbool (SF_of_word r) in
-    let PF := Vbool (PF_of_word r) in
-    let ZF := Vbool (ZF_of_word r) in
-    ok [:: OF; CF; SF; PF; ZF; Vword r].
+Definition tshift ws := 
+  option bool -> option bool -> option bool -> option bool -> option bool -> 
+  i_wsize ws -> i_wsize ws -> rflags5 * i_wsize ws.
 
-Definition x86_shr (v i: word) : exec values :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then
-    let u := Vundef sbool in
-    ok [:: u; u; u; u; u; Vword v]
-  else
-    let rc := lsb (I64.shru v (I64.sub i I64.one)) in
-    let r  := I64.shru v i in
+Definition vobool (v:value) := 
+  match v with
+  | Vbool b => Some b 
+  | _       => None 
+  end.
 
-    let OF :=
-      if i == I64.one then Vbool (msb r)
-      else undef_b in
-    let CF := Vbool rc in
-    let SF := Vbool (SF_of_word r) in
-    let PF := Vbool (PF_of_word r) in
-    let ZF := Vbool (ZF_of_word r) in
-    ok [:: OF; CF; SF; PF; ZF; Vword r].
+Definition x86_shl ws (OF CF SF PF ZF:bool) (v i: word) : exec values :=
+  ok (f5_w 
+    (@select_op tshift 
+       I8.x86_shl I16.x86_shl I32.x86_shl I64.x86_shl ws
+       (vobool OF) (vobool CF) (vobool SF) (vobool PF) (vobool ZF)
+       (of_word ws v) (of_word ws i))).
 
-Definition x86_sar (v i: word) : exec values :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then
-    let u := Vundef sbool in
-    ok [:: u; u; u; u; u; Vword v]
-  else
-    let rc := lsb (I64.shr v (I64.sub i I64.one)) in
-    let r  := I64.shr v i in
+Definition x86_shr ws (OF CF SF PF ZF:bool) (v i: word) : exec values :=
+  ok (f5_w 
+    (@select_op tshift 
+       I8.x86_shr I16.x86_shr I32.x86_shr I64.x86_shr ws
+       (vobool OF) (vobool CF) (vobool SF) (vobool PF) (vobool ZF)
+       (of_word ws v) (of_word ws i))).
 
-    let OF :=
-      if i == I64.one then Vbool false
-      else undef_b in
-    let CF := Vbool rc in
-    let SF := Vbool (SF_of_word r) in
-    let PF := Vbool (PF_of_word r) in
-    let ZF := Vbool (ZF_of_word r) in
-    ok [:: OF; CF; SF; PF; ZF; Vword r].
+Definition x86_sar ws (OF CF SF PF ZF:bool) (v i: word) : exec values :=
+  ok (f5_w 
+    (@select_op tshift 
+       I8.x86_sar I16.x86_sar I32.x86_sar I64.x86_sar ws
+       (vobool OF) (vobool CF) (vobool SF) (vobool PF) (vobool ZF)
+       (of_word ws v) (of_word ws i))).
 
 Notation app_b   o := (app_sopn [:: sbool] o).
 Notation app_w   o := (app_sopn [:: sword] o).
@@ -729,47 +676,40 @@ Notation app_ww  o := (app_sopn [:: sword; sword] o).
 Notation app_www o := (app_sopn [:: sword; sword; sword] o).
 Notation app_wwb o := (app_sopn [:: sword; sword; sbool] o).
 Notation app_bww o := (app_sopn [:: sbool; sword; sword] o).
-Notation app_w4 o  := (app_sopn [:: sword; sword; sword; sword] o).
+Notation app_w4  o := (app_sopn [:: sword; sword; sword; sword] o).
+Notation app_b5w2 o := (app_sopn [:: sbool; sbool; sbool; sbool; sbool; sword; sword] o).
 
 Definition sem_sopn (o:sopn) :  values -> exec values :=
   match o with
-  | Omulu        => app_ww  (fun x y => ok (@pval sword sword (wumul x y)))
-  | Oaddcarry    => app_wwb (fun x y c => ok (@pval sbool sword (waddcarry x y c)))
-  | Osubcarry    => app_wwb (fun x y c => ok (@pval sbool sword (wsubcarry x y c)))
-
-  (* Low level x86 operations *)
-  | Ox86_MOV	 => app_w    x86_MOV
-  | Ox86_CMOVcc  => (fun v => match v with
-    | [:: v1; v2; v3] =>
-      Let b := to_bool v1 in
-      if b then
-        Let w2 := to_word v2 in ok [:: Vword w2]
-      else
-        Let w3 := to_word v3 in ok [:: Vword w3]
-    | _ => type_error end)
-  | Ox86_ADD     => app_ww   x86_add
-  | Ox86_SUB     => app_ww   x86_sub
-  | Ox86_MUL     => app_ww   x86_mul
-  | Ox86_IMUL    => app_ww   x86_imul
-  | Ox86_IMUL64    => app_ww   x86_imul64
-  | Ox86_DIV     => app_www  x86_div
-  | Ox86_IDIV    => app_www  x86_idiv
-  | Ox86_ADC     => app_wwb  x86_adc
-  | Ox86_SBB     => app_wwb  x86_sbb
-  | Ox86_NEG	=> app_w	x86_neg
-  | Ox86_INC     => app_w    x86_inc
-  | Ox86_DEC     => app_w    x86_dec
-  | Ox86_SETcc   => app_b    x86_setcc
-  | Ox86_LEA     => app_w4   x86_lea
-  | Ox86_TEST    => app_ww   x86_test
-  | Ox86_CMP     => app_ww   x86_cmp
-  | Ox86_AND     => app_ww   x86_and
-  | Ox86_OR      => app_ww   x86_or
-  | Ox86_XOR     => app_ww   x86_xor
-  | Ox86_NOT     => app_w    x86_not
-  | Ox86_SHL     => app_ww x86_shl
-  | Ox86_SHR     => app_ww x86_shr
-  | Ox86_SAR     => app_ww x86_sar
+  | Omulu      ws  => app_ww   (wmulu      ws)
+  | Omuls      ws  => app_ww   (wmuls      ws)
+  | Oaddcarry  ws  => app_wwb  (waddcarry  ws)
+  | Osubcarry  ws  => app_wwb  (wsubcarry  ws)
+  | Ox86_MOV	ws => app_w    (x86_MOV    ws)
+  | Ox86_CMOVcc ws => app_bww  (x86_CMOVcc ws)
+  | Ox86_ADD    ws => app_ww   (x86_add    ws)
+  | Ox86_SUB    ws => app_ww   (x86_sub    ws)
+  | Ox86_MUL    ws => app_ww   (x86_mul    ws)
+  | Ox86_IMUL   ws => app_ww   (x86_imul   ws)
+  | Ox86_IMUL64 ws => app_ww   (x86_imul64 ws)
+  | Ox86_DIV    ws => app_www  (x86_div    ws)
+  | Ox86_IDIV   ws => app_www  (x86_idiv   ws)
+  | Ox86_ADC    ws => app_wwb  (x86_adc    ws)
+  | Ox86_SBB    ws => app_wwb  (x86_sbb    ws)
+  | Ox86_NEG	ws => app_w    (x86_neg    ws)
+  | Ox86_INC    ws => app_w    (x86_inc    ws)
+  | Ox86_DEC    ws => app_w    (x86_dec    ws)
+  | Ox86_SETcc  ws => app_b    (x86_setcc  ws)
+  | Ox86_LEA       => app_w4    x86_lea
+  | Ox86_TEST   ws => app_ww   (x86_test   ws)
+  | Ox86_CMP    ws => app_ww   (x86_cmp    ws)
+  | Ox86_AND    ws => app_ww   (x86_and    ws)
+  | Ox86_OR     ws => app_ww   (x86_or     ws)
+  | Ox86_XOR    ws => app_ww   (x86_xor    ws)
+  | Ox86_NOT    ws => app_w    (x86_not    ws)
+  | Ox86_SHL    ws => app_b5w2 (x86_shl    ws)
+  | Ox86_SHR    ws => app_b5w2 (x86_shr    ws)
+  | Ox86_SAR    ws => app_b5w2 (x86_sar    ws)
   end.
 
 (* ** Instructions
@@ -1117,7 +1057,7 @@ Lemma vrvP (x:lval) v s1 s2 :
   write_lval x v s1 = ok s2 ->
   s1.(evm) = s2.(evm) [\ vrv x].
 Proof.
-  case x => /= [ _ ty | ? /vrvP_var| y e| y e] //.
+  case x => /= [ _ ty | ? /vrvP_var| ws y e| y e] //.
   + by move=> /write_noneP [->].
   + by t_rbindP => -[<-].
   apply: on_arr_varP => n t; case:y => -[] ty yn yi /= -> Hy.
@@ -1241,7 +1181,7 @@ Lemma read_e_eq_on s vm' vm m e:
   vm =[read_e_rec s e] vm'->
   sem_pexpr (Estate m vm) e = sem_pexpr (Estate m vm') e.
 Proof.
-  elim:e s => //= [e He|v|v e He|v e He|o e He|o e1 He1 e2 He2|e He e1 He1 e2 He2] s.
+  elim:e s => //= [ws e He|v|v e He|ws v e He|o e He|o e1 He1 e2 He2|e He e1 He1 e2 He2] s.
   + by move=> /He ->.
   + move=> /get_var_eq_on -> //;SvD.fsetdec.
   + move=> Heq;rewrite (He _ Heq)=> {He}.
@@ -1305,7 +1245,7 @@ Lemma write_lval_eq_on X x v s1 s2 vm1 :
    evm s2 =[Sv.union (vrv x) X] vm2 /\
    write_lval x v {|emem:= emem s1; evm := vm1|} = ok {|emem:= emem s2; evm := vm2|}.
 Proof.
-  case:x => [vi ty | x | x e | x e ] /=.
+  case:x => [vi ty | x | ws x e | x e ] /=.
   + move=> ? /write_noneP [->];rewrite /write_none=> H ?;exists vm1;split=>//.
     by case:H => [[u ->] | [-> /eqP /negbTE ->]].
   + move=> _ Hw /(write_var_eq_on Hw) [vm2 [Hvm2 Hx]];exists vm2;split=>//.
@@ -1464,10 +1404,11 @@ Proof.
 Qed.
 
 Lemma value_uincl_word ve ve' (w:word) :
-  value_uincl ve ve' -> to_word ve = ok w -> ve = w /\ ve' = w.
+  value_uincl ve ve' -> to_word ve = ok w -> ve = Vword w /\ ve' = Vword w.
 Proof.
   case:ve ve' => //=;last by move=> [].
-  by move=> z0 [] //= z1 -> [] ->. Qed.
+  by move=> z0 [] //= z1 -> [] ->. 
+Qed.
 
 Lemma value_uincl_bool ve ve' b :
   value_uincl ve ve' -> to_bool ve = ok b -> ve = b /\ ve' = b.
@@ -1568,7 +1509,7 @@ Lemma vuincl_sem_sop1 o ve1 ve1' v1 :
   sem_sop1 o ve1 = ok v1 ->
   sem_sop1 o ve1' = ok v1.
 Proof.
-  case: o;rewrite /= /sem_op1_b /sem_op1_w /mk_sem_sop1 => Hu;
+  case: o => [ | ws | ws];rewrite /= /sem_op1_b /sem_op1_w /mk_sem_sop1 => Hu;
     apply: rbindP => z Hz [] <-.
   + by have [z' [-> /= <- ]]:= of_val_uincl Hu Hz.
   + by have [z' [-> /= <- ]]:= of_val_uincl Hu Hz.
@@ -1588,11 +1529,11 @@ Lemma sem_pexpr_uincl s1 vm2 e v1:
   sem_pexpr s1 e = ok v1 ->
   exists v2, sem_pexpr (Estate s1.(emem) vm2) e = ok v2 /\ value_uincl v1 v2.
 Proof.
-  move=> Hu; elim: e v1=>//=[z|b|e He|x|x p Hp|x p Hp|o e He|o e1 He1 e2 He2|e He e1 He1 e2 He2 ] v1.
+  move=> Hu; elim: e v1=>//=[z|b|ws e He|x|x p Hp|ws x p Hp|o e He|o e1 He1 e2 He2|e He e1 He1 e2 He2 ] v1.
   + by move=> [] <-;exists z.
   + by move=> [] <-;exists b.
   + apply: rbindP => z;apply: rbindP => ve /He [] ve' [] -> Hvu Hto [] <-.
-    by case: (value_uincl_int Hvu Hto) => ??;subst; exists (Vword (I64.repr z)).
+    by case: (value_uincl_int Hvu Hto) => ??;subst; exists (Vword (wrepr ws z)).
   + by apply get_var_uincl.
   + apply on_arr_varP => n t Htx;rewrite /on_arr_var=> /(get_var_uincl Hu) [v2 [->]].
     case: v2 => //= ? t' [] ? Htt';subst.
@@ -1657,26 +1598,9 @@ Lemma vuincl_sem_opn o vs vs' v :
   List.Forall2 value_uincl vs vs' -> sem_sopn o vs = ok v ->
   exists v', sem_sopn o vs' = ok v' /\ List.Forall2  value_uincl v v'.
 Proof.
-  rewrite /sem_sopn;case: o => //;try apply vuincl_sopn=> //.
-  move: vs=> [] // vs1 [] // vs2 [] // vs3 [] //.
-  move: vs'=> [|vs'1].
-  + move=> Hu; sinversion Hu.
-  move=> [|vs'2].
-  + move=> Hu; sinversion Hu; sinversion H4.
-  move=> [|vs'3].
-  + move=> Hu; sinversion Hu; sinversion H4; sinversion H6.
-  move=> [//|].
-  + move=> H; sinversion H; sinversion H5; sinversion H6.
-    apply: rbindP=> b /(value_uincl_bool H3) [] _ ->.
-    case: (b)=> /=.
-    + apply: rbindP=> v2 /(value_uincl_word H2) [] _ -> []<-.
-      eexists; split=> //.
-      apply: List.Forall2_cons=> //.
-    + apply: rbindP=> v3 /(value_uincl_word H4) [] _ -> []<-.
-      eexists; split=> //.
-      apply: List.Forall2_cons=> //.
-  move=> a l H.
-  sinversion H; sinversion H5; sinversion H6; sinversion H7.
+  rewrite /sem_sopn;case: o;match goal with 
+  | |- forall (ws:wsize), _ => move=> ws 
+  | _ => idtac end;try apply vuincl_sopn=> //.
 Qed.
 
 Lemma set_vm_uincl vm vm' x z z' :
@@ -1794,7 +1718,7 @@ Lemma write_uincl s1 s2 vm1 r v1 v2:
     write_lval r v2 (Estate (emem s1) vm1) = ok (Estate (emem s2) vm2) /\
     vm_uincl s2.(evm) vm2.
 Proof.
-  move=> Hvm1 Hv;case:r => [xi ty | x | x p | x p] /=.
+  move=> Hvm1 Hv;case:r => [xi ty | x | ws x p | x p] /=.
   + move=> H; have [-> _]:= write_noneP H.
     by rewrite (uincl_write_none _ Hv H);exists vm1.
   + by apply write_var_uincl.
@@ -2081,12 +2005,14 @@ End UNDEFINCL.
 
 Lemma eq_exprP s e1 e2 : eq_expr e1 e2 -> sem_pexpr s e1 = sem_pexpr s e2.
 Proof.
-  elim: e1 e2=> [z  | b  | e He | x  | x e He | x e He | o e  He | o e1 He1 e2 He2 | e He e1 He1 e2 He2]
-                [z' | b' | e'   | x' | x' e'  | x' e'  | o' e' | o' e1' e2' | e' e1' e2'] //=.
-  + by move=> /eqP ->.   + by move=> /eqP ->.
-  + by move=> /He ->.    + by move=> /eqP ->.
+  elim: e1 e2=> [z  | b  | ws e He | x  | x e He | ws x e He | o e  He | o e1 He1 e2 He2 | e He e1 He1 e2 He2]
+                [z' | b' | ws' e'   | x' | x' e'  | ws' x' e'  | o' e' | o' e1' e2' | e' e1' e2'] //=.
+  + by move=> /eqP ->.   
+  + by move=> /eqP ->.
+  + by move=> /andP[] /eqP -> /He ->.   
+  + by move=> /eqP ->.
   + by move=> /andP [] /eqP -> /He ->.
-  + by move=> /andP [] /eqP -> /He ->.
+  + by move=> /andP []/andP [] /eqP -> /eqP -> /He ->.
   + by move=> /andP[]/eqP -> /He ->.
   + by move=> /andP[]/andP[] /eqP -> /He1 -> /He2 ->.
   by move=> /andP[]/andP[] /He -> /He1 -> /He2 ->.

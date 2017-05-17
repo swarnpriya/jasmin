@@ -475,39 +475,6 @@ Proof.
   apply Z.compare_eq.
 Qed.
 
-(* 64 bits word *)
-Module I64 := Integers.Int64.
-
-Definition i64_cmp (w1 w2:I64.int) := 
-   Z.compare (I64.unsigned w1) (I64.unsigned w2).
-
-Lemma i64_eqP : Equality.axiom (fun x y => I64.unsigned x == I64.unsigned y).
-Proof.
-  move=> p1 p2.
-  have := I64.eq_spec p1 p2;rewrite /I64.eq /Coqlib.zeq.
-  by case:Z.eq_dec => [/eqP | /eqP /negbTE] ->;constructor.
-Qed.
-
-Definition i64_eqMixin := EqMixin i64_eqP.
-Canonical  i64_eqType  := EqType I64.int i64_eqMixin.
-
-Lemma ueqP n1 n2: reflect (n1 = n2) (I64.unsigned n1 == I64.unsigned n2).
-Proof. by apply (n1 =P n2). Qed.
-
-Instance i64O : Cmp i64_cmp.
-Proof.
-  rewrite /i64_cmp;constructor.
-  + by move=> ??;rewrite Z.compare_antisym. 
-  + move=> ????;case:Z.compare_spec=> [->|H1|H1];
-    case:Z.compare_spec=> H2 //= -[] <- //;
-    rewrite -?H2 ?Z.compare_gt_iff ?Z.compare_lt_iff //.
-    + move: (H2);rewrite -?Z.compare_lt_iff => ->.
-      by rewrite Z.compare_lt_iff;apply: Z.lt_trans H1 H2. 
-    by apply: Z.lt_trans H2 H1. 
-  by move=> x y /Z.compare_eq Heq; rewrite -(I64.repr_unsigned x) -(I64.repr_unsigned y) Heq.
-Qed.
-
-
 (* ** Some Extra tactics
  * -------------------------------------------------------------------- *)
 
