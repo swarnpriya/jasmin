@@ -63,12 +63,12 @@ Definition sor e1 e2 :=
   end.
 
 (* FIXME improve this *)
-Definition snot_w e := Papp1 Olnot e.
+Definition snot_w ws e := Papp1 (Olnot ws) e.
 
 Definition s_op1 o e := 
   match o with
   | Onot  => snot_bool e 
-  | Olnot => snot_w e
+  | Olnot ws => snot_w ws e
   | Oneg => sneg e
   end.
 
@@ -84,7 +84,7 @@ Definition sadd_int e1 e2 :=
   | _, _ => Papp2 (Oadd Op_int) e1 e2
   end.
 
-Definition sadd_w e1 e2 := 
+Definition sadd_w ws e1 e2 := 
   match is_wconst e1, is_wconst e2 with
   | Some n1, Some n2 => 
     wconst (iword_add n1 n2)

@@ -487,31 +487,16 @@ Definition f4_w ws (fw:rflags4 * i_wsize ws) :=
 
 (* -------------------------------------------------------------------- *)
 
-Definition wmulu ws (v1 v2:word) : exec values :=
-  let hl := 
-    @select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws * i_wsize ws)
-      I8.wmulu I16.wmulu I32.wmulu I64.wmulu ws (of_word ws v1) (of_word ws v2) in
-  ok [:: Vword (w_to_word hl.1); Vword (w_to_word hl.2)].
+Definition bwvv (bw:bool * word) : exec values := 
+  ok [:: Vbool bw.1; Vword bw.2].
 
-Definition wmuls ws (v1 v2:word) : exec values :=
-  let hl := 
-    @select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws * i_wsize ws)
-      I8.wmuls I16.wmuls I32.wmuls I64.wmuls ws (of_word ws v1) (of_word ws v2) in
-  ok [:: Vword (w_to_word hl.1); Vword (w_to_word hl.2)].
+Definition wwvv (bw:word * word) : exec values := 
+  ok [:: Vword bw.1; Vword bw.2].
 
-Definition waddcarry ws (v1 v2:word) (b:bool) : exec values :=
-  let bw := 
-    @select_op (fun ws => i_wsize ws -> i_wsize ws -> bool -> bool * i_wsize ws)
-      I8.waddcarry I16.waddcarry I32.waddcarry I64.waddcarry ws
-      (of_word ws v1) (of_word ws v2) b in
-  ok [:: Vbool bw.1; Vword (w_to_word bw.2)].
-
-Definition wsubcarry ws (v1 v2:word) (b:bool) : exec values :=
-  let bw := 
-    @select_op (fun ws => i_wsize ws -> i_wsize ws -> bool -> bool * i_wsize ws)
-      I8.wsubcarry I16.wsubcarry I32.wsubcarry I64.wsubcarry ws
-      (of_word ws v1) (of_word ws v2) b in
-  ok [:: Vbool bw.1; Vword (w_to_word bw.2)].
+Definition sem_wmulu ws v1 v2 := wwvv (wmulu ws v1 v2).
+Definition sem_wmuls ws v1 v2 := wwvv (wmuls ws v1 v2).
+Definition sem_waddc ws v1 v2 b := bwvv (waddc ws v1 v2 b).
+Definition sem_wsubc ws v1 v2 b := bwvv (wsubc ws v1 v2 b).
 
 Definition x86_MOV ws (x:word) : exec values :=
   ok [:: Vword (w_to_word (of_word ws x))].
@@ -681,10 +666,10 @@ Notation app_b5w2 o := (app_sopn [:: sbool; sbool; sbool; sbool; sbool; sword; s
 
 Definition sem_sopn (o:sopn) :  values -> exec values :=
   match o with
-  | Omulu      ws  => app_ww   (wmulu      ws)
-  | Omuls      ws  => app_ww   (wmuls      ws)
-  | Oaddcarry  ws  => app_wwb  (waddcarry  ws)
-  | Osubcarry  ws  => app_wwb  (wsubcarry  ws)
+  | Omulu      ws  => app_ww   (sem_wmulu  ws)
+  | Omuls      ws  => app_ww   (sem_wmuls  ws)
+  | Oaddcarry  ws  => app_wwb  (sem_waddc  ws)
+  | Osubcarry  ws  => app_wwb  (sem_wsubc  ws)
   | Ox86_MOV	ws => app_w    (x86_MOV    ws)
   | Ox86_CMOVcc ws => app_bww  (x86_CMOVcc ws)
   | Ox86_ADD    ws => app_ww   (x86_add    ws)
@@ -725,6 +710,11 @@ Definition sem_range (s : estate) (r : range) :=
   Let i2 := sem_pexpr s pe2 >>= to_int in
   ok (wrange d i1 i2).
 
+Definition cast_w ws (v:value) (x:word) := 
+  match ws with
+  | Some ws => Let x := to_word v in (w_to_word (of_word ws x)).
+
+
 Inductive sem : estate -> cmd -> estate -> Prop :=
 | Eskip s :
     sem s [::] s
@@ -738,7 +728,7 @@ with sem_I : estate -> instr -> estate -> Prop :=
     sem_I s1 (MkI ii i) s2
 
 with sem_i : estate -> instr_r -> estate -> Prop :=
-| Eassgn s1 s2 (x:lval) tag e:
+| Eassgn s1 s2 (x:lval) ws tag e:
     (Let v := sem_pexpr s1 e in write_lval x v s1) = ok s2 ->
     sem_i s1 (Cassgn x tag e) s2
 

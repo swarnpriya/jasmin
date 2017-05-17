@@ -95,11 +95,17 @@ Definition fundef : option bool := None.
 
 Definition Zofb (b:bool) : Z := if b then 1 else 0.
 
+Notation iword := Z (only parsing).
+
+Create HintDb Iword discriminated.
+
 Module MakeI (WS:WSIZE).
 
   Include (Integers.Make WS).
 
   Definition weq (w1 w2: int) := unsigned w1 == unsigned w2.
+
+  Definition wneq (w1 w2: int) := ~~ (unsigned w1 == unsigned w2).
 
   Definition wcmp (w1 w2:int) := 
     Z.compare (unsigned w1) (unsigned w2).
@@ -139,11 +145,11 @@ Module MakeI (WS:WSIZE).
 
   Definition b_to_w (b:bool) := if b then one else zero.
 
-  Definition waddcarry (x y:int) (c:bool) :=
+  Definition waddc (x y:int) (c:bool) :=
     let n := unsigned x + unsigned y + unsigned (b_to_w c) in
     (modulus <=? n, repr n).
 
-  Definition wsubcarry (x y:int) (c:bool) :=
+  Definition wsubc (x y:int) (c:bool) :=
     let n := unsigned x - (unsigned y + unsigned (b_to_w c)) in
     (n <? 0, repr n).
 
@@ -156,10 +162,16 @@ Module MakeI (WS:WSIZE).
     (repr (Z.quot n modulus), repr n).
   
   Definition wsle (x y:int) := signed x <=? signed y.
-  Definition wslt (x y:int) := signed x <? signed y.
+  Definition wslt (x y:int) := signed x <?  signed y.
 
   Definition wule (x y:int) := unsigned x <=? unsigned y.
-  Definition wult (x y:int) := unsigned x <? unsigned y.
+  Definition wult (x y:int) := unsigned x <?  unsigned y.
+
+  Definition wsge (x y:int) := wsle y x.
+  Definition wsgt (x y:int) := wslt y x.
+
+  Definition wuge (x y:int) := wule y x.
+  Definition wugt (x y:int) := wult y x.
 
   Lemma lt_unsigned x: (modulus <=? unsigned x)%Z = false.
   Proof. by rewrite Z.leb_gt;case: (unsigned_range x). Qed.
@@ -424,8 +436,7 @@ Module MakeI (WS:WSIZE).
   (* ** Machine word representation for the compiler and the wp
    * -------------------------------------------------------------------- *)
 
-  Notation iword := Z (only parsing).
-
+(*
   Notation ibase := modulus (only parsing).
 
   Notation tobase := Z_mod_modulus (only parsing).
@@ -444,19 +455,11 @@ Module MakeI (WS:WSIZE).
 
   Definition iword_add (n1 n2:iword) : iword := tobase (n1 + n2).
 
-  Definition iword_addc (n1 n2:iword) : (bool * iword) := 
-    let n  := tobase n1 + tobase n2 in
-    (ibase <=? n, tobase n).
-
-  Definition iword_addcarry (n1 n2:iword) (c:bool) : (bool * iword) := 
+  Definition iword_addc (n1 n2:iword) (c:bool) : (bool * iword) := 
     let n  := tobase n1 + tobase n2 + Zofb c in
     (ibase <=? n, tobase n).
 
   Definition iword_sub (n1 n2:iword) : iword := tobase (n1 - n2).
-
-  Definition iword_subc (n1 n2:iword) : (bool * iword) := 
-    let n := tobase n1 - tobase n2 in
-    (n <? 0, tobase n).
 
   Definition iword_subcarry (n1 n2:iword) (c:bool) : (bool * iword) := 
     let n := tobase n1 - (tobase n2 + Zofb c) in
@@ -466,12 +469,14 @@ Module MakeI (WS:WSIZE).
 
   Lemma iword_eqbP (n1 n2:iword) : iword_eqb n1 n2 = (repr n1 == repr n2).
   Proof. by []. Qed.
-
+  
   Lemma iword_ltbP (n1 n2:iword) : iword_ltb n1 n2 = wult (repr n1) (repr n2).
   Proof. by []. Qed.
 
   Lemma iword_lebP (n1 n2:iword) : iword_leb n1 n2 = wule (repr n1) (repr n2).
   Proof. by []. Qed.
+
+  Hint Immediate iword_eqbP iword_ltbP iword_lebP : Iword.
 
   Lemma urepr n : unsigned (repr n) = Z_mod_modulus n.
   Proof. done. Qed.
@@ -516,7 +521,7 @@ Module MakeI (WS:WSIZE).
     apply: reqP;rewrite /iword_mul /mul !urepr.
     by rewrite !Z_mod_modulus_eq Zmod_mod Zmult_mod.
   Qed.
-
+*)
 End MakeI.
 
 Module I8   := MakeI Wordsize_8.
@@ -564,9 +569,9 @@ Definition wsize_size (s:wsize) :=
 
 Definition of_word ws (w:word) : i_wsize ws :=
   match ws with
-  | U8  => I8 .repr (I64.unsigned w mod I8.modulus)
-  | U16 => I16.repr (I64.unsigned w mod I8.modulus)
-  | U32 => I32.repr (I64.unsigned w mod I8.modulus)
+  | U8  => I8 .repr (I64.unsigned w)
+  | U16 => I16.repr (I64.unsigned w)
+  | U32 => I32.repr (I64.unsigned w)
   | U64 => w
   end.
 
@@ -594,6 +599,16 @@ Definition wlnot ws :=
 
 Definition w_op2 ws (op : i_wsize ws -> i_wsize ws -> i_wsize ws) (w1 w2:word) :=
   w_to_word (op (of_word ws w1) (of_word ws w2)).
+
+Definition w_op2b ws (op : i_wsize ws -> i_wsize ws -> bool -> bool * i_wsize ws) 
+           (w1 w2:word) (b:bool) :=
+  let bw := op (of_word ws w1) (of_word ws w2) b in
+  (bw.1, w_to_word bw.2).
+
+Definition w_op2ww ws (op : i_wsize ws -> i_wsize ws -> i_wsize ws * i_wsize ws) 
+           (w1 w2:word) :=
+  let ww := op (of_word ws w1) (of_word ws w2) in
+  (w_to_word ww.1, w_to_word ww.2).
 
 Definition w_op2_b ws (op: i_wsize ws -> i_wsize ws -> bool) (w1 w2:word) :=
   op (of_word ws w1) (of_word ws w2).
@@ -678,6 +693,54 @@ Definition wuge w :=
   w_op2_b 
     (fun x y => @select_op (fun w => i_wsize w -> i_wsize w -> bool)
                   I8.wule I16.wule I32.wule I64.wule w y x).
+
+Definition waddc w :=
+  w_op2b (@select_op (fun ws => i_wsize ws -> i_wsize ws -> bool -> bool * i_wsize ws)
+     I8.waddc I16.waddc I32.waddc I64.waddc w).
+
+Definition wsubc w :=
+  w_op2b (@select_op (fun ws => i_wsize ws -> i_wsize ws -> bool -> bool * i_wsize ws)
+     I8.wsubc I16.wsubc I32.wsubc I64.wsubc w).
+
+Definition wmulu w :=
+  w_op2ww (@select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws * i_wsize ws)
+      I8.wmulu I16.wmulu I32.wmulu I64.wmulu w).
+
+Definition wmuls w := 
+  w_op2ww (@select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws * i_wsize ws)
+      I8.wmuls I16.wmuls I32.wmuls I64.wmuls w).
+
+(* ** Machine word representation for the compiler and the wp
+ * -------------------------------------------------------------------- *)
+Definition bwbz (bw:bool * word) : bool * Z := 
+  (bw.1, I64.unsigned bw.2).
+
+Definition wwzz (bw:word * word) : Z * Z := 
+  (I64.unsigned bw.1, I64.unsigned bw.2).
+
+Definition iword_wadd  ws z1 z2 :=  I64.unsigned (wadd  ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wmul  ws z1 z2 :=  I64.unsigned (wmul  ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wsub  ws z1 z2 :=  I64.unsigned (wsub  ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wland ws z1 z2 :=  I64.unsigned (wland ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wlor  ws z1 z2 :=  I64.unsigned (wlor  ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wlxor ws z1 z2 :=  I64.unsigned (wlxor ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wlsr  ws z1 z2 :=  I64.unsigned (wlsr  ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wlsl  ws z1 z2 :=  I64.unsigned (wlsl  ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wasr  ws z1 z2 :=  I64.unsigned (wasr  ws (I64.repr z1) (I64.repr z2)).
+Definition iword_weq   ws z1 z2 :=  weq  ws (I64.repr z1) (I64.repr z2).
+Definition iword_wneq  ws z1 z2 :=  wneq ws (I64.repr z1) (I64.repr z2).
+Definition iword_wslt  ws z1 z2 :=  wslt ws (I64.repr z1) (I64.repr z2).
+Definition iword_wult  ws z1 z2 :=  wult ws (I64.repr z1) (I64.repr z2).
+Definition iword_wsle  ws z1 z2 :=  wsle ws (I64.repr z1) (I64.repr z2).
+Definition iword_wule  ws z1 z2 :=  wule ws (I64.repr z1) (I64.repr z2).
+Definition iword_wsgt  ws z1 z2 :=  wsgt ws (I64.repr z1) (I64.repr z2).
+Definition iword_wugt  ws z1 z2 :=  wugt ws (I64.repr z1) (I64.repr z2).
+Definition iword_wsge  ws z1 z2 :=  wsge ws (I64.repr z1) (I64.repr z2).
+Definition iword_wuge  ws z1 z2 :=  wuge ws (I64.repr z1) (I64.repr z2).
+Definition iword_wmulu ws z1 z2 :=  wwzz (wmulu ws (I64.repr z1) (I64.repr z2)).
+Definition iword_wmuls ws z1 z2 :=  wwzz (wmuls ws (I64.repr z1) (I64.repr z2)).
+Definition iword_waddc ws z1 z2 b := bwbz (waddc ws (I64.repr z1) (I64.repr z2) b).
+Definition iword_wsubc ws z1 z2 b := bwbz (wsubc ws (I64.repr z1) (I64.repr z2) b).
 
 (* ** Coercion to nat 
  * -------------------------------------------------------------------- *)
