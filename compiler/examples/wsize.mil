@@ -2,4 +2,5 @@ export fn foo (reg u64 x) {
 (u32)[x + 1] = x;
 (u32)[x + 0] = (u32)[x + 0] + 32s x;
 (u32)[x + 0] +32s= x;
+x +16u = 1;
 }
