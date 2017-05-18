@@ -363,7 +363,8 @@ Variant bincop :=
 Variant shtop :=
   | ST_SHL
   | ST_SHR
-  | ST_SAR.
+  | ST_SAR
+  | ST_SHLD.
 
 Variant alukind :=
   | LK_CMP
@@ -394,6 +395,7 @@ Definition kind_of_sopn (o : sopn) :=
   | Ox86_SHR    => OK_ALU (LK_SHT ST_SHR)
   | Ox86_SHL    => OK_ALU (LK_SHT ST_SHL)
   | Ox86_SAR    => OK_ALU (LK_SHT ST_SAR)
+  | Ox86_SHLD   => OK_ALU (LK_SHT ST_SHLD)
   | Ox86_DEC    => OK_CNT false
   | Ox86_INC    => OK_CNT true
   | Ox86_AND    => OK_ALU (LK_BINU BU_AND)
@@ -421,6 +423,7 @@ Definition string_of_aluk (o : alukind) :=
       | LK_SHT ST_SHR  => Ox86_SHR   
       | LK_SHT ST_SHL  => Ox86_SHL   
       | LK_SHT ST_SAR  => Ox86_SAR   
+      | LK_SHT ST_SHLD => Ox86_SHLD   
       end
 
   in string_of_sopn op.
@@ -543,19 +546,31 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
     end
 
   | LK_SHT sht =>
-    match as_pair e, as_singleton l with
-    | Some (e1, e2), Some x =>
+    match e, as_singleton l with
+    | [:: e1 & er ], Some x =>
       Let o1 := oprd_of_pexpr ii e1 in
-      Let o2 := ireg_of_pexpr ii e2 in
       Let ox := oprd_of_lval ii x in
       if (o1 != ox) then
         cierror ii (Cerr_assembler
           (AsmErr_string ("First [rl]val should be the same for " ++ string_of_aluk o))) else
-      ciok (match sht with
-            | ST_SHL => SHL
-            | ST_SHR => SHR
-            | ST_SAR => SAR
-            end o1 o2)
+      (match sht, er with
+       | ST_SHL, [:: e2] => 
+              Let o2 := ireg_of_pexpr ii e2 in
+              ciok (SHL o1 o2)
+       | ST_SHR, [:: e2] => 
+              Let o2 := ireg_of_pexpr ii e2 in
+              ciok (SHR o1 o2)
+       | ST_SAR, [:: e2] => 
+              Let o2 := ireg_of_pexpr ii e2 in
+              ciok (SAR o1 o2)
+       | ST_SHLD, [:: e2; e3] =>
+              Let o2 := oprd_of_pexpr ii e2 in
+              Let o3 := ireg_of_pexpr ii e3 in
+              ciok (SHLD o1 o2 o3)
+       | _, _ =>
+              cierror ii (Cerr_assembler
+                            (AsmErr_string ("wrong arguments for operator " ++ string_of_aluk o)))
+            end)
 
     | _, _ =>
       cierror ii (Cerr_assembler

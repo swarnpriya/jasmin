@@ -291,6 +291,9 @@ let pp_instr (i : X86_sem.asm) =
   | SHR (op, ir) ->
       `Instr (pp_iname rs "shr", [pp_imr rs ir; pp_opr rs op])
 
+  | SHLD (op1, op2, ir) ->
+      `Instr (pp_iname rs "shld", [pp_imr rs ir; pp_opr rs op2; pp_opr rs op1])
+
 (* -------------------------------------------------------------------- *)
 let pp_instr (fmt : Format.formatter) (i : X86_sem.asm) =
   pp_gen fmt (pp_instr i)
@@ -333,6 +336,7 @@ let wregs_of_instr (c : rset) (i : X86_sem.asm) =
   | SAL    (op, _)
   | SAR    (op, _)
   | SHL    (op, _)
+  | SHLD    (op, _, _)
   | SHR    (op, _) ->
       Option.map_default (fun r -> Set.add r c) c (reg_of_oprd op)
 
