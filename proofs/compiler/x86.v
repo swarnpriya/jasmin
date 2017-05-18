@@ -329,7 +329,11 @@ Definition assemble_cond ii (e: pexpr) : ciexec condt :=
 (* -------------------------------------------------------------------- *)
 Variant binuop :=
   | BU_ADD
-  | BU_SUB.
+  | BU_SUB
+  | BU_AND
+  | BU_OR
+  | BU_XOR
+.
 
 Variant bincop :=
   | BC_ADC
@@ -371,25 +375,31 @@ Definition kind_of_sopn (o : sopn) :=
   | Ox86_SAR    ws => OK_ALU   ws (LK_SHT ST_SAR)
   | Ox86_DEC    ws => OK_CNT   ws false
   | Ox86_INC    ws => OK_CNT   ws true
+  | Ox86_AND    ws => OK_ALU   ws (LK_BINU BU_AND)
+  | Ox86_OR     ws => OK_ALU   ws (LK_BINU BU_OR)
+  | Ox86_XOR    ws => OK_ALU   ws (LK_BINU BU_XOR)
   | Ox86_MOV    ws => OK_MOV   ws 
   | Ox86_CMOVcc ws => OK_MOVcc ws 
-  | _           => OK_None
+  | _              => OK_None
   end.
 
 Definition string_of_aluk ws (o : alukind) :=
   let op :=
       match o with
-      | LK_CMP          => Ox86_CMP     
-      | LK_BINU BU_ADD  => Ox86_ADD   
-      | LK_BINC BC_ADC  => Ox86_ADC   
-      | LK_BINU BU_SUB  => Ox86_SUB   
-      | LK_BINC BC_SBB  => Ox86_SBB   
-      | LK_NEG          => Ox86_NEG   
-      | LK_MUL          => Ox86_MUL   
-      | LK_IMUL         => Ox86_IMUL64
-      | LK_SHT  ST_SHR  => Ox86_SHR   
-      | LK_SHT  ST_SHL  => Ox86_SHL   
-      | LK_SHT  ST_SAR  => Ox86_SAR   
+      | LK_CMP         => Ox86_CMP   
+      | LK_BINU BU_ADD => Ox86_ADD   
+      | LK_BINC BC_ADC => Ox86_ADC   
+      | LK_BINU BU_SUB => Ox86_SUB   
+      | LK_BINC BC_SBB => Ox86_SBB   
+      | LK_BINU BU_AND => Ox86_AND
+      | LK_BINU BU_OR  => Ox86_OR
+      | LK_BINU BU_XOR => Ox86_XOR
+      | LK_NEG         => Ox86_NEG   
+      | LK_MUL         => Ox86_MUL   
+      | LK_IMUL        => Ox86_IMUL64
+      | LK_SHT ST_SHR  => Ox86_SHR   
+      | LK_SHT ST_SHL  => Ox86_SHL   
+      | LK_SHT ST_SAR  => Ox86_SAR   
       end
 
   in string_of_sopn (op ws).
@@ -478,6 +488,9 @@ Definition assemble_fopn ii (l: lvals) ws (o: alukind) (e: pexprs) : ciexec asm 
         ciok (match bin with
               | BU_ADD => ADD
               | BU_SUB => SUB
+              | BU_AND => AND
+              | BU_OR => OR
+              | BU_XOR => XOR
               end ws o1 o2)
 
     | _, _ =>
