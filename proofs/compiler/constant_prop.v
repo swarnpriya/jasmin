@@ -38,15 +38,12 @@ Local Open Scope Z_scope.
 (* ** Smart constructors                                                      *)
 (* -------------------------------------------------------------------------- *)
 
-Definition snot_bool (e:pexpr) := 
+Definition sbnot (e:pexpr) := 
   match e with
   | Pbool b      => negb b
   | Papp1 Onot e => e 
   | _            => Papp1 Onot e
   end.
-
-(* FIXME: make this smart constructor smarter *)
-Definition sneg (e: pexpr) := Papp1 Oneg e.
 
 Definition sand e1 e2 := 
   match is_bool e1, is_bool e2 with
@@ -62,18 +59,6 @@ Definition sor e1 e2 :=
   | _, _       => Papp2 Oor e1 e2 
   end.
 
-(* FIXME improve this *)
-Definition snot_w ws e := Papp1 (Olnot ws) e.
-
-Definition s_op1 o e := 
-  match o with
-  | Onot  => snot_bool e 
-  | Olnot ws => snot_w ws e
-  | Oneg => sneg e
-  end.
-
-(* ------------------------------------------------------------------------ *)
-
 Definition tobase (wz:wsize * Z) : Z :=
   match wz.1 with
   | U8  => I8 .unsigned (I8 .repr wz.2)
@@ -81,6 +66,28 @@ Definition tobase (wz:wsize * Z) : Z :=
   | U32 => I32.unsigned (I32.repr wz.2)
   | U64 => I64.unsigned (I64.repr wz.2)
   end.
+
+Definition slnot ws e := 
+  match is_wconst e with
+  | Some n => wconst(ws, iword_wlnot ws (tobase n))
+  | None   => Papp1 (Olnot ws) e
+  end.
+
+Definition sneg ws e := 
+  match is_wconst e with
+  | Some n => wconst(ws, iword_wneg ws (tobase n))
+  | None   => Papp1 (Oneg ws) e
+  end.
+
+Definition s_op1 o e := 
+  match o with
+  | Onot     => sbnot    e 
+  | Olnot ws => slnot ws e
+  | Oneg  ws => sneg  ws e
+  end.
+
+(* ------------------------------------------------------------------------ *)
+
 
 Definition sadd_int e1 e2 := 
   match is_const e1, is_const e2 with

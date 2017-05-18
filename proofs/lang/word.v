@@ -275,6 +275,15 @@ Module MakeI (WS:WSIZE).
   Definition rflags_of_bwop_w (w : int) : (rflags5 * int) :=
     (rflags_of_bwop w, w).
 
+  Definition x86_neg (w:int) :=
+    let vs := (- signed w)%Z in
+    let v := neg w in
+    ({| f5_OF := flag (signed v != vs);  
+        f5_CF := flag (negb (weq w zero));
+        f5_SF := SF_of_word v; 
+        f5_PF := PF_of_word v;
+        f5_ZF := ZF_of_word v; |}, v).
+
   Definition x86_add (v1 v2 : int) :=
     rflags_of_aluop_w
     (add v1 v2)
@@ -597,6 +606,9 @@ Definition select_op (T : wsize -> Type) o8 o16 o32 o64 ws :=
 Definition wlnot ws := 
   w_op1 (@select_op (fun w => i_wsize w -> i_wsize w) I8.not I16.not I32.not I64.not ws).
 
+Definition wneg ws := 
+  w_op1 (@select_op (fun w => i_wsize w -> i_wsize w) I8.neg I16.neg I32.neg I64.neg ws).
+
 Definition w_op2 ws (op : i_wsize ws -> i_wsize ws -> i_wsize ws) (w1 w2:word) :=
   w_to_word (op (of_word ws w1) (of_word ws w2)).
 
@@ -718,6 +730,8 @@ Definition bwbz (bw:bool * word) : bool * Z :=
 Definition wwzz (bw:word * word) : Z * Z := 
   (I64.unsigned bw.1, I64.unsigned bw.2).
 
+Definition iword_wlnot ws z1    :=  I64.unsigned (wlnot ws (I64.repr z1)).
+Definition iword_wneg  ws z1    :=  I64.unsigned (wneg  ws (I64.repr z1)).
 Definition iword_wadd  ws z1 z2 :=  I64.unsigned (wadd  ws (I64.repr z1) (I64.repr z2)).
 Definition iword_wmul  ws z1 z2 :=  I64.unsigned (wmul  ws (I64.repr z1) (I64.repr z2)).
 Definition iword_wsub  ws z1 z2 :=  I64.unsigned (wsub  ws (I64.repr z1) (I64.repr z2)).

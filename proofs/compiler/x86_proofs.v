@@ -1,6 +1,6 @@
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect.
-(* ------- *) Require Import utils expr linear compiler_util low_memory.
+(* ------- *) Require Import utils expr linear compiler_util.
 (* ------- *) Require Import sem linear linear_sem x86 x86_sem.
 
 Set Implicit Arguments.

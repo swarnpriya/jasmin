@@ -103,10 +103,12 @@ Definition is_vstk (m:map) (x:var) :=
 Definition check_var (m:map) (x1 x2:var_i) :=
   ~~ is_in_stk m x1 && (v_var x1 == v_var x2) && ~~is_vstk m x1.
 
+Definition wconst64 z := wconst (U64, z).
+
 Definition check_var_stk (m:map) (x1 x2:var_i) (e2:pexpr) := 
   is_vstk m x2 && (vtype x1 == sword) &&
     match Mvar.get m.1 x1 with
-    | Some ofs => e2 == (Pcast (Pconst ofs))
+    | Some ofs => e2 == wconst64 ofs
     | _ => false
     end.
 
@@ -125,7 +127,7 @@ Definition is_addr_ofs (*check_e *) ofs e1 e2 :=
     end 
   | _ => *) 
     match is_const e1, is_wconst e2 with
-    | Some i, Some zofs => (ofs + 8*i)%Z == zofs
+    | Some i, Some (_,zofs) => (ofs + 8*i)%Z == zofs
     | _, _              => false
     end
 (*  end *).
@@ -141,12 +143,12 @@ Fixpoint check_e (m:map) (e1 e2: pexpr) :=
   match e1, e2 with 
   | Pconst n1, Pconst n2 => n1 == n2 
   | Pbool  b1, Pbool  b2 => b1 == b2 
-  | Pcast  e1, Pcast  e2 => check_e m e1 e2 
+  | Pcast ws1 e1, Pcast ws2 e2 => (ws1 == ws2) && check_e m e1 e2 
   | Pvar   x1, Pvar   x2 => check_var m x1 x2 
-  | Pvar   x1, Pload x2 e2 => check_var_stk m x1 x2 e2
+  | Pvar   x1, Pload U64 x2 e2 => check_var_stk m x1 x2 e2
   | Pget  x1 e1, Pget x2 e2 => check_var m x1 x2 && check_e m e1 e2
-  | Pget  x1 e1, Pload x2 e2 => check_arr_stk' (* check_e *) m x1 e1 x2 e2
-  | Pload x1 e1, Pload x2 e2 => check_var m x1 x2 && check_e m e1 e2
+  | Pget  x1 e1, Pload U64 x2 e2 => check_arr_stk' (* check_e *) m x1 e1 x2 e2
+  | Pload ws1 x1 e1, Pload ws2 x2 e2 => (ws1 == ws2) && check_var m x1 x2 && check_e m e1 e2
   | Papp1 o1 e1, Papp1 o2 e2 => (o1 == o2) && check_e m e1 e2 
   | Papp2 o1 e11 e12, Papp2 o2 e21 e22 =>
     (o1 == o2) && check_e m e11 e21 && check_e m e12 e22
@@ -160,10 +162,10 @@ Definition check_lval (m:map) (r1 r2:lval) :=
   match r1, r2 with
   | Lnone _ t1, Lnone _ t2 => t1 == t2
   | Lvar x1, Lvar x2 => check_var m x1 x2
-  | Lvar x1, Lmem x2 e2 => check_var_stk m x1 x2 e2
-  | Lmem x1 e1, Lmem x2 e2 => check_var m x1 x2 && check_e m e1 e2
+  | Lvar x1, Lmem U64 x2 e2 => check_var_stk m x1 x2 e2
+  | Lmem ws1 x1 e1, Lmem ws2 x2 e2 => (ws1 == ws2) && check_var m x1 x2 && check_e m e1 e2
   | Laset x1 e1, Laset x2 e2 => check_var m x1 x2 && check_e m e1 e2
-  | Laset x1 e1, Lmem x2 e2 => check_arr_stk m x1 e1 x2 e2
+  | Laset x1 e1, Lmem U64 x2 e2 => check_arr_stk m x1 e1 x2 e2
   | _, _ => false
   end.
 

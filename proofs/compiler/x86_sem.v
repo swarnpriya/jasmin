@@ -65,52 +65,52 @@ Variant asm : Type :=
 | LABEL of positive
 
   (* Data transfert *)
-| MOV    of         oprd & oprd    (* copy *)
-| CMOVcc of condt & oprd & oprd    (* conditional copy *)
+| MOV    of wsize &         oprd & oprd    (* copy *)
+| CMOVcc of wsize & condt & oprd & oprd    (* conditional copy *)
 
   (* Arithmetic *)
-| ADD    of oprd & oprd            (* add unsigned / signed *)
-| SUB    of oprd & oprd            (* sub unsigned / signed *)
-| MUL    of oprd                   (* mul unsigned *)
-| IMUL   of oprd                   (* mul   signed *)
-| IMUL64	of oprd & oprd	(* mul truncated *)
-| IMUL64_imm of oprd & oprd & word (* mul by immediate, truncated *)
-| DIV    of oprd                   (* div unsigned *)
-| IDIV   of oprd                   (* div   signed *)
+| ADD    of wsize & oprd & oprd            (* add unsigned / signed *)
+| SUB    of wsize & oprd & oprd            (* sub unsigned / signed *)
+| MUL    of wsize & oprd                   (* mul unsigned *)
+| IMUL   of wsize & oprd                   (* mul   signed *)
+| IMUL64 of wsize & oprd & oprd	           (* mul truncated *)
+| IMUL64_imm of wsize & oprd & oprd & word (* mul by immediate, truncated *)
+| DIV    of wsize & oprd                   (* div unsigned *)
+| IDIV   of wsize & oprd                   (* div   signed *)
 
-| ADC    of oprd & oprd            (* add with carry *)
-| SBB    of oprd & oprd            (* sub with borrow *)
+| ADC    of wsize & oprd & oprd            (* add with carry *)
+| SBB    of wsize & oprd & oprd            (* sub with borrow *)
 
-| NEG	of oprd	(* negation *)
+| NEG    of wsize & oprd                   (* negation *)
 
-| INC    of oprd                   (* increment *)
-| DEC    of oprd                   (* decrement *)
+| INC    of wsize & oprd                   (* increment *)
+| DEC    of wsize & oprd                   (* decrement *)
 
   (* Flag *)
-| SETcc  of condt & oprd           (* Set byte on condition *)
+| SETcc  of wsize & condt & oprd           (* Set byte on condition *)
 
   (* Pointer arithmetic *)
 | LEA    of oprd & oprd            (* Load Effective Address *)
 
   (* Comparison *)
-| TEST   of oprd & oprd            (* Bit-wise logical and CMP *)
-| CMP    of oprd & oprd            (* Signed sub CMP *)
+| TEST   of wsize & oprd & oprd            (* Bit-wise logical and CMP *)
+| CMP    of wsize & oprd & oprd            (* Signed sub CMP *)
 
   (* Jumps *)
 | JMP    of label                  (* Unconditional jump *)
 | Jcc    of label & condt          (* Conditional jump *)
 
   (* Bitwise logical instruction *)
-| AND    of oprd & oprd            (* bit-wise and *)
-| OR     of oprd & oprd            (* bit-wise or  *)
-| XOR    of oprd & oprd            (* bit-wise xor *)
-| NOT    of oprd                   (* bit-wise not *)
+| AND    of wsize & oprd & oprd            (* bit-wise and *)
+| OR     of wsize & oprd & oprd            (* bit-wise or  *)
+| XOR    of wsize & oprd & oprd            (* bit-wise xor *)
+| NOT    of wsize & oprd                   (* bit-wise not *)
 
   (* Bit shifts *)
-| SHL    of oprd & ireg            (* unsigned / left  *)
-| SHR    of oprd & ireg            (* unsigned / right *)
-| SAL    of oprd & ireg            (*   signed / left; synonym of SHL *)
-| SAR    of oprd & ireg            (*   signed / right *)
+| SHL    of wsize & oprd & ireg            (* unsigned / left  *)
+| SHR    of wsize & oprd & ireg            (* unsigned / right *)
+| SAL    of wsize & oprd & ireg            (*   signed / left; synonym of SHL *)
+| SAR    of wsize & oprd & ireg            (*   signed / right *)
 .
 
 (* -------------------------------------------------------------------- *)
@@ -181,6 +181,7 @@ Module RegMap.
     fun z => if (z == x) then y else m z.
 End RegMap.
 
+(*
 (* -------------------------------------------------------------------- *)
 Module RflagMap.
   Variant rflagv := Def of bool | Undef.
@@ -747,3 +748,4 @@ Definition fetch_and_eval s :=
   if nth None (map some s.(xc)) s.(xip) is Some i then
     eval_instr i (st_write_ip s.(xip).+1 s)
   else type_error.
+*)

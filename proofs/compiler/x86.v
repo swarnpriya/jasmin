@@ -28,7 +28,7 @@
 (* ** Imports and settings *)
 
 From mathcomp Require Import all_ssreflect.
-Require Import expr linear compiler_util low_memory x86_sem.
+Require Import expr linear compiler_util x86_sem.
 
 Import Ascii.
 Import Relations.
