@@ -358,8 +358,7 @@ Variant binuop :=
   | BU_SUB
   | BU_AND
   | BU_OR
-  | BU_XOR
-.
+  | BU_XOR.
 
 Variant bincop :=
   | BC_ADC
@@ -515,7 +514,7 @@ Definition assemble_fopn ii (l: lvals) ws (o: alukind) (e: pexprs) : ciexec asm 
               | BU_ADD => ADD
               | BU_SUB => SUB
               | BU_AND => AND
-              | BU_OR => OR
+              | BU_OR  => OR
               | BU_XOR => XOR
               end ws o1 o2)
 
