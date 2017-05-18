@@ -74,6 +74,14 @@ Definition s_op1 o e :=
 
 (* ------------------------------------------------------------------------ *)
 
+Definition tobase (wz:wsize * Z) : Z :=
+  match wz.1 with
+  | U8  => I8 .unsigned (I8 .repr wz.2)
+  | U16 => I16.unsigned (I16.repr wz.2)
+  | U32 => I32.unsigned (I32.repr wz.2)
+  | U64 => I64.unsigned (I64.repr wz.2)
+  end.
+
 Definition sadd_int e1 e2 := 
   match is_const e1, is_const e2 with
   | Some n1, Some n2 => Pconst (n1 + n2)
@@ -84,21 +92,25 @@ Definition sadd_int e1 e2 :=
   | _, _ => Papp2 (Oadd Op_int) e1 e2
   end.
 
+
+Definition tobase2 ws wz := 
+  tobase (ws, tobase wz).
+
 Definition sadd_w ws e1 e2 := 
   match is_wconst e1, is_wconst e2 with
   | Some n1, Some n2 => 
-    wconst (iword_add n1 n2)
+    wconst (ws ,iword_wadd ws (tobase n1) (tobase n2))
   | Some n, _ => 
-    if (tobase n == 0)%Z then e2 else Papp2 (Oadd Op_w) e1 e2
+    if (tobase2 ws n == 0)%Z then e2 else Papp2 (Oadd (Op_w ws)) e1 e2
   | _, Some n => 
-    if (tobase n == 0)%Z then e1 else Papp2 (Oadd Op_w) e1 e2
-  | _, _ => Papp2 (Oadd Op_w) e1 e2
+    if (tobase2 ws n == 0)%Z then e1 else Papp2 (Oadd (Op_w ws)) e1 e2
+  | _, _ => Papp2 (Oadd (Op_w ws)) e1 e2
   end.
 
 Definition sadd ty :=
   match ty with
-  | Op_int => sadd_int
-  | Op_w   => sadd_w
+  | Op_int  => sadd_int
+  | Op_w ws => sadd_w ws
   end.
 
 Definition ssub_int e1 e2 := 
@@ -109,18 +121,18 @@ Definition ssub_int e1 e2 :=
   | _, _ => Papp2 (Osub Op_int) e1 e2
   end.
 
-Definition ssub_w e1 e2 := 
+Definition ssub_w ws e1 e2 := 
   match is_wconst e1, is_wconst e2 with
-  | Some n1, Some n2 => wconst (iword_sub n1 n2)
+  | Some n1, Some n2 => wconst (ws, (iword_wsub ws (tobase n1) (tobase n2)))
   | _, Some n => 
-    if (tobase n == 0)%Z then e1 else Papp2 (Osub Op_w) e1 e2
-  | _, _ => Papp2 (Osub Op_w) e1 e2
+    if (tobase2 ws n == 0)%Z then e1 else Papp2 (Osub (Op_w ws)) e1 e2
+  | _, _ => Papp2 (Osub (Op_w ws)) e1 e2
   end.
 
 Definition ssub ty := 
   match ty with
-  | Op_int => ssub_int
-  | Op_w   => ssub_w
+  | Op_int  => ssub_int
+  | Op_w ws => ssub_w ws
   end.
 
 Definition smul_int e1 e2 := 
@@ -137,26 +149,26 @@ Definition smul_int e1 e2 :=
   | _, _ => Papp2 (Omul Op_int) e1 e2
   end.
 
-Definition smul_w e1 e2 := 
+Definition smul_w ws e1 e2 := 
   match is_wconst e1, is_wconst e2 with
-  | Some n1, Some n2 => wconst (iword_mul n1 n2)
+  | Some n1, Some n2 => wconst (ws, iword_wmul ws (tobase n1) (tobase n2))
   | Some n, _ => 
-    let n := tobase n in
-    if (n == 0)%Z then wconst 0
+    let n := tobase2 ws n in
+    if (n == 0)%Z then wconst (ws, 0)
     else if (n == 1)%Z then e2 
-    else Papp2 (Omul Op_w) (wconst n) e2
+    else Papp2 (Omul (Op_w ws)) (wconst (ws, n)) e2
   | _, Some n => 
-    let n := tobase n in
-    if (n == 0)%Z then wconst 0
+    let n := tobase2 ws n in
+    if (n == 0)%Z then wconst (ws, 0)
     else if (n == 1)%Z then e1
-    else Papp2 (Omul Op_w) e1 (wconst n)
-  | _, _ => Papp2 (Omul Op_w) e1 e2
+    else Papp2 (Omul (Op_w ws)) e1 (wconst (ws, n))
+  | _, _ => Papp2 (Omul (Op_w ws)) e1 e2
   end.
 
 Definition smul ty := 
   match ty with
-  | Op_int => smul_int
-  | Op_w   => smul_w
+  | Op_int  => smul_int
+  | Op_w ws => smul_w ws
   end.
 
 Definition s_eq ty e1 e2 := 
@@ -168,9 +180,9 @@ Definition s_eq ty e1 e2 :=
       | Some i1, Some i2 => Pbool (i1 == i2)
       | _, _             => Papp2 (Oeq ty) e1 e2
       end 
-    | Cmp_sw | Cmp_uw =>
+    | Cmp_sw ws | Cmp_uw ws =>
       match is_wconst e1, is_wconst e2 with
-      | Some i1, Some i2 => Pbool (iword_eqb i1 i2)
+      | Some i1, Some i2 => Pbool (iword_weq ws (tobase i1) (tobase i2))
       | _, _             => Papp2 (Oeq ty) e1 e2
       end
     end.
@@ -178,8 +190,10 @@ Definition s_eq ty e1 e2 :=
 Definition sneq ty e1 e2 := 
   match is_bool (s_eq ty e1 e2) with
   | Some b => Pbool (~~ b)
-  | None      => Papp2 (Oneq ty) e1 e2
+  | None   => Papp2 (Oneq ty) e1 e2
   end.
+
+(* FIXME Improve this *)
 
 Definition slt ty e1 e2 := 
   if eq_expr e1 e2 then Pbool false 
@@ -209,35 +223,34 @@ Definition sge ty e1 e2 :=
   | _      , _       => Papp2 (Oge ty) e1 e2 
   end.
 
-
 (* FIXME: Improve this *)
 
-Definition sland e1 e2 := Papp2 Oland e1 e2.
-Definition slor  e1 e2 := Papp2 Olor  e1 e2.
-Definition slxor e1 e2 := Papp2 Olxor e1 e2.
-Definition slsr  e1 e2 := Papp2 Olsr  e1 e2.
-Definition slsl  e1 e2 := Papp2 Olsl  e1 e2.
-Definition sasr  e1 e2 := Papp2 Oasr  e1 e2.
+Definition sland ws e1 e2 := Papp2 (Oland ws) e1 e2.
+Definition slor  ws e1 e2 := Papp2 (Olor  ws) e1 e2.
+Definition slxor ws e1 e2 := Papp2 (Olxor ws) e1 e2.
+Definition slsr  ws e1 e2 := Papp2 (Olsr  ws) e1 e2.
+Definition slsl  ws e1 e2 := Papp2 (Olsl  ws) e1 e2.
+Definition sasr  ws e1 e2 := Papp2 (Oasr  ws) e1 e2.
 
 Definition s_op2 o e1 e2 := 
   match o with 
-  | Oand    => sand e1 e2 
-  | Oor     => sor  e1 e2
-  | Oadd ty => sadd ty e1 e2
-  | Osub ty => ssub ty e1 e2
-  | Omul ty => smul ty e1 e2
-  | Oeq  ty => s_eq ty e1 e2
-  | Oneq ty => sneq ty e1 e2
-  | Olt  ty => slt  ty e1 e2
-  | Ole  ty => sle  ty e1 e2
-  | Ogt  ty => sgt  ty e1 e2
-  | Oge  ty => sge  ty e1 e2
-  | Oland   => sland e1 e2
-  | Olor    => slor  e1 e2
-  | Olxor   => slxor e1 e2 
-  | Olsr    => slsr  e1 e2
-  | Olsl    => slsl  e1 e2
-  | Oasr    => sasr  e1 e2
+  | Oand     => sand     e1 e2 
+  | Oor      => sor      e1 e2
+  | Oadd  ty => sadd  ty e1 e2
+  | Osub  ty => ssub  ty e1 e2
+  | Omul  ty => smul  ty e1 e2
+  | Oeq   ty => s_eq  ty e1 e2
+  | Oneq  ty => sneq  ty e1 e2
+  | Olt   ty => slt   ty e1 e2
+  | Ole   ty => sle   ty e1 e2
+  | Ogt   ty => sgt   ty e1 e2
+  | Oge   ty => sge   ty e1 e2
+  | Oland ws => sland ws e1 e2
+  | Olor  ws => slor  ws e1 e2
+  | Olxor ws => slxor ws e1 e2 
+  | Olsr  ws => slsr  ws e1 e2
+  | Olsl  ws => slsl  ws e1 e2
+  | Oasr  ws => sasr  ws e1 e2
   end.
 
 Definition s_if e e1 e2 := 
@@ -255,10 +268,10 @@ Fixpoint const_prop_e (m:cpm) e :=
   match e with
   | Pconst _      => e
   | Pbool  _      => e
-  | Pcast e       => Pcast (const_prop_e m e)
+  | Pcast ws e    => Pcast ws (const_prop_e m e)
   | Pvar  x       => if Mvar.get m x is Some n then Pconst n else e
   | Pget  x e     => Pget x (const_prop_e m e)
-  | Pload x e     => Pload x (const_prop_e m e)
+  | Pload ws x e  => Pload ws x (const_prop_e m e)
   | Papp1 o e     => s_op1 o (const_prop_e m e)
   | Papp2 o e1 e2 => s_op2 o (const_prop_e m e1)  (const_prop_e m e2)
   | Pif e e1 e2   => s_if (const_prop_e m e) (const_prop_e m e1) (const_prop_e m e2)
@@ -283,7 +296,7 @@ Definition const_prop_rv (m:cpm) (rv:lval) : cpm * lval :=
   | Lnone _ _ => (m, rv)
   | Lvar  x   => (Mvar.remove m x, rv)
     (* TODO : FIXME should we do more on x, in particular if x is a known value *)
-  | Lmem  x e => (m, Lmem x (const_prop_e m e))
+  | Lmem ws x e => (m, Lmem ws x (const_prop_e m e))
   | Laset x e => (Mvar.remove m x, Laset x (const_prop_e m e))
   end.
 

@@ -585,9 +585,9 @@ Definition x86_setcc ws (b:bool) : exec values :=
 Definition check_scale (s:Z) :=
   (s == 1%Z) || (s == 2%Z) || (s == 4%Z) || (s == 8%Z).
 
-Definition x86_lea (disp base:word) (scale:word) (offset:word) : exec values :=
+Definition x86_lea ws (disp base:word) (scale:word) (offset:word) : exec values :=
   if check_scale (I64.unsigned scale) then
-    ok [::Vword (I64.add disp (I64.add base (I64.mul scale offset)))]
+    ok [::Vword (wadd ws disp (wadd ws base (wmul ws scale offset)))]
   else type_error.
 
 Definition x86_test ws (v1 v2: word) : exec values :=
@@ -685,7 +685,7 @@ Definition sem_sopn (o:sopn) :  values -> exec values :=
   | Ox86_INC    ws => app_w    (x86_inc    ws)
   | Ox86_DEC    ws => app_w    (x86_dec    ws)
   | Ox86_SETcc  ws => app_b    (x86_setcc  ws)
-  | Ox86_LEA       => app_w4    x86_lea
+  | Ox86_LEA    ws => app_w4   (x86_lea    ws)
   | Ox86_TEST   ws => app_ww   (x86_test   ws)
   | Ox86_CMP    ws => app_ww   (x86_cmp    ws)
   | Ox86_AND    ws => app_ww   (x86_and    ws)
@@ -710,11 +710,6 @@ Definition sem_range (s : estate) (r : range) :=
   Let i2 := sem_pexpr s pe2 >>= to_int in
   ok (wrange d i1 i2).
 
-Definition cast_w ws (v:value) (x:word) := 
-  match ws with
-  | Some ws => Let x := to_word v in (w_to_word (of_word ws x)).
-
-
 Inductive sem : estate -> cmd -> estate -> Prop :=
 | Eskip s :
     sem s [::] s
@@ -728,7 +723,7 @@ with sem_I : estate -> instr -> estate -> Prop :=
     sem_I s1 (MkI ii i) s2
 
 with sem_i : estate -> instr_r -> estate -> Prop :=
-| Eassgn s1 s2 (x:lval) ws tag e:
+| Eassgn s1 s2 (x:lval) tag e:
     (Let v := sem_pexpr s1 e in write_lval x v s1) = ok s2 ->
     sem_i s1 (Cassgn x tag e) s2
 
