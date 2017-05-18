@@ -586,8 +586,8 @@ Definition assemble_opn ii (l: lvals) (o: sopn) (e: pexprs) : ciexec asm :=
     end
 
   | OK_MOV ws =>
-    match l, e with
-    | [::l], [:: e] =>
+    match as_singleton l, as_singleton e with
+    | Some l, Some e =>
       Let ol := oprd_of_lval  ws ii l in
       Let or := oprd_of_pexpr ws ii e in
       ciok (MOV ws ol or)
