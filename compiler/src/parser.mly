@@ -193,7 +193,6 @@ peqop:
 (* ** Left value
  * -------------------------------------------------------------------- *)
 
-(* FIXME: missing syntax for Lmem *)
 plvalue_r:
 | UNDERSCORE
     { PLIgnore }
