@@ -380,9 +380,6 @@ Definition Varr_inj n n' t t' : @Varr n t = @Varr n' t' -> n = n' /\ t = t' :=
 Lemma Varr_inj1 n t t' : @Varr n t = @Varr n t' -> t = t'.
 Proof. by move=> /Varr_inj []. Qed.
 
-Definition wrepr ws z := 
-  w_to_word (@select_op (fun ws => Z -> i_wsize ws) I8.repr I16.repr I32.repr I64.repr ws z).
-
 Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
   match e with
   | Pconst z => ok (Vint z)

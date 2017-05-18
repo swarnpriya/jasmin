@@ -206,46 +206,49 @@ Definition reg_of_var ii (v: var) :=
 Definition reg_of_vars ii (vs: seq var_i) :=
   mapM (reg_of_var ii \o v_var) vs.
 
-Definition word_of_int (z: Z) := ciok (I64.repr z).
+
+Definition word_of_int ws (z: Z) := ciok (wrepr ws z).
 
 Definition word_of_pexpr ii e :=
   match e with
-  | Pcast (Pconst z) => word_of_int z
+  | Pcast ws (Pconst z) => word_of_int ws z
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid integer constant"))
   end.
 
-Definition oprd_of_lval ii (l: lval) :=
+Definition oprd_of_lval ws ii (l: lval) :=
   match l with
   | Lnone _ _ => cierror ii (Cerr_assembler (AsmErr_string "Lnone not implemented"))
   | Lvar v =>
      Let s := reg_of_var ii v in
      ciok (Reg_op s)
-  | Lmem v e =>
+  | Lmem ws' v e =>
      Let s := reg_of_var ii v in
      Let w := word_of_pexpr ii e in
-     ciok (Adr_op (mkAddress w (Some s) Scale1 None))
+     if ws == ws' then ciok (Adr_op (mkAddress w (Some s) Scale1 None))
+     else  cierror ii (Cerr_assembler (AsmErr_string "lval : wsize mismatch"))
   | Laset v e => cierror ii (Cerr_assembler (AsmErr_string "Laset not handled in assembler"))
   end.
 
-Definition oprd_of_pexpr ii (e: pexpr) :=
+Definition oprd_of_pexpr ws ii (e: pexpr) :=
   match e with
-  | Pcast (Pconst z) =>
-     Let w := word_of_int z in
+  | Pcast ws (Pconst z) =>
+     Let w := word_of_int ws z in
      ciok (Imm_op w)
   | Pvar v =>
      Let s := reg_of_var ii v in
      ciok (Reg_op s)
-  | Pload v e => (* FIXME: can we recognize more expression for e ? *)
+  | Pload ws' v e => (* FIXME: can we recognize more expression for e ? *)
      Let s := reg_of_var ii v in
      Let w := word_of_pexpr ii e in
-     ciok (Adr_op (mkAddress w (Some s) Scale1 None))
+    if ws == ws' then ciok (Adr_op (mkAddress w (Some s) Scale1 None))
+    else  cierror ii (Cerr_assembler (AsmErr_string "pexpr : wsize mismatch"))
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd"))
   end.
 
 Definition ireg_of_pexpr ii (e: pexpr) :=
   match e with
-  | Pcast (Pconst z) =>
-     Let w := word_of_int z in
+  | Pcast ws (Pconst z) =>
+     Let w := word_of_int ws z in
      ciok (Imm_ir w)
   | Pvar v =>
      Let s := reg_of_var ii v in
@@ -347,49 +350,49 @@ Variant alukind :=
   | LK_NEG.
 
 Variant opkind :=
-  | OK_ALU of alukind
-  | OK_CNT of bool
-  | OK_MOV
-  | OK_MOVcc
+  | OK_ALU   `(wsize) `(alukind)
+  | OK_CNT   `(wsize) `(bool)
+  | OK_MOV   `(wsize)
+  | OK_MOVcc `(wsize)
   | OK_None.
 
 Definition kind_of_sopn (o : sopn) :=
   match o with
-  | Ox86_CMP    => OK_ALU LK_CMP
-  | Ox86_ADD    => OK_ALU (LK_BINU BU_ADD)
-  | Ox86_ADC    => OK_ALU (LK_BINC BC_ADC)
-  | Ox86_SUB    => OK_ALU (LK_BINU BU_SUB)
-  | Ox86_SBB    => OK_ALU (LK_BINC BC_SBB)
-  | Ox86_NEG    => OK_ALU LK_NEG
-  | Ox86_MUL    => OK_ALU LK_MUL
-  | Ox86_IMUL64 => OK_ALU LK_IMUL
-  | Ox86_SHR    => OK_ALU (LK_SHT ST_SHR)
-  | Ox86_SHL    => OK_ALU (LK_SHT ST_SHL)
-  | Ox86_SAR    => OK_ALU (LK_SHT ST_SAR)
-  | Ox86_DEC    => OK_CNT false
-  | Ox86_INC    => OK_CNT true
-  | Ox86_MOV    => OK_MOV
-  | Ox86_CMOVcc => OK_MOVcc
+  | Ox86_CMP    ws => OK_ALU   ws LK_CMP
+  | Ox86_ADD    ws => OK_ALU   ws (LK_BINU BU_ADD)
+  | Ox86_ADC    ws => OK_ALU   ws (LK_BINC BC_ADC)
+  | Ox86_SUB    ws => OK_ALU   ws (LK_BINU BU_SUB)
+  | Ox86_SBB    ws => OK_ALU   ws (LK_BINC BC_SBB)
+  | Ox86_NEG    ws => OK_ALU   ws LK_NEG
+  | Ox86_MUL    ws => OK_ALU   ws LK_MUL
+  | Ox86_IMUL64 ws => OK_ALU   ws LK_IMUL
+  | Ox86_SHR    ws => OK_ALU   ws (LK_SHT ST_SHR)
+  | Ox86_SHL    ws => OK_ALU   ws (LK_SHT ST_SHL)
+  | Ox86_SAR    ws => OK_ALU   ws (LK_SHT ST_SAR)
+  | Ox86_DEC    ws => OK_CNT   ws false
+  | Ox86_INC    ws => OK_CNT   ws true
+  | Ox86_MOV    ws => OK_MOV   ws 
+  | Ox86_CMOVcc ws => OK_MOVcc ws 
   | _           => OK_None
   end.
 
-Definition string_of_aluk (o : alukind) :=
+Definition string_of_aluk ws (o : alukind) :=
   let op :=
       match o with
-      | LK_CMP         => Ox86_CMP   
-      | LK_BINU BU_ADD => Ox86_ADD   
-      | LK_BINC BC_ADC => Ox86_ADC   
-      | LK_BINU BU_SUB => Ox86_SUB   
-      | LK_BINC BC_SBB => Ox86_SBB   
-      | LK_NEG         => Ox86_NEG   
-      | LK_MUL         => Ox86_MUL   
-      | LK_IMUL        => Ox86_IMUL64
-      | LK_SHT ST_SHR  => Ox86_SHR   
-      | LK_SHT ST_SHL  => Ox86_SHL   
-      | LK_SHT ST_SAR  => Ox86_SAR   
+      | LK_CMP          => Ox86_CMP     
+      | LK_BINU BU_ADD  => Ox86_ADD   
+      | LK_BINC BC_ADC  => Ox86_ADC   
+      | LK_BINU BU_SUB  => Ox86_SUB   
+      | LK_BINC BC_SBB  => Ox86_SBB   
+      | LK_NEG          => Ox86_NEG   
+      | LK_MUL          => Ox86_MUL   
+      | LK_IMUL         => Ox86_IMUL64
+      | LK_SHT  ST_SHR  => Ox86_SHR   
+      | LK_SHT  ST_SHL  => Ox86_SHL   
+      | LK_SHT  ST_SAR  => Ox86_SAR   
       end
 
-  in string_of_sopn op.
+  in string_of_sopn (op ws).
 
 (* -------------------------------------------------------------------- *)
 Variant alu_vars :=
@@ -428,130 +431,131 @@ Proof. by case: s => [|x' [|y' [|]]] //= [-> ->]. Qed.
 End AsN.
 
 (* -------------------------------------------------------------------- *)
-Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
+
+Definition assemble_fopn ii (l: lvals) ws (o: alukind) (e: pexprs) : ciexec asm :=
   match o with
   | LK_CMP =>
     match as_pair e, as_unit l with
     | Some (e1, e2), true =>
-      Let o1 := oprd_of_pexpr ii e1 in
-      Let o2 := oprd_of_pexpr ii e2 in
-      ciok (CMP o1 o2)
+      Let o1 := oprd_of_pexpr ws ii e1 in
+      Let o2 := oprd_of_pexpr ws ii e2 in
+      ciok (CMP ws o1 o2)
 
     | _, _ =>
       cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk ws o)))
     end
 
   | LK_BINU bin =>
     match e, l with
     | [:: e1; e2], [:: x ] =>
-      Let o1 := oprd_of_pexpr ii e1 in
-      Let o2 := oprd_of_pexpr ii e2 in
-      Let ox := oprd_of_lval ii x in
+      Let o1 := oprd_of_pexpr ws ii e1 in
+      Let o2 := oprd_of_pexpr ws ii e2 in
+      Let ox := oprd_of_lval  ws ii x in
 
       if (o1 != ox) then
         cierror ii (Cerr_assembler
-          (AsmErr_string ("First [rl]val should be the same for " ++ string_of_aluk o)))
+          (AsmErr_string ("First [rl]val should be the same for " ++ string_of_aluk ws o)))
       else
         ciok (match bin with
               | BU_ADD => ADD
               | BU_SUB => SUB
-              end o1 o2)
+              end ws o1 o2)
 
     | _, _ =>
       cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk ws o)))
     end
 
   | LK_BINC bin =>
     match e, l with
     | [:: e1; e2; Pvar ecf], [:: x ] =>
-      Let o1 := oprd_of_pexpr ii e1 in
-      Let o2 := oprd_of_pexpr ii e2 in
-      Let rcf := rflag_of_var ii ecf in
-      Let ox := oprd_of_lval ii x in
+      Let o1  := oprd_of_pexpr ws ii e1 in
+      Let o2  := oprd_of_pexpr ws ii e2 in
+      Let rcf := rflag_of_var     ii ecf in
+      Let ox  := oprd_of_lval  ws ii x in
       if (rcf != CF) then
         cierror ii (Cerr_assembler
-          (AsmErr_string ("Carry flag in wrong register for " ++ string_of_aluk o))) else
+          (AsmErr_string ("Carry flag in wrong register for " ++ string_of_aluk ws o))) else
       if (o1 != ox) then
         cierror ii (Cerr_assembler
-          (AsmErr_string ("First [rl]val should be the same for " ++ string_of_aluk o))) else
+          (AsmErr_string ("First [rl]val should be the same for " ++ string_of_aluk ws o))) else
 
       ciok (match bin with
             | BC_ADC => ADC
             | BC_SBB => SBB
-            end o1 o2)
+            end ws o1 o2)
 
     | _, _ =>
       cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk ws o)))
     end
 
   | LK_SHT sht =>
     match e, l with
     | [:: e1; e2], [:: x ] =>
-      Let o1 := oprd_of_pexpr ii e1 in
-      Let o2 := ireg_of_pexpr ii e2 in
-      Let ox := oprd_of_lval ii x in
+      Let o1 := oprd_of_pexpr ws ii e1 in
+      Let o2 := ireg_of_pexpr    ii e2 in
+      Let ox := oprd_of_lval  ws ii x in
       if (o1 != ox) then
         cierror ii (Cerr_assembler
-          (AsmErr_string ("First [rl]val should be the same for " ++ string_of_aluk o))) else
+          (AsmErr_string ("First [rl]val should be the same for " ++ string_of_aluk ws o))) else
       ciok (match sht with
             | ST_SHL => SHL
             | ST_SHR => SHR
             | ST_SAR => SAR
-            end o1 o2)
+            end ws o1 o2)
 
     | _, _ =>
       cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk ws o)))
     end
 
   | LK_MUL =>
     match e, l with
     | [:: e1; e2], [:: lo ; hi ] =>
       (* TODO: check constraints *)
-      Let o2 := oprd_of_pexpr ii e2 in
-      ok (MUL o2)
+      Let o2 := oprd_of_pexpr ws ii e2 in
+      ok (MUL ws o2)
 
     | _, _ =>
       cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk ws o)))
     end
 
   | LK_IMUL =>
     match e, l with
     | [:: e1; e2], [:: x ] =>
       (* TODO: check constraints *)
-      Let d := oprd_of_lval ii x in
-      Let o1 := oprd_of_pexpr ii e1 in
+      Let d  := oprd_of_lval  ws ii x in
+      Let o1 := oprd_of_pexpr ws ii e1 in
       match is_wconst e2 with
-      | Some c => ok (IMUL64_imm d o1 (I64.repr c))
+      | Some (ws', c) => ok (IMUL64_imm ws d o1 (wrepr ws' c))
       | None =>
-          Let o2 := oprd_of_pexpr ii e2 in ok (IMUL64 o1 o2)
+          Let o2 := oprd_of_pexpr ws ii e2 in ok (IMUL64 ws o1 o2)
       end
 
     | _, _ =>
       cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o))) end
+        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk ws o))) end
 
   | LK_NEG =>
     match e, l with
     | [:: e ], [:: x ] =>
       (* TODO: check constraints *)
-      Let d := oprd_of_lval ii x in
-      Let o := oprd_of_pexpr ii e in
-      ok (NEG o)
+      Let d := oprd_of_lval  ws ii x in
+      Let o := oprd_of_pexpr ws ii e in
+      ok (NEG ws o)
 
     | _, _ =>
       cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk ws o)))
     end
   end.
 
 Definition assemble_opn ii (l: lvals) (o: sopn) (e: pexprs) : ciexec asm :=
   match kind_of_sopn o with
-  | OK_ALU aluk =>
+  | OK_ALU ws aluk =>
     match lvals_as_alu_vars l with
     | Some (ALUVars vof vcf vsf vpf vzf, l) =>
       Let rof := rflag_of_var ii vof in
@@ -560,20 +564,20 @@ Definition assemble_opn ii (l: lvals) (o: sopn) (e: pexprs) : ciexec asm :=
       Let rpf := rflag_of_var ii vpf in
       Let rzf := rflag_of_var ii vzf in
       if ((rof == OF) && (rcf == CF) && (rsf == SF) && (rpf == PF) && (rzf == ZF)) then
-      assemble_fopn ii l aluk e
+      assemble_fopn ii l ws aluk e
       else cierror ii (Cerr_assembler (AsmErr_string "Invalid registers in lvals"))
     | None => cierror ii (Cerr_assembler (AsmErr_string "Invalid number of lvals"))
     end
 
-  | OK_CNT inc =>
+  | OK_CNT ws inc =>
     match l with
     | [:: Lvar vof; Lvar vsf; Lvar vpf; Lvar vzf; l] =>
-      Let ol := oprd_of_lval ii l in
+      Let ol := oprd_of_lval ws ii l in
       match e with
       | [:: e] =>
-        Let or := oprd_of_pexpr ii e in
+        Let or := oprd_of_pexpr ws ii e in
         if (or == ol) then
-          ciok ((if inc then INC else DEC) or)
+          ciok ((if inc then INC else DEC) ws or)
         else
           cierror ii (Cerr_assembler (AsmErr_string "lval & rval of Ox86_DEC/INC should be the same"))
       | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid number of pexpr in Ox86_DEC/INC"))
@@ -581,25 +585,25 @@ Definition assemble_opn ii (l: lvals) (o: sopn) (e: pexprs) : ciexec asm :=
     | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid number of lval in Ox86_DEC/INC"))
     end
 
-  | OK_MOV =>
+  | OK_MOV ws =>
     match l, e with
     | [::l], [:: e] =>
-      Let ol := oprd_of_lval ii l in
-      Let or := oprd_of_pexpr ii e in
-      ciok (MOV ol or)
+      Let ol := oprd_of_lval  ws ii l in
+      Let or := oprd_of_pexpr ws ii e in
+      ciok (MOV ws ol or)
     | _, _ =>
       cierror ii (Cerr_assembler (AsmErr_string "Invalid number of lval or pexpr in Ox86_MOV"))
     end
 
-  | OK_MOVcc =>
+  | OK_MOVcc ws =>
     match l, e with
     | [::l], [:: c; e1; e2] =>
-      Let ol := oprd_of_lval ii l in
-      Let or := oprd_of_pexpr ii e1 in 
+      Let ol := oprd_of_lval   ws ii l in
+      Let or := oprd_of_pexpr  ws ii e1 in 
       Let oc  := assemble_cond ii c in
-      Let ol' := oprd_of_pexpr ii e2 in
+      Let ol' := oprd_of_pexpr ws ii e2 in
       if ol == ol' then 
-        ciok (CMOVcc oc ol or)
+        ciok (CMOVcc ws oc ol or)
       else
         cierror ii (Cerr_assembler (AsmErr_string "lval & rval of Ox86_MOVcc should be the same"))
     | _, _ => 
@@ -613,10 +617,7 @@ Definition assemble_i (li: linstr) : ciexec asm :=
   let (ii, i) := li in
   match i with
   | Lassgn l _ e =>
-     (* TODO: this is useless since lowering doesn't leave Lassgn; might remove at some point *)
-     Let dst := oprd_of_lval ii l in
-     Let src := oprd_of_pexpr ii e in
-     ciok (MOV dst src)
+    cierror ii (Cerr_assembler (AsmErr_string "lowering leave Lassgn"))
   | Lopn l o p => assemble_opn ii l o p
   | Llabel l => ciok (LABEL l)
   | Lgoto l => ciok (JMP l)

@@ -69,12 +69,12 @@ let infix_sop2 = function
   | Omul _ -> "*"
   | Osub _ -> "-"
 
-  | Oland  -> "&"
-  | Olor   -> "|"
-  | Olxor  -> "^"
-  | Olsr   -> ">>"
-  | Olsl   -> "<<"
-  | Oasr   -> assert false
+  | Oland  _ -> "&"
+  | Olor   _ -> "|"
+  | Olxor  _ -> "^"
+  | Olsr   _ -> ">>"
+  | Olsl   _ -> "<<"
+  | Oasr   _ -> assert false
 
   | Oeq  k -> "==" ^ string_cmp_ty k
   | Oneq k -> "!=" ^ string_cmp_ty k
@@ -83,10 +83,18 @@ let infix_sop2 = function
   | Ogt  k -> ">"  ^ string_cmp_ty k
   | Oge  k -> ">=" ^ string_cmp_ty k
 
+let pp_ws fmt = function
+  | W8  -> Format.fprintf fmt "U8"
+  | W16 -> Format.fprintf fmt "U16"
+  | W32 -> Format.fprintf fmt "U32"
+  | W64 -> Format.fprintf fmt "U64"
+  | _   -> assert false
 
-let pp_sopn fmt sopn =
-  F.fprintf fmt "%s"
+
+let pp_sopn fmt (sopn, ws) =
+  F.fprintf fmt "(%s %a)"
     (match sopn with
+     | Omuls        -> "Omuls"
      | Omulu        -> "Omulu"
      | Oaddcarry    -> "Oaddcarry"
      | Osubcarry    -> "Osubcarry"
@@ -114,7 +122,7 @@ let pp_sopn fmt sopn =
      | Ox86_NOT     -> "Ox86_NOT"
      | Ox86_SHL     -> "Ox86_SHL"
      | Ox86_SHR     -> "Ox86_SHR"
-     | Ox86_SAR     -> "Ox86_SAR")
+     | Ox86_SAR     -> "Ox86_SAR") pp_ws ws
 
 let count = ref 0
 let vars_tbl = Hv.create 101

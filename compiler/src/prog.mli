@@ -41,13 +41,12 @@ type op2 =
   | Omul    of op_ty
   | Osub    of op_ty
 
-  | Oland
-  | Olor
-  | Olxor
-  | Olsr
-  | Olsl
-  | Oasr
-
+  | Oland   of word_size
+  | Olor    of word_size
+  | Olxor   of word_size
+  | Olsr    of word_size
+  | Olsl    of word_size
+  | Oasr    of word_size
   | Oeq     of cmp_ty
   | Oneq    of cmp_ty
   | Olt     of cmp_ty
@@ -108,38 +107,40 @@ val tint  : 'e gty
 val tbool : 'e gty
 (* ------------------------------------------------------------------------ *)
 
-type op =
+type op_name =
 (* Generic operation *)
-| Omulu
-| Oaddcarry
-| Osubcarry
+| Omuls
+| Omulu       
+| Oaddcarry   
+| Osubcarry   
 (* Low level x86 operations *)
-| Ox86_MOV
-| Ox86_CMOVcc
-| Ox86_ADD
-| Ox86_SUB
-| Ox86_MUL
-| Ox86_IMUL
-| Ox86_IMUL64
-| Ox86_DIV
-| Ox86_IDIV
-| Ox86_ADC
-| Ox86_SBB
-| Ox86_NEG
-| Ox86_INC
-| Ox86_DEC
-| Ox86_SETcc
-| Ox86_LEA
-| Ox86_TEST
-| Ox86_CMP
-| Ox86_AND
-| Ox86_OR
-| Ox86_XOR
-| Ox86_NOT
-| Ox86_SHL
-| Ox86_SHR
-| Ox86_SAR
+| Ox86_MOV    
+| Ox86_CMOVcc 
+| Ox86_ADD    
+| Ox86_SUB    
+| Ox86_MUL    
+| Ox86_IMUL   
+| Ox86_IMUL64 
+| Ox86_DIV    
+| Ox86_IDIV   
+| Ox86_ADC    
+| Ox86_SBB    
+| Ox86_NEG    
+| Ox86_INC    
+| Ox86_DEC    
+| Ox86_SETcc  
+| Ox86_LEA    
+| Ox86_TEST   
+| Ox86_CMP    
+| Ox86_AND    
+| Ox86_OR     
+| Ox86_XOR    
+| Ox86_NOT    
+| Ox86_SHL    
+| Ox86_SHR    
+| Ox86_SAR    
 
+type op =  op_name * word_size
 
 type assgn_tag =
   | AT_keep   (* compile to move *)

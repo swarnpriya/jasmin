@@ -16,12 +16,15 @@ type peop1 = [ `Not | `Neg ]
 
 type peop2 = [
   `Add | `Sub | `Mul | `And | `Or  | `BAnd | `BOr | `BXOr |
-  `ShR | `ShL | `Asr | `Eq  | `Neq | `Lt  | `Le   | `Gt  | `Ge | 
-  `Lts  | `Les   | `Gts  | `Ges
+  `ShR | `ShL | `Eq  | `Neq | `Lt  | `Le   | `Gt  | `Ge 
 ]
 
 (* -------------------------------------------------------------------- *)
 type wsize = [ `W8 | `W16 | `W32 | `W64 | `W128 | `W256 ]
+
+type sign = [`Unsigned | `Signed ]
+
+type swsize = (sign * wsize) option
 
 (* -------------------------------------------------------------------- *)
 type pexpr_r =
@@ -32,9 +35,9 @@ type pexpr_r =
   | PEBool   of bool
   | PEInt    of Bigint.zint
   | PECall   of pident * pexpr list
-  | PEPrim   of pident * pexpr list
-  | PEOp1    of peop1 * pexpr
-  | PEOp2    of peop2 * (pexpr * pexpr)
+  | PEPrim   of (pident * wsize option) * pexpr list
+  | PEOp1    of (peop1 * swsize) * pexpr
+  | PEOp2    of (peop2 * swsize) * (pexpr * pexpr)
 
 and pexpr = pexpr_r L.located
 
@@ -58,9 +61,8 @@ type plvalue_r =
 and plvalue = plvalue_r L.located
 
 (* -------------------------------------------------------------------- *)
-type peqop = [
-  `Raw | `Add | `Sub | `ShR | `Asr | `ShL | `BAnd | `BXOr | `BOr  | `Mul
-]
+type peqop = 
+  ([`Add | `Sub | `ShR | `ShL | `BAnd | `BXOr | `BOr  | `Mul] * swsize) option
 
 (* -------------------------------------------------------------------- *)
 type pinstr_r =

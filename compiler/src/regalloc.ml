@@ -37,7 +37,7 @@ let x86_equality_constraints (tbl: (var, int) Hashtbl.t) (k: int -> int -> unit)
       k i j
     with Not_found -> ()
   in
-  match op, lvs, es with
+  match fst op, lvs, es with
   | (Oaddcarry | Osubcarry),
     [ _ ; Lvar v ], Pvar w :: _
   | (Ox86_ADD | Ox86_SUB | Ox86_ADC | Ox86_SBB | Ox86_NEG
@@ -275,7 +275,7 @@ struct
     let mallocate_one x y a =
       match x with Pvar x -> allocate_one x y a | _ -> a
     in
-    match op, lvs, es with
+    match fst op, lvs, es with
     | (Ox86_ADD | Ox86_SUB | Ox86_AND | Ox86_OR | Ox86_XOR | Ox86_CMP
       | Ox86_SHL | Ox86_SHR | Ox86_SAR | Ox86_NEG),
       Lvar oF :: Lvar cF :: Lvar sF :: Lvar pF :: Lvar zF :: _, _ ->

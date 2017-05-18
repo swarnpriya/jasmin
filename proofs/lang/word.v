@@ -602,6 +602,9 @@ Definition select_op (T : wsize -> Type) o8 o16 o32 o64 ws :=
   | U32 => o32 
   | U64 => o64
   end.
+
+Definition wrepr ws z := 
+  w_to_word (@select_op (fun ws => Z -> i_wsize ws) I8.repr I16.repr I32.repr I64.repr ws z).
   
 Definition wlnot ws := 
   w_op1 (@select_op (fun w => i_wsize w -> i_wsize w) I8.not I16.not I32.not I64.not ws).

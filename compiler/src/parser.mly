@@ -17,12 +17,11 @@
 %token T_BOOL
 %token T_U8 T_U16 T_U32 T_U64 T_U128 T_U256 T_INT
 
+%token <Syntax.sign * Syntax.wsize > OPSIZE 
 %token SHARP
 %token AMP
 %token AMPAMP
-%token AMPEQ
 %token BANG
-%token BANGEQ
 %token COMMA
 %token DOWNTO
 %token ELSE
@@ -32,38 +31,25 @@
 %token FN
 %token FOR
 %token GE 
-%token GEs
 %token GT
-%token GTs
 %token GTGT
-%token GTGTs
-%token GTGTEQ
-%token GTGTsEQ
 %token HAT
-%token HATEQ
 %token IF
 %token INLINE
 %token LE
-%token LEs
 %token LT
-%token LTs
 %token LTLT
-%token LTLTEQ
 %token MINUS
-%token MINUSEQ
 %token PARAM
 %token PIPE
-%token PIPEEQ
 %token PIPEPIPE
 %token PLUS
-%token PLUSEQ
 %token RARROW
 %token REG
 %token RETURN
 %token SEMICOLON
 %token STACK
 %token STAR
-%token STAREQ
 %token TO
 %token TRUE
 %token UNDERSCORE
@@ -78,9 +64,9 @@
 %left PIPE
 %left HAT
 %left AMP
-%left EQEQ BANGEQ
-%left LE LEs GE GEs LT LTs GT GTs
-%left LTLT GTGT GTGTs
+%left EQEQ EQ
+%left LE GE LT GT 
+%left LTLT GTGT 
 %left PLUS MINUS
 %left STAR
 %nonassoc BANG
@@ -127,8 +113,11 @@ ptype:
 (* ** Index expressions
  * -------------------------------------------------------------------- *)
 
+%inline op_size:
+| x=OPSIZE? { (x:swsize) }
+
 %inline peop1:
-| BANG  { `Not }
+| BANG   { `Not }
 | MINUS  { `Neg }
 
 %inline peop2:
@@ -142,17 +131,12 @@ ptype:
 | HAT      { `BXOr }
 | LTLT     { `ShL  }
 | GTGT     { `ShR  }
-| GTGTs    { `Asr  }
 | EQEQ     { `Eq   }
-| BANGEQ   { `Neq  }
+| BANG EQ  { `Neq  }
 | LT       { `Lt   }
 | LE       { `Le   }
 | GT       { `Gt   }
 | GE       { `Ge   }
-| LTs      { `Lts  }
-| LEs      { `Les  }
-| GTs      { `Gts  }
-| GEs      { `Ges  }
 
 prim:
 | SHARP x=ident { x }
@@ -176,11 +160,11 @@ pexpr_r:
 | ct=parens(ptype)? LBRACKET v=var PLUS e=pexpr RBRACKET
     { PEFetch (ct, v, e) }
 
-| o=peop1 e=pexpr
-    { PEOp1 (o, e) }
+| o=peop1 s=op_size e=pexpr
+    { PEOp1 ((o, s), e) }
 
-| e1=pexpr o=peop2 e2=pexpr
-    { PEOp2 (o, (e1, e2)) }
+| e1=pexpr o=peop2 s=op_size e2=pexpr
+    { PEOp2 ((o, s), (e1, e2)) }
 
 | e=parens(pexpr)
     { PEParens e }
@@ -188,24 +172,23 @@ pexpr_r:
 | f=var args=parens_tuple(pexpr)
     { PECall (f, args) }
 
-| f=prim args=parens_tuple(pexpr)
-    { PEPrim (f, args) }
+| f=prim ws=op_size args=parens_tuple(pexpr)
+    { PEPrim ((f, Utils.omap snd ws), args) }
 
 pexpr:
 | e=loc(pexpr_r) { e }
 
 (* -------------------------------------------------------------------- *)
 peqop:
-| EQ      { `Raw  }
-| PLUSEQ  { `Add  }
-| MINUSEQ { `Sub  }
-| STAREQ  { `Mul  }
-| GTGTEQ  { `ShR  }
-| GTGTsEQ { `Asr  }
-| LTLTEQ  { `ShL  }
-| AMPEQ   { `BAnd }
-| HATEQ   { `BXOr }
-| PIPEEQ  { `BOr  }
+| EQ                  { None  }
+| PLUS  s=op_size EQ  { Some(`Add , (s:swsize)) }      
+| MINUS s=op_size EQ  { Some(`Sub , s) }
+| STAR  s=op_size EQ  { Some(`Mul , s) }
+| GTGT  s=op_size EQ  { Some(`ShR , s) }
+| LTLT  s=op_size EQ  { Some(`ShL , s) }
+| AMP   s=op_size EQ  { Some(`BAnd, s) }
+| HAT   s=op_size EQ  { Some(`BXOr, s) }
+| PIPE  s=op_size EQ  { Some(`BOr , s) }
 
 (* ** Left value
  * -------------------------------------------------------------------- *)
@@ -237,7 +220,8 @@ pinstr_r:
 | fc=loc(f=var args=parens_tuple(pexpr) { (f, args) })
     c=prefix(IF, pexpr)? SEMICOLON
     { let { L.pl_loc = loc; L.pl_desc = (f, args) } = fc in
-      PIAssign ([], `Raw, L.mk_loc loc (PECall (f, args)), c) }
+      PIAssign ([], None, 
+                L.mk_loc loc (PECall (f, args)), c) }
 
 | IF c=pexpr i1s=pblock
     { PIIf (c, i1s, None) }

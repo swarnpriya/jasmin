@@ -18,7 +18,6 @@
     "u64"   , T_U64  ;
     "u128"  , T_U128 ;
     "u256"  , T_U256 ;
-
     "bool"  , T_BOOL ;
     "int"   , T_INT  ;
 
@@ -73,6 +72,15 @@ rule main = parse
   | ident+ as s
       { odfl (NID s) (Hash.find_option keywords s) }
 
+  | "8s"    { OPSIZE(`Signed, `W8 ) } 
+  | "16s"   { OPSIZE(`Signed, `W16) } 
+  | "32s"   { OPSIZE(`Signed, `W32) } 
+  | "64s"   { OPSIZE(`Signed, `W64) } 
+  | "8u"    { OPSIZE(`Unsigned, `W8 ) } 
+  | "16u"   { OPSIZE(`Unsigned, `W16) } 
+  | "32u"   { OPSIZE(`Unsigned, `W32) } 
+  | "64u"   { OPSIZE(`Unsigned, `W64) } 
+
   | "#"     { SHARP      } 
   | "["     { LBRACKET   }
   | "]"     { RBRACKET   }
@@ -87,10 +95,6 @@ rule main = parse
   | "<"     { LT         }
   | ">="    { GE         }
   | ">"     { GT         }
-  | "<=s"   { LEs        }
-  | "<s"    { LTs        }
-  | ">=s"   { GEs        }
-  | ">s"    { GTs        }
 
   | "!"     { BANG       }
   | "+"     { PLUS       }
@@ -102,21 +106,9 @@ rule main = parse
   | "&&"    { AMPAMP     }
   | "||"    { PIPEPIPE   }
   | ">>"    { GTGT       }
-  | ">>s"   { GTGTs      }
   | "<<"    { LTLT       }
   | "="     { EQ         }
   | "=="    { EQEQ       }
-  | "!="    { BANGEQ     }
-  | "+="    { PLUSEQ     }
-  | "-="    { MINUSEQ    }
-  | "*="    { STAREQ     }
-  | "|="    { PIPEEQ     }
-  | "&="    { AMPEQ      }
-  | "^="    { HATEQ      }
-  | "^="    { HATEQ      }
-  | ">>="   { GTGTEQ     }
-  | ">>s="  { GTGTsEQ    }
-  | "<<="   { LTLTEQ     }
 
   | _ as c  { invalid_char (L.of_lexbuf lexbuf) c }
   | eof     { EOF }

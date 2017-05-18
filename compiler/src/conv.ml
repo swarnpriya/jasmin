@@ -1,5 +1,6 @@
 open Var0
 open Prog
+open Word
 module T = Type
 module C = Expr
 
@@ -39,8 +40,8 @@ let bi_of_nat n =
 let pos_of_int i = pos_of_bi (B.of_int i)
 let int_of_pos p = B.to_int (bi_of_pos p)
 
-let int64_of_bi bi = Integers.Int64.repr (z_of_bi bi)
-let bi_of_int64 z  = bi_of_z (Integers.Int64.signed z)
+let int64_of_bi bi = I64.repr (z_of_bi bi)
+let bi_of_int64 z  = bi_of_z (I64.signed z)
 
 (* ------------------------------------------------------------------------ *)
 
@@ -154,26 +155,37 @@ let vari_of_cvari tbl v =
 
 (* ------------------------------------------------------------------------ *)
 
+let cwsize_of_wsize = function
+  | W8  -> Word.U8
+  | W16 -> Word.U16
+  | W32 -> Word.U32
+  | W64 -> Word.U64
+  | W128 -> assert false 
+  | W256 -> assert false 
+
+let wsize_of_cwsize = function
+  | Word.U8  -> W8  
+  | Word.U16 -> W16 
+  | Word.U32 -> W32 
+  | Word.U64 -> W64 
+
 let ccmp_of_cmp = function
-  | Cmp_int    -> C.Cmp_int
-  | Cmp_uw W64 -> C.Cmp_uw
-  | Cmp_uw _   -> assert false
-  | Cmp_sw W64 -> C.Cmp_sw
-  | Cmp_sw _   -> assert false
+  | Cmp_int   -> C.Cmp_int
+  | Cmp_uw ws -> C.Cmp_uw (cwsize_of_wsize ws) 
+  | Cmp_sw ws -> C.Cmp_sw (cwsize_of_wsize ws)
 
 let cmp_of_ccmp = function
-  | C.Cmp_int -> Cmp_int
-  | C.Cmp_uw  -> Cmp_uw W64
-  | C.Cmp_sw  -> Cmp_sw W64
+  | C.Cmp_int    -> Cmp_int
+  | C.Cmp_uw  ws -> Cmp_uw (wsize_of_cwsize ws)
+  | C.Cmp_sw  ws -> Cmp_sw (wsize_of_cwsize ws)
 
 let coty_of_oty = function
   | Op_int   -> C.Op_int
-  | Op_w W64 -> C.Op_w
-  | Op_w _   -> assert false
+  | Op_w ws  -> C.Op_w (cwsize_of_wsize ws)
 
 let oty_of_coty = function
-  | C.Op_int -> Op_int
-  | C.Op_w   -> Op_w W64
+  | C.Op_int  -> Op_int
+  | C.Op_w ws -> Op_w (wsize_of_cwsize ws)
 
 let cop_of_op = function
   | Oand    -> C.Oand
@@ -183,12 +195,12 @@ let cop_of_op = function
   | Omul ty -> C.Omul (coty_of_oty ty)
   | Osub ty -> C.Osub (coty_of_oty ty)
 
-  | Oland   -> C.Oland
-  | Olor    -> C.Olor
-  | Olxor   -> C.Olxor
-  | Olsr    -> C.Olsr
-  | Olsl    -> C.Olsl
-  | Oasr    -> C.Oasr
+  | Oland ty -> C.Oland (cwsize_of_wsize ty)
+  | Olor  ty -> C.Olor  (cwsize_of_wsize ty)
+  | Olxor ty -> C.Olxor (cwsize_of_wsize ty)
+  | Olsr  ty -> C.Olsr  (cwsize_of_wsize ty)
+  | Olsl  ty -> C.Olsl  (cwsize_of_wsize ty)
+  | Oasr  ty -> C.Oasr  (cwsize_of_wsize ty)
 
   | Oeq  ty -> C.Oeq  (ccmp_of_cmp ty)
   | Oneq ty -> C.Oneq (ccmp_of_cmp ty)
@@ -204,12 +216,12 @@ let op_of_cop = function
   | C.Omul ty -> Omul (oty_of_coty ty)
   | C.Osub ty -> Osub (oty_of_coty ty)
 
-  | C.Oland   -> Oland
-  | C.Olor    -> Olor
-  | C.Olxor   -> Olxor
-  | C.Olsr    -> Olsr
-  | C.Olsl    -> Olsl
-  | C.Oasr    -> Oasr
+  | C.Oland ty  -> Oland (wsize_of_cwsize ty)
+  | C.Olor  ty  -> Olor  (wsize_of_cwsize ty)
+  | C.Olxor ty  -> Olxor (wsize_of_cwsize ty)
+  | C.Olsr  ty  -> Olsr  (wsize_of_cwsize ty)
+  | C.Olsl  ty  -> Olsl  (wsize_of_cwsize ty)
+  | C.Oasr  ty  -> Oasr  (wsize_of_cwsize ty)
 
   | C.Oeq  ty -> Oeq  (cmp_of_ccmp ty)
   | C.Oneq ty -> Oneq (cmp_of_ccmp ty)
@@ -219,28 +231,24 @@ let op_of_cop = function
   | C.Oge  ty -> Oge  (cmp_of_ccmp ty)
 
 let op1_of_cop1 = function
-  | C.Olnot -> Olnot W64
-  | C.Onot  -> Onot
-  | C.Oneg -> Oneg W64
+  | C.Olnot ty -> Olnot (wsize_of_cwsize ty)
+  | C.Onot     -> Onot
+  | C.Oneg  ty -> Oneg (wsize_of_cwsize ty)
 
 let cop1_of_op1 = function
-  | Olnot W64 -> C.Olnot
-  | Olnot _   -> assert false
-  | Onot      -> C.Onot
-  | Oneg W64 -> C.Oneg
-  | Oneg _   -> assert false
+  | Olnot ty -> C.Olnot (cwsize_of_wsize ty)
+  | Onot     -> C.Onot
+  | Oneg  ty -> C.Oneg (cwsize_of_wsize ty)
 
 (* ------------------------------------------------------------------------ *)
 
 let rec cexpr_of_expr tbl = function
   | Pconst z          -> C.Pconst (z_of_bi z)
   | Pbool  b          -> C.Pbool  b
-  | Pcast (W64, e)    -> C.Pcast (cexpr_of_expr tbl e)
-  | Pcast _           -> assert false
+  | Pcast (ty, e)     -> C.Pcast (cwsize_of_wsize ty, cexpr_of_expr tbl e)
   | Pvar x            -> C.Pvar (cvari_of_vari tbl x)
   | Pget (x,e)        -> C.Pget (cvari_of_vari tbl x, cexpr_of_expr tbl e)
-  | Pload (W64, x, e) -> C.Pload(cvari_of_vari tbl x, cexpr_of_expr tbl e)
-  | Pload _           -> assert false
+  | Pload (ty, x, e)  -> C.Pload(cwsize_of_wsize ty, cvari_of_vari tbl x, cexpr_of_expr tbl e)
   | Papp1 (o, e)      -> C.Papp1(cop1_of_op1 o, cexpr_of_expr tbl e)
   | Papp2 (o, e1, e2) -> C.Papp2(cop_of_op o, cexpr_of_expr tbl e1, cexpr_of_expr tbl e2)
   | Pif   (e, e1, e2)  -> C.Pif(cexpr_of_expr tbl e,
@@ -250,10 +258,10 @@ let rec cexpr_of_expr tbl = function
 let rec expr_of_cexpr tbl = function
   | C.Pconst z          -> Pconst (bi_of_z z)
   | C.Pbool  b          -> Pbool  b
-  | C.Pcast  e          -> Pcast (W64, expr_of_cexpr tbl e)
+  | C.Pcast (ty, e)     -> Pcast (wsize_of_cwsize ty, expr_of_cexpr tbl e)
   | C.Pvar x            -> Pvar (vari_of_cvari tbl x)
-  | C.Pget (x,e)        -> Pget (vari_of_cvari tbl x, expr_of_cexpr tbl e)
-  | C.Pload (x, e)      -> Pload(W64, vari_of_cvari tbl x, expr_of_cexpr tbl e)
+  | C.Pget  (x,e)       -> Pget (vari_of_cvari tbl x, expr_of_cexpr tbl e)
+  | C.Pload (ty, x, e)  -> Pload(wsize_of_cwsize ty, vari_of_cvari tbl x, expr_of_cexpr tbl e)
   | C.Papp1 (o, e)      -> Papp1(op1_of_cop1 o, expr_of_cexpr tbl e)
   | C.Papp2 (o, e1, e2) -> Papp2(op_of_cop o, expr_of_cexpr tbl e1, expr_of_cexpr tbl e2)
   | C.Pif   (e, e1, e2) -> Pif(expr_of_cexpr tbl e,
@@ -263,79 +271,81 @@ let rec expr_of_cexpr tbl = function
 
 (* ------------------------------------------------------------------------ *)
 
-let copn_of_opn = function
-  | Omulu        -> C.Omulu
-  | Oaddcarry    -> C.Oaddcarry
-  | Osubcarry    -> C.Osubcarry
-  | Ox86_MOV  -> C.Ox86_MOV
-  | Ox86_CMOVcc  -> C.Ox86_CMOVcc
-  | Ox86_ADD     -> C.Ox86_ADD
-  | Ox86_SUB     -> C.Ox86_SUB
-  | Ox86_MUL     -> C.Ox86_MUL
-  | Ox86_IMUL    -> C.Ox86_IMUL
-  | Ox86_IMUL64	-> C.Ox86_IMUL64
-  | Ox86_DIV     -> C.Ox86_DIV
-  | Ox86_IDIV    -> C.Ox86_IDIV
-  | Ox86_ADC     -> C.Ox86_ADC
-  | Ox86_SBB     -> C.Ox86_SBB
-  | Ox86_NEG	-> C.Ox86_NEG
-  | Ox86_INC     -> C.Ox86_INC
-  | Ox86_DEC     -> C.Ox86_DEC
-  | Ox86_SETcc   -> C.Ox86_SETcc
-  | Ox86_LEA     -> C.Ox86_LEA
-  | Ox86_TEST    -> C.Ox86_TEST
-  | Ox86_CMP     -> C.Ox86_CMP
-  | Ox86_AND     -> C.Ox86_AND
-  | Ox86_OR      -> C.Ox86_OR
-  | Ox86_XOR     -> C.Ox86_XOR
-  | Ox86_NOT     -> C.Ox86_NOT
-  | Ox86_SHL     -> C.Ox86_SHL
-  | Ox86_SHR     -> C.Ox86_SHR
-  | Ox86_SAR     -> C.Ox86_SAR
+let copn_of_opn (o, ws) = 
+  match o with 
+  | Omulu        -> C.Omulu       (cwsize_of_wsize ws)  
+  | Omuls        -> C.Omuls       (cwsize_of_wsize ws)  
+  | Oaddcarry    -> C.Oaddcarry   (cwsize_of_wsize ws)
+  | Osubcarry    -> C.Osubcarry   (cwsize_of_wsize ws)
+  | Ox86_MOV     -> C.Ox86_MOV    (cwsize_of_wsize ws)
+  | Ox86_CMOVcc  -> C.Ox86_CMOVcc (cwsize_of_wsize ws)
+  | Ox86_ADD     -> C.Ox86_ADD    (cwsize_of_wsize ws)
+  | Ox86_SUB     -> C.Ox86_SUB    (cwsize_of_wsize ws)
+  | Ox86_MUL     -> C.Ox86_MUL    (cwsize_of_wsize ws)
+  | Ox86_IMUL    -> C.Ox86_IMUL   (cwsize_of_wsize ws)
+  | Ox86_IMUL64	 -> C.Ox86_IMUL64 (cwsize_of_wsize ws)
+  | Ox86_DIV     -> C.Ox86_DIV    (cwsize_of_wsize ws)
+  | Ox86_IDIV    -> C.Ox86_IDIV   (cwsize_of_wsize ws)
+  | Ox86_ADC     -> C.Ox86_ADC    (cwsize_of_wsize ws)
+  | Ox86_SBB     -> C.Ox86_SBB    (cwsize_of_wsize ws)
+  | Ox86_NEG	 -> C.Ox86_NEG    (cwsize_of_wsize ws)
+  | Ox86_INC     -> C.Ox86_INC    (cwsize_of_wsize ws)
+  | Ox86_DEC     -> C.Ox86_DEC    (cwsize_of_wsize ws)
+  | Ox86_SETcc   -> C.Ox86_SETcc  (cwsize_of_wsize ws)
+  | Ox86_LEA     -> C.Ox86_LEA    (cwsize_of_wsize ws)
+  | Ox86_TEST    -> C.Ox86_TEST   (cwsize_of_wsize ws)
+  | Ox86_CMP     -> C.Ox86_CMP    (cwsize_of_wsize ws)
+  | Ox86_AND     -> C.Ox86_AND    (cwsize_of_wsize ws)
+  | Ox86_OR      -> C.Ox86_OR     (cwsize_of_wsize ws)
+  | Ox86_XOR     -> C.Ox86_XOR    (cwsize_of_wsize ws)
+  | Ox86_NOT     -> C.Ox86_NOT    (cwsize_of_wsize ws)
+  | Ox86_SHL     -> C.Ox86_SHL    (cwsize_of_wsize ws)
+  | Ox86_SHR     -> C.Ox86_SHR    (cwsize_of_wsize ws)
+  | Ox86_SAR     -> C.Ox86_SAR    (cwsize_of_wsize ws)
 
 let opn_of_copn = function
-  | C.Omulu        -> Omulu
-  | C.Oaddcarry    -> Oaddcarry
-  | C.Osubcarry    -> Osubcarry
-  | C.Ox86_MOV  -> Ox86_MOV
-  | C.Ox86_CMOVcc  -> Ox86_CMOVcc
-  | C.Ox86_ADD     -> Ox86_ADD
-  | C.Ox86_SUB     -> Ox86_SUB
-  | C.Ox86_MUL     -> Ox86_MUL
-  | C.Ox86_IMUL    -> Ox86_IMUL
-  | C.Ox86_IMUL64	-> Ox86_IMUL64
-  | C.Ox86_DIV     -> Ox86_DIV
-  | C.Ox86_IDIV    -> Ox86_IDIV
-  | C.Ox86_ADC     -> Ox86_ADC
-  | C.Ox86_SBB     -> Ox86_SBB
-  | C.Ox86_NEG	-> Ox86_NEG
-  | C.Ox86_INC     -> Ox86_INC
-  | C.Ox86_DEC     -> Ox86_DEC
-  | C.Ox86_SETcc   -> Ox86_SETcc
-  | C.Ox86_LEA     -> Ox86_LEA
-  | C.Ox86_TEST    -> Ox86_TEST
-  | C.Ox86_CMP     -> Ox86_CMP
-  | C.Ox86_AND     -> Ox86_AND
-  | C.Ox86_OR      -> Ox86_OR
-  | C.Ox86_XOR     -> Ox86_XOR
-  | C.Ox86_NOT     -> Ox86_NOT
-  | C.Ox86_SHL     -> Ox86_SHL
-  | C.Ox86_SHR     -> Ox86_SHR
-  | C.Ox86_SAR     -> Ox86_SAR
+  | C.Omuls       ws -> Omuls      , (wsize_of_cwsize ws)
+  | C.Omulu       ws -> Omulu      , (wsize_of_cwsize ws)
+  | C.Oaddcarry   ws -> Oaddcarry  , (wsize_of_cwsize ws)
+  | C.Osubcarry   ws -> Osubcarry  , (wsize_of_cwsize ws)
+  | C.Ox86_MOV    ws -> Ox86_MOV   , (wsize_of_cwsize ws)
+  | C.Ox86_CMOVcc ws -> Ox86_CMOVcc, (wsize_of_cwsize ws)
+  | C.Ox86_ADD    ws -> Ox86_ADD   , (wsize_of_cwsize ws)
+  | C.Ox86_SUB    ws -> Ox86_SUB   , (wsize_of_cwsize ws)
+  | C.Ox86_MUL    ws -> Ox86_MUL   , (wsize_of_cwsize ws)
+  | C.Ox86_IMUL   ws -> Ox86_IMUL  , (wsize_of_cwsize ws)
+  | C.Ox86_IMUL64 ws -> Ox86_IMUL64, (wsize_of_cwsize ws)
+  | C.Ox86_DIV    ws -> Ox86_DIV   , (wsize_of_cwsize ws)
+  | C.Ox86_IDIV   ws -> Ox86_IDIV  , (wsize_of_cwsize ws)
+  | C.Ox86_ADC    ws -> Ox86_ADC   , (wsize_of_cwsize ws)
+  | C.Ox86_SBB    ws -> Ox86_SBB   , (wsize_of_cwsize ws)
+  | C.Ox86_NEG	  ws -> Ox86_NEG   , (wsize_of_cwsize ws)
+  | C.Ox86_INC    ws -> Ox86_INC   , (wsize_of_cwsize ws)
+  | C.Ox86_DEC    ws -> Ox86_DEC   , (wsize_of_cwsize ws)
+  | C.Ox86_SETcc  ws -> Ox86_SETcc , (wsize_of_cwsize ws)
+  | C.Ox86_LEA    ws -> Ox86_LEA   , (wsize_of_cwsize ws)
+  | C.Ox86_TEST   ws -> Ox86_TEST  , (wsize_of_cwsize ws)
+  | C.Ox86_CMP    ws -> Ox86_CMP   , (wsize_of_cwsize ws)
+  | C.Ox86_AND    ws -> Ox86_AND   , (wsize_of_cwsize ws)
+  | C.Ox86_OR     ws -> Ox86_OR    , (wsize_of_cwsize ws)
+  | C.Ox86_XOR    ws -> Ox86_XOR   , (wsize_of_cwsize ws)
+  | C.Ox86_NOT    ws -> Ox86_NOT   , (wsize_of_cwsize ws)
+  | C.Ox86_SHL    ws -> Ox86_SHL   , (wsize_of_cwsize ws)
+  | C.Ox86_SHR    ws -> Ox86_SHR   , (wsize_of_cwsize ws)
+  | C.Ox86_SAR    ws -> Ox86_SAR   , (wsize_of_cwsize ws)
 
 (* ------------------------------------------------------------------------ *)
 
 let clval_of_lval tbl = function
   | Lnone(loc, ty) -> C.Lnone (set_loc tbl loc, cty_of_ty ty)
   | Lvar x         -> C.Lvar  (cvari_of_vari tbl x)
-  | Lmem (W64,x,e) -> C.Lmem  (cvari_of_vari tbl x, cexpr_of_expr tbl e)
-  | Lmem _         -> assert false
+  | Lmem (ty,x,e)  -> C.Lmem  (cwsize_of_wsize ty, cvari_of_vari tbl x, cexpr_of_expr tbl e)
   | Laset(x,e)     -> C.Laset (cvari_of_vari tbl x, cexpr_of_expr tbl e)
 
 let lval_of_clval tbl = function
   | C.Lnone(p,ty)-> Lnone (get_loc tbl p, ty_of_cty ty)
   | C.Lvar x     -> Lvar (vari_of_cvari tbl x)
-  | C.Lmem(x,e)  -> Lmem (W64, vari_of_cvari tbl x, expr_of_cexpr tbl e)
+  | C.Lmem(ty, x,e) -> Lmem (wsize_of_cwsize ty, vari_of_cvari tbl x, expr_of_cexpr tbl e)
   | C.Laset(x,e) -> Laset (vari_of_cvari tbl x, expr_of_cexpr tbl e)
 
 (* ------------------------------------------------------------------------ *)

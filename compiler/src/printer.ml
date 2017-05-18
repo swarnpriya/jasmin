@@ -45,12 +45,12 @@ let string_of_op2 = function
   | Omul _ -> "*"
   | Osub _ -> "-"
 
-  | Oland  -> "&"
-  | Olor   -> "|"
-  | Olxor  -> "^"
-  | Olsr   -> ">>"
-  | Olsl   -> "<<"
-  | Oasr   -> ">>s"
+  | Oland  _ -> "&"
+  | Olor   _ -> "|"
+  | Olxor  _ -> "^"
+  | Olsr   _ -> ">>"
+  | Olsl   _ -> "<<"
+  | Oasr   _ -> ">>s"
 
   | Oeq  _ -> "=="
   | Oneq _ -> "!="
@@ -111,6 +111,7 @@ let pp_glvs pp_var fmt lvs =
 (* -------------------------------------------------------------------- *)
 let pp_opn = function
   | Omulu        -> "#mulu"
+  | Omuls        -> "#muls"
   | Oaddcarry    -> "#addc"
   | Osubcarry    -> "#subc"
   | Ox86_MOV  -> "#x86_MOV"
@@ -158,8 +159,8 @@ let rec pp_gi pp_info pp_var fmt i =
       (pp_glv pp_var) x (pp_tag t) (pp_ge pp_var) e
 
   | Copn(x, o, e) -> (* FIXME *)
-    F.fprintf fmt "@[<hov 2>%a =@ %s(%a);@]"
-       (pp_glvs pp_var) x (pp_opn o)
+    F.fprintf fmt "@[<hov 2>%a =@ %s %iu(%a);@]"
+       (pp_glvs pp_var) x (pp_opn (fst o)) (int_of_ws (snd o))
        (pp_ges pp_var) e
 
   | Cif(e, c, []) ->
