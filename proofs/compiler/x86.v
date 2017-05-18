@@ -254,16 +254,16 @@ Variant ofs :=
   
 Fixpoint addr_ofs e := 
   match e with
-  | Pcast (Pconst z) => Ofs_const z
+  | Pcast U64 (Pconst z) => Ofs_const z
   | Pvar  x          => Ofs_var x
-  | Papp2 (Omul Op_w) e1 e2 =>
+  | Papp2 (Omul (Op_w U64)) e1 e2 =>
     match addr_ofs e1, addr_ofs e2 with
     | Ofs_const n1, Ofs_const n2 => Ofs_const (n1 * n2)%Z
     | Ofs_const sc, Ofs_var   x  => Ofs_mul sc x 
     | Ofs_var   x , Ofs_const sc => Ofs_mul sc x      
     | _           , _            => Ofs_error
     end
-  | Papp2 (Oadd Op_w) e1 e2 =>
+  | Papp2 (Oadd (Op_w U64)) e1 e2 =>
     match addr_ofs e1, addr_ofs e2 with
     | Ofs_const n1, Ofs_const n2 => Ofs_const (n1 + n2)%Z
     | Ofs_const n , Ofs_var   x  => Ofs_add 1%Z x n
@@ -278,7 +278,7 @@ Fixpoint addr_ofs e :=
 Definition addr_of_pexpr ii s (e: pexpr) :=
   match addr_ofs e with
   | Ofs_const z => 
-    Let n := word_of_int z in
+    Let n := word_of_int U64 z in
     ciok (mkAddress n (Some s) Scale1 None)
   | Ofs_var x =>
     Let x := reg_of_var ii x in
@@ -289,7 +289,7 @@ Definition addr_of_pexpr ii s (e: pexpr) :=
     ciok (mkAddress I64.zero (Some s) sc (Some x))
   | Ofs_add sc x z =>
     Let x := reg_of_var ii x in
-    Let n := word_of_int z in
+    Let n := word_of_int U64 z in
     Let sc := scale_of_z ii sc in
     ciok (mkAddress n (Some s) sc (Some x))
   | Ofs_error =>
@@ -304,10 +304,10 @@ Definition oprd_of_pexpr ws ii (e: pexpr) :=
   | Pvar v =>
      Let s := reg_of_var ii v in
      ciok (Reg_op s)
-  | Pload ws' v e => (* FIXME: can we recognize more expression for e ? *)
+  | Pload ws' v e => 
     if ws == ws' then
       Let s := reg_of_var ii v in
-      Let w := word_of_pexpr ii e in
+      Let w := addr_of_pexpr ii s e in
       ciok (Adr_op w)
     else  cierror ii (Cerr_assembler (AsmErr_string "pexpr : wsize mismatch"))
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd"))
@@ -568,10 +568,10 @@ Definition assemble_fopn ii (l: lvals) ws (o: alukind) (e: pexprs) : ciexec asm 
   | LK_BINC bin =>
     match as_triple e, as_singleton l with
     | Some (e1, e2, Pvar ecf), Some x =>
-      Let o1 := oprd_of_pexpr ws ii e1 in
-      Let o2 := oprd_of_pexpr ws ii e2 in
-      Let rcf := rflag_of_var    ii ecf in
-      Let ox := oprd_of_lval  ws ii x in
+      Let o1  := oprd_of_pexpr ws ii e1 in
+      Let o2  := oprd_of_pexpr ws ii e2 in
+      Let rcf := rflag_of_var     ii ecf in
+      Let ox  := oprd_of_lval  ws ii x in
       if (rcf != CF) then
         cierror ii (Cerr_assembler
           (AsmErr_string ("Carry flag in wrong register for " ++ string_of_aluk ws o))) else
@@ -590,12 +590,12 @@ Definition assemble_fopn ii (l: lvals) ws (o: alukind) (e: pexprs) : ciexec asm 
     end
 
   | LK_SHT sht =>
+
     match as_pair e, as_singleton l with
     | Some (e1, e2), Some x =>
       Let o1 := oprd_of_pexpr ws ii e1 in
       Let o2 := ireg_of_pexpr    ii e2 in
       Let ox := oprd_of_lval  ws ii x in
-
       if (o1 != ox) then
         cierror ii (Cerr_assembler
           (AsmErr_string ("First [rl]val should be the same for " ++ string_of_aluk ws o))) else
