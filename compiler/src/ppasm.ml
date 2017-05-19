@@ -78,8 +78,8 @@ let rsize_of_wsize (ws : LM.wsize) =
 let pp_instr_rsize (rs : rsize) =
   match rs with
   | `U8  -> "b"
-  | `U16 -> "s"
-  | `U32 -> "w"
+  | `U16 -> "w"
+  | `U32 -> "l"
   | `U64 -> "q"
 
 (* -------------------------------------------------------------------- *)
@@ -158,7 +158,7 @@ let pp_opr (ws : rsize) (op : X86_sem.oprd) =
       pp_register ws reg
 
   | Adr_op addr ->
-      pp_address ws addr
+      pp_address rs addr (* CHECK THIS!!! *)
 
 (* -------------------------------------------------------------------- *)
 let pp_imr (ws : rsize) (op : X86_sem.ireg) =
@@ -298,7 +298,7 @@ let pp_instr (i : X86_sem.asm) =
       `Instr (pp_iname `U32 "rol", [pp_imr `U32 ir; pp_opr `U32 op])
 
   | ADD32 (op1, op2) ->
-      `Instr (pp_iname `U32 "addl", [pp_opr `U32 op2; pp_opr `U32 op1])
+      `Instr (pp_iname `U32 "add", [pp_opr `U32 op2; pp_opr `U32 op1])
 
 (* -------------------------------------------------------------------- *)
 let pp_instr (fmt : Format.formatter) (i : X86_sem.asm) =
