@@ -14,6 +14,7 @@ crypto_sign_ed25519_amd64_64_choose_t:
 	movq	%rdi, (%rsp)
 	imulq	$768, %rsi, %rax
 	movq	%rdx, %rsi
+	sarq	$7, %rsi
 	movq	%rdx, %rdi
 	addq	%rsi, %rdi
 	xorq	%rsi, %rdi
