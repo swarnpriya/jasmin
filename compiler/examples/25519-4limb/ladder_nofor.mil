@@ -416,7 +416,7 @@ fn cswap(stack u64[4] x2p, stack u64[4] z2p, stack u64[4] x3p, stack u64[4] z3p,
 // ** montgomery ladder
 // ************************************************************************
 
-export fn mladder(stack u64[4] xr, reg u64 sp) -> (stack u64[4], stack u64[4]) {
+fn mladder(stack u64[4] xr, reg u64 sp) -> (stack u64[4], stack u64[4]) {
 
   stack u64    s;
   reg u64      tmp1;
@@ -642,7 +642,7 @@ fn pack(reg u64 rp, reg u64[4] xa) {
 // ** scalar multiplication
 // ************************************************************************
 
- fn scalarmult( reg u64 rp /* address to store result  */
+ export fn scalarmult( reg u64 rp /* address to store result  */
                     , reg u64 sp /* address of secret scalar */
                     , reg u64 pp /* address of point         */) {
   stack u64[4] save;
