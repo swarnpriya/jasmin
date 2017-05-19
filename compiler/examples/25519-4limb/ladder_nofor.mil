@@ -90,7 +90,6 @@ fn reduce(reg u64[8] z_in) -> reg u64[4] {
   reg bool cf;
   inline int i;
 
-  // FIXME: check if this is really required 
   for i = 0 to 8 { z[i] = z_in[i]; }
 
   crem_p = rem_p;
@@ -122,7 +121,6 @@ fn reduce(reg u64[8] z_in) -> reg u64[4] {
   l = zero * rem_p;
   z[0] += l;
 
-  // FIXME: check if this is really required 
   for i = 0 to 4 { z_out[i] = z[i]; }
 
   return z_out;
@@ -184,7 +182,6 @@ fn mul(stack u64[4] xa, stack u64[4] ya) -> reg u64[4] {
 
   r = reduce(z);
 
-  //for i = 0 to 4 { r[i] = z[i]; }
   return r;
 }
 
@@ -291,9 +288,6 @@ fn square(stack u64[4] xa) -> reg u64[4] {
 
   r = reduce(z);
 
-  // FIXME: maybe an equality constraint is enough here
-  //for i = 0 to 4 { r[i] = z[i]; }
-
   return r;
 }
 
@@ -334,6 +328,7 @@ fn ladderstep(stack u64[4] x1p, stack u64[4] x2p, stack u64[4] z2p, stack u64[4]
   c121666p[1] = 0;
   c121666p[2] = 0;
   c121666p[3] = 0;
+
   // workp mapping: 0 -> x1p, 1 -> x2p, 2 -> z2p, 3 -> x3p, 4 -> z3p
   t1      = x2p;
   t2      = t1;
@@ -379,22 +374,10 @@ fn ladderstep(stack u64[4] x1p, stack u64[4] x2p, stack u64[4] z2p, stack u64[4]
  
   return x2p, z2p, x3p, z3p;
 }
-/*
-export fn ladderstep_exp() {
-  stack u64[4] x1p;
-  stack u64[4] x2p;
-  stack u64[4] z2p;
-  stack u64[4] x3p;
-  stack u64[4] z3p;
-
-  x2p, z2p, x3p, z3p = ladderstep(x1p,x2p,z2p,x3p,z3p);
-}
-*/
 
 // ** cswap
 // ************************************************************************
 
-// FIXME: compare with OpenSSL, this is a translation from C
 fn cswap(stack u64[4] x2p, stack u64[4] z2p, stack u64[4] x3p, stack u64[4] z3p, reg u64 swap)
     -> (stack u64[4] , stack u64[4] , stack u64[4] , stack u64[4]) {
 
