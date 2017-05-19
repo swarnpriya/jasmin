@@ -1,0 +1,14 @@
+export fn f(reg u64 xa) -> reg u64 {
+	reg u64[8] res;
+	reg u64 a;
+	reg u64 i;
+	res[0] = 0;
+	i = 6;
+	while (i >=s 0) {
+		res[0] = [xa+i];
+		[xa + 0] = res[0];
+	    i -=1;
+	}
+	a = res[0];
+	return a;
+}

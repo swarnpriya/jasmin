@@ -248,7 +248,7 @@ export fn crypto_sign_ed25519_amd64_64_sc25519_barrett(reg u64 rp, reg u64 xp){
 	cf, t1 -= or - cf;  // cf? t1 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER1 - cf;
   or = crypto_sign_ed25519_amd64_64_ORDER2;
 	cf, t2 -= or - cf;  // cf? t2 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER2 - cf; 
-  or = crypto_sign_ed25519_amd64_64_ORDER3
+  or = crypto_sign_ed25519_amd64_64_ORDER3;
 	cf, t3 -= or - cf;  // cf? t3 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER3 - cf; 
 	r0 = t0 if !cf;  //r0 = t0 if !carry; 
 	r1 = t1 if !cf;  //r1 = t1 if !carry; 

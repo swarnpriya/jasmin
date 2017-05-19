@@ -212,36 +212,44 @@ crypto_sign_ed25519_amd64_64_sc25519_barrett:
 	addq	%rax, %rbp
 	movq	(%rsi), %rax
 	subq	%r8, %rax
-	movq	%rax, %r8
+	movq	%rax, %r9
 	movq	8(%rsi), %rcx
 	sbbq	%r10, %rcx
-	movq	%rcx, %r9
+	movq	%rcx, %r10
 	movq	16(%rsi), %rdx
 	sbbq	%r11, %rdx
-	movq	%rdx, %r10
+	movq	%rdx, %r11
 	movq	24(%rsi), %rsi
 	sbbq	%rbp, %rsi
-	movq	%rsi, %r11
-	subq	$6346243789798364141, %r8
-	sbbq	$1503914060200516822, %r9
-	sbbq	$0, %r10
-	sbbq	$1152921504606846976, %r11
-	cmovnbq	%r8, %rax
-	movq	%rax, %r8
-	cmovnbq	%r9, %rcx
-	movq	%rcx, %r9
-	cmovnbq	%r10, %rdx
-	movq	%rdx, %r10
-	cmovnbq	%r11, %rsi
-	movq	%rsi, %r11
-	subq	$6346243789798364141, %r8
-	sbbq	$1503914060200516822, %r9
-	sbbq	$0, %r10
-	sbbq	$1152921504606846976, %r11
-	cmovnbq	%r8, %rax
-	cmovnbq	%r9, %rcx
-	cmovnbq	%r10, %rdx
-	cmovnbq	%r11, %rsi
+	movq	%rsi, %rbp
+	movq	$6346243789798364141, %r8
+	subq	%r8, %r9
+	movq	$1503914060200516822, %r8
+	sbbq	%r8, %r10
+	movq	$0, %r8
+	sbbq	%r8, %r11
+	movq	$1152921504606846976, %r8
+	sbbq	%r8, %rbp
+	cmovnbq	%r9, %rax
+	movq	%rax, %r9
+	cmovnbq	%r10, %rcx
+	movq	%rcx, %r10
+	cmovnbq	%r11, %rdx
+	movq	%rdx, %r11
+	cmovnbq	%rbp, %rsi
+	movq	%rsi, %rbp
+	movq	$6346243789798364141, %r8
+	subq	%r8, %r9
+	movq	$1503914060200516822, %r8
+	sbbq	%r8, %r10
+	movq	$0, %r8
+	sbbq	%r8, %r11
+	movq	$1152921504606846976, %r8
+	sbbq	%r8, %rbp
+	cmovnbq	%r9, %rax
+	cmovnbq	%r10, %rcx
+	cmovnbq	%r11, %rdx
+	cmovnbq	%rbp, %rsi
 	movq	%rax, (%rdi)
 	movq	%rcx, 8(%rdi)
 	movq	%rdx, 16(%rdi)
