@@ -29,10 +29,7 @@ crypto_sign_ed25519_amd64_64_choose_t(reg u64 tp, reg u64 pos, reg u64 b, reg u6
     tp_stack = tp;              // tp_stack = tp
     pos *= 768;                 // pos *= 768
     mask = b;                   // mask = b
-
-    //x86_SAR(mask,7);          // mask >>= 7
-    mask >>= 7;
-
+    #x86_SAR(mask,7);            // mask >>= 7
     u = b;                      // u = b
     u += mask;                  // u += mask
     u ^= mask;                  // u ^= mask
