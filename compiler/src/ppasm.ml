@@ -63,11 +63,11 @@ let lreg_of_reg (reg : X86_sem.register) =
 let pp_instr_rsize rs =
   match rs with
   | LM.U8  -> "b"
-  | LM.U16 -> "s"
-  | LM.U32 -> "w"
+  | LM.U16 -> "w"
+  | LM.U32 -> "l"
   | LM.U64 -> "q"
 
-let dfl_rs = LM.U64 
+let dfl_rs = LM.U64
 (* -------------------------------------------------------------------- *)
 let pp_register ws (reg : X86_sem.register) =
   let ssp = function
@@ -103,7 +103,7 @@ let pp_scale (scale : X86_sem.scale) =
   | Scale8 -> "8"
 
 (* -------------------------------------------------------------------- *)
-let pp_address ws (addr : X86_sem.address) =
+let pp_address (addr : X86_sem.address) =
   let disp = Conv.bi_of_int64 addr.ad_disp in
   let base = addr.ad_base in
   let off  = addr.ad_offset in
@@ -114,8 +114,8 @@ let pp_address ws (addr : X86_sem.address) =
   else begin
     let disp = if disp =^ Bigint.zero then None else Some disp in
     let disp = odfl "" (omap Bigint.to_string disp) in
-    let base = odfl "" (omap (pp_register ws) base) in
-    let off  = omap (pp_register ws) off in
+    let base = odfl "" (omap (pp_register U64) base) in
+    let off  = omap (pp_register U64) off in
 
     match off, scal with
     | None, _ ->
@@ -144,7 +144,7 @@ let pp_opr ws (op : X86_sem.oprd) =
       pp_register ws reg
 
   | Adr_op addr ->
-      pp_address ws addr
+      pp_address addr
 
 (* -------------------------------------------------------------------- *)
 let pp_imr ws (op : X86_sem.ireg) =
