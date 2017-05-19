@@ -4,7 +4,6 @@ crypto_sign_ed25519_amd64_64_choose_t(reg u64 tp, reg u64 pos, reg u64 b, reg u6
     reg bool        cf;
     reg bool        eqf;
     reg u64         mask;
-    reg bool        slf;
     reg u64         subt0;
     reg u64         subt1;
     reg u64         t;
@@ -30,7 +29,7 @@ crypto_sign_ed25519_amd64_64_choose_t(reg u64 tp, reg u64 pos, reg u64 b, reg u6
     tp_stack = tp;              // tp_stack = tp
     pos *= 768;                 // pos *= 768
     mask = b;                   // mask = b
-    mask >>=s 7;               // mask >>= 7
+    //x86_SAR(mask,7);            // mask >>= 7
     u = b;                      // u = b
     u += mask;                  // u += mask
     u ^= mask;                  // u ^= mask
@@ -178,19 +177,18 @@ crypto_sign_ed25519_amd64_64_choose_t(reg u64 tp, reg u64 pos, reg u64 b, reg u6
     txaddy2 = t if eqf;
     t = [basep + 728 + pos];     // t = *(uint64 *) (basep + 728 + pos)
     txaddy3 = t if eqf;
-    slf = (b <s 0);
-    t = tysubx0;                // t = tysubx0
-    tysubx0 = txaddy0 if slf;   // tysubx0 = txaddy0 if signed<
-    txaddy0 = t if slf;         // txaddy0 = t if signed<
-    t = tysubx1;                // t = tysubx1
-    tysubx1 = txaddy1 if slf;   // tysubx1 = txaddy1 if signed<
-    txaddy1 = t if slf;         // txaddy1 = t if signed<
-    t = tysubx2;                // t = tysubx2
-    tysubx2 = txaddy2 if slf;   // tysubx2 = txaddy2 if signed<
-    txaddy2 = t if slf;         // txaddy2 = t if signed<
-    t = tysubx3;                // t = tysubx3
-    tysubx3 = txaddy3 if slf;   // tysubx3 = txaddy3 if signed<
-    txaddy3 = t if slf;         // txaddy3 = t if signed<
+    t = tysubx0;                     // t = tysubx0
+    tysubx0 = txaddy0 if (b <s 0);   // tysubx0 = txaddy0 if signed<
+    txaddy0 = t if (b <s 0);         // txaddy0 = t if signed<
+    t = tysubx1;                     // t = tysubx1
+    tysubx1 = txaddy1 if (b <s 0);   // tysubx1 = txaddy1 if signed<
+    txaddy1 = t if (b <s 0);         // txaddy1 = t if signed<
+    t = tysubx2;                     // t = tysubx2
+    tysubx2 = txaddy2 if (b <s 0);   // tysubx2 = txaddy2 if signed<
+    txaddy2 = t if (b <s 0);         // txaddy2 = t if signed<
+    t = tysubx3;                     // t = tysubx3
+    tysubx3 = txaddy3 if (b <s 0);   // tysubx3 = txaddy3 if signed<
+    txaddy3 = t if (b <s 0);         // txaddy3 = t if signed<
     tp = tp_stack;              // tp = tp_stack
     [tp + 0*8] = tysubx0;     // *(uint64 *) (tp + 0) = tysubx0
     [tp + 1*8] = tysubx1;     // *(uint64 *) (tp + 8) = tysubx1
@@ -293,11 +291,10 @@ crypto_sign_ed25519_amd64_64_choose_t(reg u64 tp, reg u64 pos, reg u64 b, reg u6
     cf, tt3 -= subt0 - cf;      // cf? tt3 -= subt0 - cf; 
     subt0 = subt1 if cf;        // subt0 = subt1 if carry; 
     tt0 -= subt0;               // tt0 -= subt0
-    slf = (b <s 0);
-    tt2d0 = tt0 if slf;         // tt2d0 = tt0 if signed<
-    tt2d1 = tt1 if slf;         // tt2d1 = tt1 if signed<
-    tt2d2 = tt2 if slf;         // tt2d2 = tt2 if signed<
-    tt2d3 = tt3 if slf;         // tt2d3 = tt3 if signed<
+    tt2d0 = tt0 if (b <s 0);         // tt2d0 = tt0 if signed<
+    tt2d1 = tt1 if (b <s 0);         // tt2d1 = tt1 if signed<
+    tt2d2 = tt2 if (b <s 0);         // tt2d2 = tt2 if signed<
+    tt2d3 = tt3 if (b <s 0);         // tt2d3 = tt3 if signed<
     [tp + 8*8] = tt2d0;       // *(uint64 *) (tp + 64) = tt2d0
     [tp + 9*8] = tt2d1;       // *(uint64 *) (tp + 72) = tt2d1
     [tp + 10*8] = tt2d2;      // *(uint64 *) (tp + 80) = tt2d2
