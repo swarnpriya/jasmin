@@ -35,6 +35,7 @@ export fn crypto_sign_ed25519_amd64_64_sc25519_barrett(reg u64 rp, reg u64 xp){
 	 reg u64 t2;
 	 reg u64 t3;
 	 reg u64 zero;
+   reg u64 or;
 
 	zero ^= zero;  //zero ^= zero
 	q30 ^= q30;  //q30 ^= q30
@@ -225,10 +226,14 @@ export fn crypto_sign_ed25519_amd64_64_sc25519_barrett(reg u64 rp, reg u64 xp){
 	r3 = [xp + 3*8];  //r3 = *(uint64 *) (xp + 24)
 	_, r3 -= r23 - cf;  // r3 -= r23 - cf; 
 	t3 = r3;  //t3 = r3
-	cf, t0 -= crypto_sign_ed25519_amd64_64_ORDER0; //cf? t0 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER0
-	cf, t1 -= crypto_sign_ed25519_amd64_64_ORDER1 - cf;  // cf? t1 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER1 - cf; 
-	cf, t2 -= crypto_sign_ed25519_amd64_64_ORDER2 - cf;  // cf? t2 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER2 - cf; 
-	cf, t3 -= crypto_sign_ed25519_amd64_64_ORDER3 - cf;  // cf? t3 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER3 - cf; 
+  or = crypto_sign_ed25519_amd64_64_ORDER0;
+	cf, t0 -= or; //cf? t0 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER0
+  or = crypto_sign_ed25519_amd64_64_ORDER1;
+	cf, t1 -= or - cf;  // cf? t1 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER1 - cf; 
+  or = crypto_sign_ed25519_amd64_64_ORDER2;
+	cf, t2 -= or - cf;  // cf? t2 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER2 - cf; 
+  or = crypto_sign_ed25519_amd64_64_ORDER3;
+	cf, t3 -= or - cf;  // cf? t3 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER3 - cf; 
 	r0 = t0 if !cf;  //r0 = t0 if !carry; 
 	t0 = r0;  //t0 = r0
 	r1 = t1 if !cf;  //r1 = t1 if !carry; 
@@ -236,28 +241,19 @@ export fn crypto_sign_ed25519_amd64_64_sc25519_barrett(reg u64 rp, reg u64 xp){
 	r2 = t2 if !cf;  //r2 = t2 if !carry; 
 	t2 = r2;  //t2 = r2
 	r3 = t3 if !cf;  //r3 = t3 if !carry; 
-	//unsigned<? t3 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER3 - carry
-	//r0 = t0 if !unsigned<
-	//t0 = r0
-	//r1 = t1 if !unsigned<
-	//t1 = r1
-	//r2 = t2 if !unsigned<
-	//t2 = r2
-	//r3 = t3 if !unsigned<
 	t3 = r3;  //t3 = r3
-	cf, t0 -= crypto_sign_ed25519_amd64_64_ORDER0; //cf? t0 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER0
-	cf, t1 -= crypto_sign_ed25519_amd64_64_ORDER1 - cf;  // cf? t1 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER1 - cf; 
-	cf, t2 -= crypto_sign_ed25519_amd64_64_ORDER2 - cf;  // cf? t2 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER2 - cf; 
-	cf, t3 -= crypto_sign_ed25519_amd64_64_ORDER3 - cf;  // cf? t3 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER3 - cf; 
+  or = crypto_sign_ed25519_amd64_64_ORDER0;
+	cf, t0 -= or; //cf? t0 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER0
+  or = crypto_sign_ed25519_amd64_64_ORDER1;
+	cf, t1 -= or - cf;  // cf? t1 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER1 - cf;
+  or = crypto_sign_ed25519_amd64_64_ORDER2;
+	cf, t2 -= or - cf;  // cf? t2 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER2 - cf; 
+  or = crypto_sign_ed25519_amd64_64_ORDER3
+	cf, t3 -= or - cf;  // cf? t3 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER3 - cf; 
 	r0 = t0 if !cf;  //r0 = t0 if !carry; 
 	r1 = t1 if !cf;  //r1 = t1 if !carry; 
 	r2 = t2 if !cf;  //r2 = t2 if !carry; 
 	r3 = t3 if !cf;  //r3 = t3 if !carry; 
-	//unsigned<? t3 -= *(uint64 *) &crypto_sign_ed25519_amd64_64_ORDER3 - carry
-	//r0 = t0 if !unsigned<
-	//r1 = t1 if !unsigned<
-	//r2 = t2 if !unsigned<
-	//r3 = t3 if !unsigned<
 	[rp + 0*8] = r0;  //*(uint64 *) (rp + 0) = r0
 	[rp + 1*8] = r1;  //*(uint64 *) (rp + 8) = r1
 	[rp + 2*8] = r2;  //*(uint64 *) (rp + 16) = r2
