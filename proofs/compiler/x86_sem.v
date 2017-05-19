@@ -70,6 +70,7 @@ Variant asm : Type :=
 
   (* Arithmetic *)
 | ADD    of oprd & oprd            (* add unsigned / signed *)
+| ADD32  of oprd & oprd            (* add unsigned / signed, truncated *)
 | SUB    of oprd & oprd            (* sub unsigned / signed *)
 | MUL    of oprd                   (* mul unsigned *)
 | IMUL   of oprd                   (* mul   signed *)
@@ -112,6 +113,7 @@ Variant asm : Type :=
 | SAL    of oprd & ireg            (*   signed / left; synonym of SHL *)
 | SAR    of oprd & ireg            (*   signed / right *)
 | SHLD   of oprd & oprd & ireg     (* unsigned (double) / left *)
+| ROL32  of oprd & ireg            (* unsigned 32bit rotate / left *)
 .
 
 (* -------------------------------------------------------------------- *)
@@ -396,6 +398,17 @@ Definition rflags_of_aluop (w : word) (vu vs : Z) := fun rf =>
   end.
 
 (* -------------------------------------------------------------------- *)
+Definition rflags_of_aluop32 (w : I32.int) (vu vs : Z) := fun rf =>
+  match rf with
+  | OF => Some (Def (I32.signed   w != vs))
+  | CF => Some (Def (I32.unsigned w != vu))
+  | SF => Some (Def (I32.signed w <? 0)%Z)
+  | PF => Some (Def (~~ (I32.eq (I32.and I32.one w) I32.zero)))
+  | ZF => Some (Def (I32.eq w I32.zero))
+  | DF => None
+  end.
+
+(* -------------------------------------------------------------------- *)
 Definition rflags_of_aluop_nocf (w : word) (vs : Z) := fun rf =>
   match rf with
   | CF => None
@@ -446,6 +459,18 @@ Definition eval_ADD o1 o2 s : x86_result :=
   let vs := (I64.signed   v1 + I64.signed   v2)%Z in
   let s  := st_update_rflags (rflags_of_aluop v vu vs) s in
   write_oprd o1 v s.
+
+(* -------------------------------------------------------------------- *)
+Definition eval_ADD32 o1 o2 s : x86_result :=
+  Let v1_64 := read_oprd o1 s in
+  Let v2_64 := read_oprd o2 s in
+  let v1 := I64.loword v1_64 in
+  let v2 := I64.loword v2_64 in
+  let v  := I32.add v1 v2 in
+  let vu := (I32.unsigned v1 + I32.unsigned v2)%Z in
+  let vs := (I32.signed   v1 + I32.signed   v2)%Z in
+  let s  := st_update_rflags (rflags_of_aluop32 v vu vs) s in
+  write_oprd o1 (I64.ofwords I32.zero v) s.
 
 (* -------------------------------------------------------------------- *)
 Definition eval_SUB o1 o2 s : x86_result :=
@@ -657,6 +682,10 @@ Definition eval_SHL o ir s : x86_result :=
           end) s).
 
 (* -------------------------------------------------------------------- *)
+Definition eval_ROL32 o ir s : x86_result :=
+  ok s (* TO BE FIXED!!! *).
+
+(* -------------------------------------------------------------------- *)
 Definition eval_SHLD o1 o2 ir s : x86_result :=
   Let v1 := read_oprd o1 s in
   Let v2 := read_oprd o2 s in
@@ -767,6 +796,8 @@ Definition eval_instr (i : asm) s : x86_result :=
   | SAL    o ir     => eval_SAL o ir s
   | SAR    o ir     => eval_SAR o ir s
   | SHLD   o1 o2 ir => eval_SHLD o1 o2 ir s
+  | ROL32  o ir     => eval_ROL32 o ir s
+  | ADD32  o1 o2    => eval_ADD32 o1 o2 s
   end.
 
 (* -------------------------------------------------------------------- *)

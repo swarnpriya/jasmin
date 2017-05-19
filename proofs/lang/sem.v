@@ -556,6 +556,10 @@ Definition x86_add (v1 v2 : word) :=
     (I64.unsigned v1 + I64.unsigned v2)%Z
     (I64.signed   v1 + I64.signed   v2)%Z.
 
+Definition x86_add32 (v1 v2 : word) : exec values :=
+  (* TO BE FIXED!!! *)
+  ok [::].
+
 Definition x86_sub (v1 v2 : word) :=
   rflags_of_aluop_w
     (I64.sub v1 v2)
@@ -687,6 +691,10 @@ Definition x86_shl (v i: word) : exec values :=
     let ZF := Vbool (ZF_of_word r) in
     ok [:: OF; CF; SF; PF; ZF; Vword r].
 
+Definition x86_rol32 (v i: word) : exec values :=
+  (* TO BE FIXED!!! *)
+  ok [::].
+
 Definition x86_shr (v i: word) : exec values :=
   let i := I64.and i x86_shift_mask in
   if i == I64.zero then
@@ -789,6 +797,8 @@ Definition sem_sopn (o:sopn) :  values -> exec values :=
   | Ox86_SHR     => app_ww x86_shr
   | Ox86_SAR     => app_ww x86_sar
   | Ox86_SHLD    => app_www x86_shld
+  | Ox86_ROL32   => app_ww x86_rol32
+  | Ox86_ADD32   => app_ww x86_add32
   end.
 
 (* ** Instructions

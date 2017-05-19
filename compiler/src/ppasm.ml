@@ -294,6 +294,12 @@ let pp_instr (i : X86_sem.asm) =
   | SHLD (op1, op2, ir) ->
       `Instr (pp_iname rs "shld", [pp_imr rs ir; pp_opr rs op2; pp_opr rs op1])
 
+  | ROL32 (op, ir) ->
+      `Instr (pp_iname `U32 "rol", [pp_imr `U32 ir; pp_opr `U32 op])
+
+  | ADD32 (op1, op2) ->
+      `Instr (pp_iname `U32 "addl", [pp_opr `U32 op2; pp_opr `U32 op1])
+
 (* -------------------------------------------------------------------- *)
 let pp_instr (fmt : Format.formatter) (i : X86_sem.asm) =
   pp_gen fmt (pp_instr i)
@@ -336,9 +342,11 @@ let wregs_of_instr (c : rset) (i : X86_sem.asm) =
   | SAL    (op, _)
   | SAR    (op, _)
   | SHL    (op, _)
-  | SHLD    (op, _, _)
-  | SHR    (op, _) ->
-      Option.map_default (fun r -> Set.add r c) c (reg_of_oprd op)
+  | SHR    (op, _) 
+  | SHLD   (op, _, _)
+  | ROL32  (op, _)
+  | ADD32  (op, _)
+      -> Option.map_default (fun r -> Set.add r c) c (reg_of_oprd op)
 
   | MUL  _
   | IMUL _

@@ -90,18 +90,18 @@ let pp_sopn fmt sopn =
      | Omulu        -> "Omulu"
      | Oaddcarry    -> "Oaddcarry"
      | Osubcarry    -> "Osubcarry"
-     | Ox86_MOV  -> "Ox86_MOV"
+     | Ox86_MOV     -> "Ox86_MOV"
      | Ox86_CMOVcc  -> "Ox86_CMOVcc"
      | Ox86_ADD     -> "Ox86_ADD"
      | Ox86_SUB     -> "Ox86_SUB"
      | Ox86_MUL     -> "Ox86_MUL"
      | Ox86_IMUL    -> "Ox86_IMUL"
-     | Ox86_IMUL64	-> "Ox86_IMUL64"
+     | Ox86_IMUL64  -> "Ox86_IMUL64"
      | Ox86_DIV     -> "Ox86_DIV"
      | Ox86_IDIV    -> "Ox86_IDIV"
      | Ox86_ADC     -> "Ox86_ADC"
      | Ox86_SBB     -> "Ox86_SBB"
-     | Ox86_NEG	-> "Ox86_NEG"
+     | Ox86_NEG	    -> "Ox86_NEG"
      | Ox86_INC     -> "Ox86_INC"
      | Ox86_DEC     -> "Ox86_DEC"
      | Ox86_SETcc   -> "Ox86_SETcc"
@@ -115,7 +115,10 @@ let pp_sopn fmt sopn =
      | Ox86_SHL     -> "Ox86_SHL"
      | Ox86_SHR     -> "Ox86_SHR"
      | Ox86_SAR     -> "Ox86_SAR"
-     | Ox86_SHLD    -> "Ox86_SHLD")
+     | Ox86_SHLD    -> "Ox86_SHLD"
+     | Ox86_ROL32   -> "Ox86_ROL32"
+     | Ox86_ADD32   -> "Ox86_ADD32"
+    )
 
 let count = ref 0
 let vars_tbl = Hv.create 101

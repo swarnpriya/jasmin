@@ -530,6 +530,9 @@ let prim_sig p =
   | Osubcarry -> [tbool; u64], [u64; u64; tbool]
   | Ox86_CMP -> [tbool; tbool; tbool; tbool; tbool], [u64; u64]
   | Ox86_SHLD -> [tbool; tbool; tbool; tbool; tbool; u64], [u64; u64; u64 ]
+  | Ox86_SAR -> [tbool; tbool; tbool; tbool; tbool; u64], [u64; u64 ]
+  | Ox86_ROL32 -> [tbool; tbool; tbool; tbool; tbool; u64], [u64; u64 ]
+  | Ox86_ADD32 -> [tbool; tbool; tbool; tbool; tbool; u64], [u64; u64 ]
   | Ox86_MOV
   | Ox86_CMOVcc
   | Ox86_ADD
@@ -553,7 +556,6 @@ let prim_sig p =
   | Ox86_NOT
   | Ox86_SHL
   | Ox86_SHR
-  | Ox86_SAR
     -> (* FIXME *) assert false
 
 let prim_string =
@@ -583,7 +585,9 @@ let prim_string =
     "x86_SHL"   , P.Ox86_SHL;
     "x86_SHR"   , P.Ox86_SHR;
     "x86_SAR"   , P.Ox86_SAR;
-    "x86_SHLD"   , P.Ox86_SHLD;
+    "x86_SHLD"  , P.Ox86_SHLD;
+    "x86_ROL32"  , P.Ox86_ROL32;
+    "x86_ADD32"  , P.Ox86_ADD32;
   ]
 
 let tt_prim id =

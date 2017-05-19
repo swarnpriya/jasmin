@@ -293,6 +293,8 @@ let copn_of_opn = function
   | Ox86_SHR     -> C.Ox86_SHR
   | Ox86_SAR     -> C.Ox86_SAR
   | Ox86_SHLD    -> C.Ox86_SHLD
+  | Ox86_ROL32   -> C.Ox86_ROL32
+  | Ox86_ADD32   -> C.Ox86_ADD32
 
 let opn_of_copn = function
   | C.Omulu        -> Omulu
@@ -324,6 +326,9 @@ let opn_of_copn = function
   | C.Ox86_SHR     -> Ox86_SHR
   | C.Ox86_SAR     -> Ox86_SAR
   | C.Ox86_SHLD    -> Ox86_SHLD
+  | C.Ox86_ROL32   -> Ox86_ROL32
+  | C.Ox86_ADD32   -> Ox86_ADD32
+
 
 (* ------------------------------------------------------------------------ *)
 

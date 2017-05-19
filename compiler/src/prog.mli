@@ -140,6 +140,8 @@ type op =
 | Ox86_SHR
 | Ox86_SAR
 | Ox86_SHLD
+| Ox86_ROL32
+| Ox86_ADD32
 
 type assgn_tag =
   | AT_keep   (* compile to move *)

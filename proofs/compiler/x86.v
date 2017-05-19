@@ -393,6 +393,7 @@ Definition assemble_cond ii (e: pexpr) : ciexec condt :=
 (* -------------------------------------------------------------------- *)
 Variant binuop :=
   | BU_ADD
+  | BU_ADD32
   | BU_SUB
   | BU_AND
   | BU_OR
@@ -406,7 +407,8 @@ Variant shtop :=
   | ST_SHL
   | ST_SHR
   | ST_SAR
-  | ST_SHLD.
+  | ST_SHLD
+  | ST_ROL32.
 
 Variant alukind :=
   | LK_CMP
@@ -429,6 +431,7 @@ Definition kind_of_sopn (o : sopn) :=
   | Ox86_CMP    => OK_ALU LK_CMP
   | Ox86_ADD    => OK_ALU (LK_BINU BU_ADD)
   | Ox86_ADC    => OK_ALU (LK_BINC BC_ADC)
+  | Ox86_ADD32  => OK_ALU (LK_BINU BU_ADD32)
   | Ox86_SUB    => OK_ALU (LK_BINU BU_SUB)
   | Ox86_SBB    => OK_ALU (LK_BINC BC_SBB)
   | Ox86_NEG    => OK_ALU LK_NEG
@@ -436,6 +439,7 @@ Definition kind_of_sopn (o : sopn) :=
   | Ox86_IMUL64 => OK_ALU LK_IMUL
   | Ox86_SHR    => OK_ALU (LK_SHT ST_SHR)
   | Ox86_SHL    => OK_ALU (LK_SHT ST_SHL)
+  | Ox86_ROL32  => OK_ALU (LK_SHT ST_ROL32)
   | Ox86_SAR    => OK_ALU (LK_SHT ST_SAR)
   | Ox86_SHLD   => OK_ALU (LK_SHT ST_SHLD)
   | Ox86_DEC    => OK_CNT false
@@ -453,6 +457,7 @@ Definition string_of_aluk (o : alukind) :=
       match o with
       | LK_CMP         => Ox86_CMP   
       | LK_BINU BU_ADD => Ox86_ADD   
+      | LK_BINU BU_ADD32 => Ox86_ADD32   
       | LK_BINC BC_ADC => Ox86_ADC   
       | LK_BINU BU_SUB => Ox86_SUB   
       | LK_BINC BC_SBB => Ox86_SBB   
@@ -466,6 +471,7 @@ Definition string_of_aluk (o : alukind) :=
       | LK_SHT ST_SHL  => Ox86_SHL   
       | LK_SHT ST_SAR  => Ox86_SAR   
       | LK_SHT ST_SHLD => Ox86_SHLD   
+      | LK_SHT ST_ROL32=> Ox86_ROL32   
       end
 
   in string_of_sopn op.
@@ -552,6 +558,7 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
       else
         ciok (match bin with
               | BU_ADD => ADD
+              | BU_ADD32 => ADD32
               | BU_SUB => SUB
               | BU_AND => AND
               | BU_OR  => OR
@@ -601,6 +608,9 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
        | ST_SHL, [:: e2] => 
               Let o2 := ireg_of_pexpr ii e2 in
               ciok (SHL o1 o2)
+       | ST_ROL32, [:: e2] => 
+              Let o2 := ireg_of_pexpr ii e2 in
+              ciok (ROL32 o1 o2)
        | ST_SHR, [:: e2] => 
               Let o2 := ireg_of_pexpr ii e2 in
               ciok (SHR o1 o2)

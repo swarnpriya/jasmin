@@ -41,7 +41,7 @@ let x86_equality_constraints (tbl: (var, int) Hashtbl.t) (k: int -> int -> unit)
   | (Oaddcarry | Osubcarry),
     [ _ ; Lvar v ], Pvar w :: _
   | (Ox86_ADD | Ox86_SUB | Ox86_ADC | Ox86_SBB | Ox86_NEG
-    | Ox86_SHL | Ox86_SHR | Ox86_SAR | Ox86_SHLD
+    | Ox86_SHL | Ox86_SHR | Ox86_SAR | Ox86_SHLD | Ox86_ROL32 | Ox86_ADD32
     | Ox86_AND | Ox86_OR | Ox86_XOR),
     [ _ ; _ ; _ ; _ ; _ ; Lvar v ], Pvar w :: _
   | (Ox86_INC | Ox86_DEC),
@@ -281,7 +281,7 @@ struct
     in
     match op, lvs, es with
     | (Ox86_ADD | Ox86_SUB | Ox86_AND | Ox86_OR | Ox86_XOR | Ox86_CMP
-      | Ox86_SHL | Ox86_SHR | Ox86_SAR | Ox86_SHLD | Ox86_NEG),
+      | Ox86_SHL | Ox86_SHR | Ox86_SAR | Ox86_SHLD | Ox86_ROL32 | Ox86_ADD32 | Ox86_NEG),
       Lvar oF :: Lvar cF :: Lvar sF :: Lvar pF :: Lvar zF :: _, _ ->
       a |>
       allocate_one oF f_o |>
