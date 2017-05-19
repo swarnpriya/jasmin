@@ -183,12 +183,20 @@ Definition xprog := seq (funname * xfundef).
 (* ** Conversion to assembly *
  * -------------------------------------------------------------------- *)
 
+Definition invalid_rflag (s: string) : asm_error :=
+  AsmErr_string ("Invalid rflag name: " ++ s).
+
+Definition invalid_register (s: string) : asm_error :=
+  AsmErr_string ("Invalid register name: " ++ s).
+
+Global Opaque invalid_rflag invalid_register.
+
 Definition rflag_of_var ii (v: var) :=
   match v with
   | Var sbool s =>
      match (rflag_of_string s) with
      | Some r => ciok r
-     | None => cierror ii (Cerr_assembler (AsmErr_string ("Invalid rflag name: " ++ s)))
+     | None => cierror ii (Cerr_assembler (invalid_rflag s))
      end
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid rflag type"))
   end.
@@ -198,7 +206,7 @@ Definition reg_of_var ii (v: var) :=
   | Var sword s =>
      match (reg_of_string s) with
      | Some r => ciok r
-     | None => cierror ii (Cerr_assembler (AsmErr_string ("Invalid register name: " ++ s)))
+     | None => cierror ii (Cerr_assembler (invalid_register s))
      end
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid register type"))
   end.
@@ -530,6 +538,11 @@ Lemma as_tripleT s x y z :
 Proof. by case: s => [|x' [|y' [|z' [|]]]] //= [-> -> ->]. Qed.
 End AsN.
 
+Definition wrong_aluk o : asm_error :=
+  AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o).
+
+Global Opaque wrong_aluk.
+
 (* -------------------------------------------------------------------- *)
 Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
   match o with
@@ -541,8 +554,7 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
       ciok (CMP o1 o2)
 
     | _, _ =>
-      cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+      cierror ii (Cerr_assembler (wrong_aluk o))
     end
 
   | LK_BINU bin =>
@@ -566,8 +578,7 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
               end o1 o2)
 
     | _, _ =>
-      cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+      cierror ii (Cerr_assembler (wrong_aluk o))
     end
 
   | LK_BINC bin =>
@@ -592,8 +603,7 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
             end o1 o2)
 
     | _, _ =>
-      cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+      cierror ii (Cerr_assembler (wrong_aluk o))
     end
 
   | LK_SHT sht =>
@@ -627,8 +637,7 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
             end)
 
     | _, _ =>
-      cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+      cierror ii (Cerr_assembler (wrong_aluk o))
     end
 
   | LK_MUL =>
@@ -643,8 +652,7 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
       else cierror ii (Cerr_assembler (AsmErr_string ("wrong op/lvals for MUL")))
 
     | _, _ =>
-      cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+      cierror ii (Cerr_assembler (wrong_aluk o))
     end
 
   | LK_IMUL =>
@@ -659,20 +667,20 @@ Definition assemble_fopn ii (l: lvals) (o: alukind) (e: pexprs) : ciexec asm :=
       end
 
     | _, _ =>
-      cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o))) end
+      cierror ii (Cerr_assembler (wrong_aluk o))
+    end
 
   | LK_NEG =>
     match as_singleton e, as_singleton l with
     | Some e, Some x =>
-      (* TODO: check constraints *)
       Let d := oprd_of_lval ii x in
       Let o := oprd_of_pexpr ii e in
-      ok (NEG o)
+      if d == o then ok (NEG o) else
+        cierror ii (Cerr_assembler
+          (AsmErr_string ("src/dst of NEG not identical")))
 
     | _, _ =>
-      cierror ii (Cerr_assembler
-        (AsmErr_string ("wrong arguments / outputs for operator " ++ string_of_aluk o)))
+      cierror ii (Cerr_assembler (wrong_aluk o))
     end
   end.
 
