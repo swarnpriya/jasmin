@@ -416,40 +416,44 @@ fn cswap(stack u64[4] x2p, stack u64[4] z2p, stack u64[4] x3p, stack u64[4] z3p,
 // ** montgomery ladder
 // ************************************************************************
 
-fn mladder(stack u64[4] xr, reg u64 sp) -> (stack u64[4], stack u64[4]) {
+fn set_int(reg u64 v) -> reg u64[4] {
+  reg u64[4] res;
+  inline int i;
+  res[0] = v;
+  for i = 1 to 4 { res[i] = 0; }
+  return res;
+}
 
-  stack u64    s;
+fn mladder(stack u64[4] xr, reg u64 sp) -> (stack u64[4], stack u64[4]) {
+  reg bool     cf;
   reg u64      tmp1;
   reg u64      tmp2;
   reg u64      bit;
   reg u64      swap;
+  reg u64      i;
+  reg u64      j;
   stack u64    prevbit;
+  stack u64    is;
+  stack u64    js;
+  stack u64    s;
   stack u64[4] x1;
   stack u64[4] x2;
   stack u64[4] z2;
   stack u64[4] x3;
   stack u64[4] z3;
-  reg u64      i;
-  reg u64      j;
-  stack u64    is;
-  stack u64    js;
-  reg bool     cf;
+  inline int k;
 
-  prevbit = 0;
-  x1 = xr;
-  x2[0] = 1; x2[1] = 0; x2[2] = 0; x2[3] = 0;
-  z2[0] = 0; z2[1] = 0; z2[2] = 0; z2[3] = 0;
+  x1 = xr; 
+  x2 = set_int(1);
+  z2 = set_int(0);
+  z3 = set_int(1);
   x3 = xr;
-  z3[0] = 1; z3[1] = 0; z3[2] = 0; z3[3] = 0;
 
-  j = 62; i = 3;
+  prevbit = 0; j = 62; i = 3;
   while (i >=s 0) {
-    is = i;
-    tmp1 = [sp + 8*i];
-    s = tmp1;
+    is = i; tmp1 = [sp + 8*i]; s = tmp1;
     while (j >=s 0) {
-      js = j;
-      tmp2 = s;
+      js = j; tmp2 = s;
       bit = tmp2 >> j;
       bit = bit & 1;
       swap = prevbit;
@@ -457,16 +461,12 @@ fn mladder(stack u64[4] xr, reg u64 sp) -> (stack u64[4], stack u64[4]) {
       prevbit = bit;
       x2,z2,x3,z3 = cswap(x2,z2,x3,z3,swap);
       x2,z2,x3,z3 = ladderstep(x1,x2,z2,x3,z3);
-      j=js;
-      j -= 1;
+      j=js; j -= 1;
     }
-    j = 63;
-    i = is;
-    i -= 1;
+    j = 63; i = is; i -= 1;
   }
   return x2, z2;
 }
-
 // ** inversion
 // ************************************************************************
 
