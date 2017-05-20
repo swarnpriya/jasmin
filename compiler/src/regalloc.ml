@@ -44,6 +44,8 @@ let x86_equality_constraints (tbl: (var, int) Hashtbl.t) (k: int -> int -> unit)
     | Ox86_SHL | Ox86_SHR | Ox86_SAR
     | Ox86_AND | Ox86_OR | Ox86_XOR),
     [ _ ; _ ; _ ; _ ; _ ; Lvar v ], Pvar w :: _
+  | (Ox86_RCL | Ox86_RCR | Ox86_ROL | Ox86_ROR), [_;_;Lvar v], Pvar w::_ ->
+    merge v w
   | (Ox86_INC | Ox86_DEC),
     [ _ ; _ ; _ ; _ ; Lvar v ], Pvar w :: _
     (* TODO: add more constraints *)
@@ -326,6 +328,19 @@ struct
       allocate_one sF f_s |>
       allocate_one pF f_p |>
       allocate_one zF f_z
+    | (Ox86_ROL | Ox86_ROR), [Lvar oF; Lvar cF; _], [_;x] ->
+      a |> 
+      mallocate_one x rcx |> 
+      allocate_one oF f_o |>
+      allocate_one cF f_c 
+    | (Ox86_RCL | Ox86_RCR), [Lvar oF; Lvar cF; _], [_;x;cF'] ->
+      a |> 
+      mallocate_one cF' f_c |>
+      mallocate_one x   rcx |> 
+      allocate_one  oF  f_o |>
+      allocate_one  cF  f_c 
+    | Ox86_RORX, _, _ -> a
+      
     | _, _, _ -> a (* TODO *)
 
 end

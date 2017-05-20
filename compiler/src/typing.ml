@@ -550,6 +550,10 @@ let prim_sig p =
   | Ox86_SHR    
   | Ox86_SAR    
     -> (* FIXME *) assert false
+  | Ox86_RCL | Ox86_RCR -> [tbool; tbool; u64], [u64; u64; tbool]
+  | Ox86_ROL | Ox86_ROR -> [tbool; tbool; u64], [u64; u64]
+  | Ox86_RORX           -> [u64], [u64; u64]
+
 
 let prim_string =
   [ "mulu"      , P.Omulu;
@@ -578,6 +582,11 @@ let prim_string =
     "x86_SHL"   , P.Ox86_SHL;
     "x86_SHR"   , P.Ox86_SHR;
     "x86_SAR"   , P.Ox86_SAR;
+    "x86_RCL"   , P.Ox86_RCL;
+    "x86_RCR"   , P.Ox86_RCR;
+    "x86_ROL"   , P.Ox86_ROL;
+    "x86_ROR"   , P.Ox86_ROR;
+    "x86_RORX"  , P.Ox86_RORX;
   ]
 
 let tt_prim (id, ws) =

@@ -170,7 +170,6 @@ Variant lower_cassgn_t : Type :=
   | LowerLt    of wsize & pexpr & pexpr
   | LowerIf    of         pexpr & pexpr & pexpr
   | LowerAssgn.
-Print lval.
 
 Definition wsize_of_lval x := 
   match x with

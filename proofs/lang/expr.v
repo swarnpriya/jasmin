@@ -114,6 +114,11 @@ Variant sopn : Set :=
 | Ox86_SHL     `(wsize) (* unsigned / left  *)
 | Ox86_SHR     `(wsize) (* unsigned / right *)
 | Ox86_SAR     `(wsize) (*   signed / right *)
+| Ox86_RCL     `(wsize) (* Rotate left with carry  *)
+| Ox86_RCR     `(wsize) (* Rotate right with carry *)
+| Ox86_ROL     `(wsize) (* Rotate left  *)
+| Ox86_ROR     `(wsize) (* Rotate right *)
+| Ox86_RORX    `(wsize) (* Rotate right without affecting flag *)
 .
 
 Scheme Equality for sop1.
@@ -185,6 +190,11 @@ Definition string_of_sopn o : string :=
   | Ox86_SHL    _ => "Ox86_SHL   "
   | Ox86_SHR    _ => "Ox86_SHR   "
   | Ox86_SAR    _ => "Ox86_SAR   "
+  | Ox86_RCL    _ => "Ox86_RCL   "
+  | Ox86_RCR    _ => "Ox86_RCR   "
+  | Ox86_ROL    _ => "Ox86_ROL   "
+  | Ox86_ROR    _ => "Ox86_ROR   "
+  | Ox86_RORX   _ => "Ox86_RORX  "
   end.
 
 (* ** Expressions

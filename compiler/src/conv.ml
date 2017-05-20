@@ -302,6 +302,11 @@ let copn_of_opn (o, ws) =
   | Ox86_SHL     -> C.Ox86_SHL    (cwsize_of_wsize ws)
   | Ox86_SHR     -> C.Ox86_SHR    (cwsize_of_wsize ws)
   | Ox86_SAR     -> C.Ox86_SAR    (cwsize_of_wsize ws)
+  | Ox86_RCL     -> C.Ox86_RCL    (cwsize_of_wsize ws)
+  | Ox86_RCR     -> C.Ox86_RCR    (cwsize_of_wsize ws)
+  | Ox86_ROL     -> C.Ox86_ROL    (cwsize_of_wsize ws)
+  | Ox86_ROR     -> C.Ox86_ROR    (cwsize_of_wsize ws)
+  | Ox86_RORX    -> C.Ox86_RORX   (cwsize_of_wsize ws)
 
 let opn_of_copn = function
   | C.Omuls       ws -> Omuls      , (wsize_of_cwsize ws)
@@ -333,6 +338,11 @@ let opn_of_copn = function
   | C.Ox86_SHL    ws -> Ox86_SHL   , (wsize_of_cwsize ws)
   | C.Ox86_SHR    ws -> Ox86_SHR   , (wsize_of_cwsize ws)
   | C.Ox86_SAR    ws -> Ox86_SAR   , (wsize_of_cwsize ws)
+  | C.Ox86_RCL    ws -> Ox86_RCL   , (wsize_of_cwsize ws)
+  | C.Ox86_RCR    ws -> Ox86_RCR   , (wsize_of_cwsize ws)
+  | C.Ox86_ROL    ws -> Ox86_ROL   , (wsize_of_cwsize ws)
+  | C.Ox86_ROR    ws -> Ox86_ROR   , (wsize_of_cwsize ws)
+  | C.Ox86_RORX   ws -> Ox86_RORX  , (wsize_of_cwsize ws)
 
 (* ------------------------------------------------------------------------ *)
 

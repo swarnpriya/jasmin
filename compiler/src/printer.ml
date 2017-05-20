@@ -139,6 +139,11 @@ let pp_opn = function
   | Ox86_SHL     -> "#x86_SHL"
   | Ox86_SHR     -> "#x86_SHR"
   | Ox86_SAR     -> "#x86_SAR"
+  | Ox86_RCL     -> "#x86_RCL"
+  | Ox86_RCR     -> "#x86_RCR"
+  | Ox86_ROL     -> "#x86_ROL"
+  | Ox86_ROR     -> "#x86_ROR"
+  | Ox86_RORX    -> "#x86_RORX"
 
 (* -------------------------------------------------------------------- *)
 let pp_tag = function

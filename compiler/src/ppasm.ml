@@ -180,6 +180,10 @@ let pp_iname ws (name : string) =
   Printf.sprintf "%s%s" name (pp_instr_rsize ws)
 
 (* -------------------------------------------------------------------- *)
+let add_imm imm arg = 
+  Utils.omap_dfl (fun imm -> pp_imm (Conv.bi_of_z imm) :: arg) arg imm 
+ 
+(* -------------------------------------------------------------------- *)
 let pp_instr (i : X86_sem.asm) =
   match i with
   | LABEL lbl ->
@@ -276,6 +280,17 @@ let pp_instr (i : X86_sem.asm) =
 
   | SHR (rs, op, ir) ->
       `Instr (pp_iname rs "shr", [pp_imr rs ir; pp_opr rs op])
+  | ROL (rs, op, i) ->
+      `Instr (pp_iname rs "rol",add_imm i [pp_opr rs op])
+  | ROR (rs, op, i) ->
+      `Instr (pp_iname rs "ror",add_imm i [pp_opr rs op])
+  | RCL (rs, op, i) ->
+      `Instr (pp_iname rs "rcl",add_imm i [pp_opr rs op])
+  | RCR (rs, op, i) ->
+      `Instr (pp_iname rs "rcr",add_imm i [pp_opr rs op])
+  | RORX (rs, op1, op2, i) ->
+    `Instr (pp_iname rs "rorx", [pp_imm (Conv.bi_of_z i);pp_opr rs op2; pp_opr rs op1])
+    
 
 (* -------------------------------------------------------------------- *)
 let pp_instr (fmt : Format.formatter) (i : X86_sem.asm) =
@@ -319,9 +334,13 @@ let wregs_of_instr (c : rset) (i : X86_sem.asm) =
   | SAL    (_, op, _)
   | SAR    (_, op, _)
   | SHL    (_, op, _)
-  | SHR    (_, op, _) ->
+  | SHR    (_, op, _)
+  | ROL    (_, op, _)
+  | ROR    (_, op, _)
+  | RCL    (_, op, _)
+  | RCR    (_, op, _) 
+  | RORX   (_, op, _, _) ->
       Option.map_default (fun r -> Set.add r c) c (reg_of_oprd op)
-
   | MUL  _
   | IMUL _
   | DIV  _

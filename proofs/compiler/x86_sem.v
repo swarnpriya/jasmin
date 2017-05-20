@@ -111,6 +111,11 @@ Variant asm : Type :=
 | SHR    of wsize & oprd & ireg            (* unsigned / right *)
 | SAL    of wsize & oprd & ireg            (*   signed / left; synonym of SHL *)
 | SAR    of wsize & oprd & ireg            (*   signed / right *)
+| RCL    of wsize & oprd & option word     (* Rotate left with carry  *)
+| RCR    of wsize & oprd & option word     (* Rotate right with carry *)
+| ROL    of wsize & oprd & option word     (* Rotate left  *)
+| ROR    of wsize & oprd & option word     (* Rotate right *)
+| RORX   of wsize & oprd & oprd & word     (* Rotate right without affecting flag *)   
 .
 
 (* -------------------------------------------------------------------- *)

@@ -42,6 +42,7 @@ Module Type WSIZE.
   Parameter wordsize : nat.
   Parameter wordsize_not_zero : wordsize <> 0%nat.
   Parameter x86_shift_zmask : Z.
+  Parameter x86_rotate_mod  : Z.
 End WSIZE.
 
 Module Wordsize_8.
@@ -49,6 +50,7 @@ Module Wordsize_8.
   Lemma wordsize_not_zero : wordsize <> 0%nat.
   Proof. done. Qed.
   Definition x86_shift_zmask := 31.
+  Definition x86_rotate_mod  := 9.
 End Wordsize_8.
 
 Module Wordsize_16.
@@ -56,6 +58,7 @@ Module Wordsize_16.
   Lemma wordsize_not_zero : wordsize <> 0%nat.
   Proof. done. Qed.
   Definition x86_shift_zmask := 31.
+  Definition x86_rotate_mod  := 17.
 End Wordsize_16.
 
 Module Wordsize_32.
@@ -63,6 +66,7 @@ Module Wordsize_32.
   Lemma wordsize_not_zero : wordsize <> 0%nat.
   Proof. done. Qed.
   Definition x86_shift_zmask := 31.
+  Definition x86_rotate_mod  := 32.
 End Wordsize_32.
 
 Module Wordsize_64.
@@ -70,15 +74,13 @@ Module Wordsize_64.
   Lemma wordsize_not_zero : wordsize <> 0%nat.
   Proof. done. Qed.
   Definition x86_shift_zmask := 63.
+  Definition x86_rotate_mod  := 64.
 End Wordsize_64.
 
 (* None => undef *)
-Record rflags5 := MkFlag5 {
-   f5_OF : option bool; 
-   f5_CF : option bool;
-   f5_SF : option bool;
-   f5_PF : option bool;
-   f5_ZF : option bool;                   
+Record rflags2 := MkFlag2 {
+   f2_OF : option bool; 
+   f2_CF : option bool;
 }.
 
 Record rflags4 := MkFlag4 {
@@ -86,6 +88,14 @@ Record rflags4 := MkFlag4 {
    f4_SF : option bool;
    f4_PF : option bool;
    f4_ZF : option bool;
+}.
+
+Record rflags5 := MkFlag5 {
+   f5_OF : option bool; 
+   f5_CF : option bool;
+   f5_SF : option bool;
+   f5_PF : option bool;
+   f5_ZF : option bool;                   
 }.
 
 Definition flag (b:bool) := Some b.
@@ -442,95 +452,59 @@ Module MakeI (WS:WSIZE).
           f5_PF := flag (PF_of_word r);
           f5_ZF := flag (ZF_of_word r) |}, r).
 
-  (* ** Machine word representation for the compiler and the wp
-   * -------------------------------------------------------------------- *)
+  Definition x86_rcl (CF:bool) (v i0: int) := 
+    let i := (and i0 (repr WS.x86_shift_zmask)) mod WS.x86_rotate_mod in
+    let x := unsigned v * 2 + Zofb CF in
+    let x := Z.lor (Z.shiftl x i) (Z.shiftr x (zwordsize + 1 - i)) in
 
-(*
-  Notation ibase := modulus (only parsing).
+    let r := repr (Z.shiftr x 1) in
+    let CF := x <? 0 in
+    let OF := 
+      if i0 == one then Some (xorb (msb r) CF)
+      else None in
+    ({| f2_OF := OF;
+        f2_CF := Some CF |}, r).
 
-  Notation tobase := Z_mod_modulus (only parsing).
+  Definition x86_rcr (CF:bool) (v i0: int) := 
+    let i := (and i0 (repr WS.x86_shift_zmask)) mod WS.x86_rotate_mod in
+    let OF := 
+      if i0 == one then Some (xorb (msb v) CF)
+      else None in
 
-  Lemma reqP n1 n2: reflect (repr n1 = repr n2) (tobase n1 == tobase n2).
-  Proof. by apply ueqP. Qed.
+    let x := Zofb CF *  modulus + unsigned v in
+    let x := Z.lor (Z.shiftr x i) (Z.shiftl x (zwordsize + 1 - i)) in
+    let r := repr x in
+    let CF := x <? 0 in
+     ({| f2_OF := OF;
+         f2_CF := Some CF |}, r).
 
-  Definition iword_eqb (n1 n2:iword) := 
-    (tobase n1 =? tobase n2).
+  Definition x86_rol (v i0: int) := 
+    let i := and i0 (repr WS.x86_shift_zmask) mod zwordsize in
+    let r := rol v (repr i) in
+    let CF := lsb r in
+    let OF := 
+      if  and i0 (repr WS.x86_shift_zmask) == one then Some (xorb (msb r) CF)
+      else None in
+    ({| f2_OF := OF;
+        f2_CF := Some CF |}, r).
 
-  Definition iword_ltb (n1 n2:iword) : bool:= 
-    (tobase n1 <? tobase n2).
+  Definition x86_ror (v i0: int) := 
+    let i := and i0 (repr WS.x86_shift_zmask) mod zwordsize in
+    let r := ror v (repr i) in
+    let CF := msb r in
+    let OF := 
+      if and i0 (repr WS.x86_shift_zmask) == one then 
+       (* FIXME what is the value here *)
+          Some (xorb (msb r) CF)
+      else None in
+    ({| f2_OF := OF;
+        f2_CF := Some CF |}, r).
 
-  Definition iword_leb (n1 n2:iword) : bool:= 
-    (tobase n1 <=? tobase n2).
-
-  Definition iword_add (n1 n2:iword) : iword := tobase (n1 + n2).
-
-  Definition iword_addc (n1 n2:iword) (c:bool) : (bool * iword) := 
-    let n  := tobase n1 + tobase n2 + Zofb c in
-    (ibase <=? n, tobase n).
-
-  Definition iword_sub (n1 n2:iword) : iword := tobase (n1 - n2).
-
-  Definition iword_subcarry (n1 n2:iword) (c:bool) : (bool * iword) := 
-    let n := tobase n1 - (tobase n2 + Zofb c) in
-    (n <? 0, tobase n).
-
-  Definition iword_mul (n1 n2:iword) : iword := tobase (n1 * n2).
-
-  Lemma iword_eqbP (n1 n2:iword) : iword_eqb n1 n2 = (repr n1 == repr n2).
-  Proof. by []. Qed.
+  Definition x86_rorx (v i: int) := 
+    let i := and i (repr WS.x86_shift_zmask) in
+    let r := ror v (repr i) in
+    r.
   
-  Lemma iword_ltbP (n1 n2:iword) : iword_ltb n1 n2 = wult (repr n1) (repr n2).
-  Proof. by []. Qed.
-
-  Lemma iword_lebP (n1 n2:iword) : iword_leb n1 n2 = wule (repr n1) (repr n2).
-  Proof. by []. Qed.
-
-  Hint Immediate iword_eqbP iword_ltbP iword_lebP : Iword.
-
-  Lemma urepr n : unsigned (repr n) = Z_mod_modulus n.
-  Proof. done. Qed.
-
-  Lemma repr_mod n : repr (Z_mod_modulus n) = repr n.
-  Proof. by apply: reqP;rewrite !Z_mod_modulus_eq Zmod_mod. Qed.
-
-  Lemma iword_addP (n1 n2:iword) : 
-    repr (iword_add n1 n2) = add (repr n1) (repr n2).
-  Proof. 
-    apply: reqP;rewrite /iword_add /add !urepr.
-    by rewrite !Z_mod_modulus_eq Zmod_mod Zplus_mod.
-  Qed.
-
-  Lemma Zofb_b_to_w c : unsigned (b_to_w c) = Zofb c.
-  Proof. 
-    case: c;rewrite urepr Z_mod_modulus_eq Zmod_small // /modulus. 
-    have := WS.wordsize_not_zero; rewrite /wordsize.
-    by case WS.wordsize.
-  Qed.
-
-  Lemma iword_addcarryP (n1 n2:iword) c : 
-    let r := iword_addcarry n1 n2 c in
-    (r.1, repr r.2) = waddcarry (repr n1) (repr n2) c.
-  Proof. by rewrite /iword_addcarry /waddcarry Zofb_b_to_w !urepr /= repr_mod. Qed.
-
-  Lemma iword_subP (n1 n2:iword) : 
-    repr (iword_sub n1 n2) = sub (repr n1) (repr n2).
-  Proof.
-    apply: reqP;rewrite /iword_sub /sub !urepr.
-    by rewrite !Z_mod_modulus_eq Zmod_mod Zminus_mod.
-  Qed.
-
-  Lemma iword_subcarryP (n1 n2:iword) c : 
-    let r := iword_subcarry n1 n2 c in
-    (r.1, repr r.2) = wsubcarry (repr n1) (repr n2) c.
-  Proof. by rewrite /iword_subcarry /wsubcarry Zofb_b_to_w !urepr /= repr_mod. Qed.
-
-  Lemma iword_mulP (n1 n2:iword) : 
-    repr (iword_mul n1 n2) = mul (repr n1) (repr n2).
-  Proof.
-    apply: reqP;rewrite /iword_mul /mul !urepr.
-    by rewrite !Z_mod_modulus_eq Zmod_mod Zmult_mod.
-  Qed.
-*)
 End MakeI.
 
 Module I8   := MakeI Wordsize_8.

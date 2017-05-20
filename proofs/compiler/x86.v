@@ -420,11 +420,19 @@ Variant alukind :=
   | LK_IMUL
   | LK_NEG.
 
+Variant rotop := 
+  | RT_ROL
+  | RT_ROR
+  | RT_RCL
+  | RT_RCR.
+
 Variant opkind :=
   | OK_ALU   `(wsize) `(alukind)
   | OK_CNT   `(wsize) `(bool)
   | OK_MOV   `(wsize)
   | OK_MOVcc `(wsize)
+  | OK_ROT   `(wsize) `(rotop)
+  | OK_RORX  `(wsize)
   | OK_None.
 
 Definition kind_of_sopn (o : sopn) :=
@@ -447,7 +455,24 @@ Definition kind_of_sopn (o : sopn) :=
   | Ox86_XOR    ws => OK_ALU   ws (LK_BINU BU_XOR)
   | Ox86_MOV    ws => OK_MOV   ws 
   | Ox86_CMOVcc ws => OK_MOVcc ws 
-  | _              => OK_None
+  | Ox86_ROL    ws => OK_ROT   ws (RT_ROL)
+  | Ox86_ROR    ws => OK_ROT   ws (RT_ROR)
+  | Ox86_RCL    ws => OK_ROT   ws (RT_RCL)
+  | Ox86_RCR    ws => OK_ROT   ws (RT_RCR)
+  | Ox86_RORX   ws => OK_RORX  ws 
+  (* FIXME *)
+  | Ox86_IMUL   _  => OK_None
+  | Ox86_DIV    _  => OK_None
+  | Ox86_IDIV   _  => OK_None
+  | Ox86_SETcc  _  => OK_None
+  | Ox86_LEA    _  => OK_None
+  | Ox86_TEST   _  => OK_None 
+  | Ox86_NOT    _  => OK_None
+  (* End FIXME *)
+  | Omulu       _  => OK_None    
+  | Omuls       _  => OK_None  
+  | Oaddcarry   _  => OK_None 
+  | Osubcarry   _  => OK_None
   end.
 
 Definition string_of_aluk ws (o : alukind) :=
@@ -466,7 +491,7 @@ Definition string_of_aluk ws (o : alukind) :=
       | LK_IMUL        => Ox86_IMUL64
       | LK_SHT ST_SHR  => Ox86_SHR   
       | LK_SHT ST_SHL  => Ox86_SHL   
-      | LK_SHT ST_SAR  => Ox86_SAR   
+      | LK_SHT ST_SAR  => Ox86_SAR 
       end
 
   in string_of_sopn (op ws).
@@ -652,6 +677,49 @@ Definition assemble_fopn ii (l: lvals) ws (o: alukind) (e: pexprs) : ciexec asm 
     end
   end.
 
+Definition pexpr_of_rot_args (pe:seq pexpr) := 
+  match pe with
+  | [:: e1, e2 & l ] => Some (e1, e2, l)
+  | _ => None
+  end.
+
+Definition dest_of_rot_lval (pe:seq lval) := 
+  match pe with
+  | [:: Lvar x1; Lvar x2 ; l ] => Some (x1, x2, l)
+  | _ => None
+  end.
+  
+Definition oimm_of_ireg ii r ir := 
+  match ir with
+  | Imm_ir x  => ok (Some x) 
+  | Reg_ir r' => 
+    if r == r' then ok None 
+    else cierror ii (Cerr_assembler (AsmErr_string "Invalid ireg"))
+  end.
+
+Definition check_rot_extra ii o l := 
+  match o with
+  | RT_ROL | RT_ROR => 
+    if l == [::] then ok tt 
+    else cierror ii (Cerr_assembler (AsmErr_string "Invalid args in ROL/ROR"))
+  | RT_RCL | RT_RCR =>
+    match as_singleton l with         
+    | Some (Pvar x) =>
+      Let c := rflag_of_var ii x in 
+      if c == CF then ok tt
+      else cierror ii (Cerr_assembler (AsmErr_string "Invalid args in RCL/RCR"))
+    | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid args in RCL/RCR"))
+    end
+  end.
+
+Definition assemble_rot o :=
+  match o with
+  | RT_ROL => ROL
+  | RT_ROR => ROR
+  | RT_RCL => RCL
+  | RT_RCR => RCR
+  end.
+
 Definition assemble_opn ii (l: lvals) (o: sopn) (e: pexprs) : ciexec asm :=
   match kind_of_sopn o with
   | OK_ALU ws aluk =>
@@ -708,6 +776,35 @@ Definition assemble_opn ii (l: lvals) (o: sopn) (e: pexprs) : ciexec asm :=
     | _, _ => 
       cierror ii (Cerr_assembler (AsmErr_string "Invalid number of lval or pexpr in Ox86_MOVcc"))
     end
+  | OK_ROT ws o =>
+    match dest_of_rot_lval l, pexpr_of_rot_args e with
+    | Some(vof, vcf, d), Some (e1, e2, es) =>
+      Let d1  := oprd_of_lval ws ii d in
+      Let rof := rflag_of_var ii vof in
+      Let rcf := rflag_of_var ii vcf in
+      Let o1  := oprd_of_pexpr ws ii e1 in
+      Let o2  := ireg_of_pexpr    ii e2 in
+      Let i   := oimm_of_ireg ii RCX o2 in 
+      Let _   := check_rot_extra ii o es in
+      if ((rof == OF) && (rcf == CF) && (d1 == o1)) then
+        ciok (assemble_rot o ws o1 i) 
+      else
+        cierror ii (Cerr_assembler (AsmErr_string "Invalid lval in ROT instr"))
+    | _, _ =>  
+      cierror ii (Cerr_assembler (AsmErr_string "Invalid number of lval or pexpr in ROT instr"))
+    end
+  
+  | OK_RORX ws =>
+    match as_singleton l, as_pair e with
+    | Some d, Some (e1, e2) =>
+      Let d1 := oprd_of_lval  ws ii d  in
+      Let o1 := oprd_of_pexpr ws ii e1 in
+      Let i  := word_of_pexpr    ii e2 in
+      ciok (RORX ws d1 o1 i)
+    | _, _ =>  
+      cierror ii 
+        (Cerr_assembler (AsmErr_string "Invalid number of lval or pexpr in RORX instr"))
+    end                      
   | OK_None =>
     cierror ii (Cerr_assembler (AsmErr_string (String.append "Unhandled sopn " (string_of_sopn o))))
   end.

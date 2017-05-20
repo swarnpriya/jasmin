@@ -472,6 +472,9 @@ Definition f5 (f:rflags5) : values :=
 
 Definition f4 (f:rflags4) : values :=
   map (oapp Vbool undef_b) [:: f.(f4_OF); f.(f4_SF); f.(f4_PF); f.(f4_ZF)].
+
+Definition f2 (f:rflags2) : values :=
+  map (oapp Vbool undef_b) [:: f.(f2_OF); f.(f2_CF)].
   
 Definition f5_w ws (fw:rflags5 * i_wsize ws) :=
   f5 fw.1 ++ [:: Vword (w_to_word fw.2)].
@@ -481,6 +484,9 @@ Definition f5_ww ws (fw:rflags5 * i_wsize ws * i_wsize ws) :=
 
 Definition f4_w ws (fw:rflags4 * i_wsize ws) :=
   f4 fw.1 ++ [:: Vword (w_to_word fw.2)].
+
+Definition f2_w ws (fw:rflags2 * i_wsize ws) :=
+  f2 fw.1 ++ [:: Vword (w_to_word fw.2)].
 
 (* -------------------------------------------------------------------- *)
 
@@ -652,6 +658,34 @@ Definition x86_sar ws (OF CF SF PF ZF:bool) (v i: word) : exec values :=
        (vobool OF) (vobool CF) (vobool SF) (vobool PF) (vobool ZF)
        (of_word ws v) (of_word ws i))).
 
+Definition x86_rcr ws (v i:word) (CF:bool) : exec values := 
+  ok (f2_w 
+    (@select_op (fun ws => bool -> i_wsize ws -> i_wsize ws -> rflags2 * i_wsize ws) 
+       I8.x86_rcr I16.x86_rcr I32.x86_rcr I64.x86_rcr ws
+       (vobool CF) (of_word ws v) (of_word ws i))).
+
+Definition x86_rcl ws (v i:word) (CF:bool) : exec values := 
+  ok (f2_w 
+    (@select_op (fun ws => bool -> i_wsize ws -> i_wsize ws -> rflags2 * i_wsize ws) 
+       I8.x86_rcl I16.x86_rcl I32.x86_rcl I64.x86_rcl ws
+       (vobool CF) (of_word ws v) (of_word ws i))).
+
+Definition x86_ror ws (v i:word) : exec values := 
+  ok (f2_w 
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags2 * i_wsize ws) 
+       I8.x86_ror I16.x86_ror I32.x86_ror I64.x86_ror ws
+       (of_word ws v) (of_word ws i))).
+
+Definition x86_rol ws (v i:word) : exec values := 
+  ok (f2_w 
+    (@select_op (fun ws => i_wsize ws -> i_wsize ws -> rflags2 * i_wsize ws) 
+       I8.x86_rol I16.x86_rol I32.x86_rol I64.x86_rol ws
+       (of_word ws v) (of_word ws i))).
+
+Definition x86_rorx ws (v i:word) : exec values := 
+  ok [:: Vword (w_op2 (@select_op (fun ws => i_wsize ws -> i_wsize ws -> i_wsize ws) 
+                  I8.x86_rorx I16.x86_rorx I32.x86_rorx I64.x86_rorx ws) v i)].
+
 Notation app_b   o := (app_sopn [:: sbool] o).
 Notation app_w   o := (app_sopn [:: sword] o).
 Notation app_ww  o := (app_sopn [:: sword; sword] o).
@@ -692,6 +726,11 @@ Definition sem_sopn (o:sopn) :  values -> exec values :=
   | Ox86_SHL    ws => app_b5w2 (x86_shl    ws)
   | Ox86_SHR    ws => app_b5w2 (x86_shr    ws)
   | Ox86_SAR    ws => app_b5w2 (x86_sar    ws)
+  | Ox86_RCL    ws => app_wwb  (x86_rcl    ws)
+  | Ox86_RCR    ws => app_wwb  (x86_rcr    ws)
+  | Ox86_ROL    ws => app_ww   (x86_rol    ws)
+  | Ox86_ROR    ws => app_ww   (x86_ror    ws)
+  | Ox86_RORX   ws => app_ww   (x86_rorx   ws)
   end.
 
 (* ** Instructions

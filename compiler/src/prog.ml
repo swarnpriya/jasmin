@@ -145,6 +145,12 @@ type op_name =
 | Ox86_SHL    
 | Ox86_SHR    
 | Ox86_SAR   
+| Ox86_RCL
+| Ox86_RCR
+| Ox86_ROL
+| Ox86_ROR
+| Ox86_RORX
+
 
 type op = op_name * word_size 
 
