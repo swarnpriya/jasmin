@@ -128,6 +128,287 @@ Record xfundef := XFundef {
 
 Definition xprog := seq (funname * xfundef).
 
+(* ** Instruction description * 
+ * -------------------------------------------------------------------- *)
+
+Variant desc_kind := 
+  | Flag of rflag
+  | Reg  of register
+  | Ireg of option register 
+  | Addr
+  | Oprd 
+  | Condt. 
+
+Variant oprd_t  := 
+  | Toprd 
+  | Tcondt.
+
+Variant oprd_kind := 
+  | FLAG  of rflag
+  | REG   of register
+  | IREG  of ireg
+  | ADDR  of address 
+  | OPRD  of oprd
+  | CONDT of condt.
+
+Parameter oprd_kind_beq : oprd_kind -> oprd_kind -> bool.
+
+Lemma oprd_kind_eq_axiom : Equality.axiom oprd_kind_beq.
+Proof.
+Admitted.
+
+Definition oprd_kind_eqMixin := Equality.Mixin oprd_kind_eq_axiom.
+Canonical oprd_kind_eqType := EqType oprd_kind oprd_kind_eqMixin.
+ 
+Definition arg_desc := seq (desc_kind * option positive).
+
+Definition interp_t (t:oprd_t) := 
+  match t with
+  | Toprd => oprd
+  | Tcondt => condt
+  end.
+
+Fixpoint interp_instr (ts:seq oprd_t) :=
+  match ts with
+  | [::] => asm
+  | t :: ts => interp_t t -> interp_instr ts 
+  end.
+
+Record instr_desc := MkID {
+   dest_desc : arg_desc;
+   src_desc  : arg_desc;
+   instr_ty   : seq oprd_t;
+   mk_instr  : interp_instr instr_ty;
+}.
+
+(* MOV *)
+
+Definition mov_desc := 
+  {| dest_desc := [:: (Oprd, Some 1%positive)];
+     src_desc  := [::(Oprd, Some 2%positive)];
+     instr_ty  := [:: Toprd; Toprd ];
+     mk_instr  := fun o1 o2 => MOV o1 o2 |}.
+
+Definition addc_desc := 
+  {| dest_desc := [:: (Flag CF, None); ...; (Flag OF, None); (Oprd, Some 1) ]
+     src_desc  := [:: (Oprd, Some 1); (Oprd, Some 2); (Flag CF, None) ]
+     instr_ty  := [:: Toprd; Toprd ];
+     mk_instr  := fun o1 o2 => MOV o1 o2 |}.
+
+Require Import gen_map.
+
+Definition oprd_map := Mp.t oprd_kind.
+
+Definition set_oprd (m:oprd_map) o k := 
+  oapp (fun p => Mp.set m p k) m o.
+
+(* ** Conversion to assembly *
+ * -------------------------------------------------------------------- *)
+
+Definition invalid_rflag (s: string) : asm_error :=
+  AsmErr_string ("Invalid rflag name: " ++ s).
+
+Definition invalid_register (s: string) : asm_error :=
+  AsmErr_string ("Invalid register name: " ++ s).
+
+Global Opaque invalid_rflag invalid_register.
+
+(* -------------------------------------------------------------------- *)
+
+Definition asm_error {A} ii s := 
+  @cierror ii (Cerr_assembler (AsmErr_string s)) A.
+
+Definition rflag_of_var ii (v: var) :=
+  match v with
+  | Var sbool s =>
+     match (rflag_of_string s) with
+     | Some r => ciok r
+     | None => cierror ii (Cerr_assembler (invalid_rflag s))
+     end
+  | _ => asm_error ii "Invalid rflag type"
+  end.
+
+(* -------------------------------------------------------------------- *)
+Definition reg_of_var ii (v: var) :=
+  match v with
+  | Var sword s =>
+     match (reg_of_string s) with
+     | Some r => ciok r
+     | None => cierror ii (Cerr_assembler (invalid_register s))
+     end
+  | _ =>  asm_error ii "Invalid register type"
+  end.
+  
+Definition rflag_of_lval ii f l :=
+  match l with
+  | Lvar x    => 
+    Let f' := rflag_of_var ii x in
+    if f == f' then ok (FLAG f)
+    else 
+      asm_error ii
+        ("Invalid lval: found " ++ string_of_rflag f' ++ 
+         " instead of " ++ string_of_rflag f)
+  | _ => asm_error ii "Invalid lval: flag expected"
+  end.
+
+Definition reg_of_lval ii r l :=
+  match l with
+  | Lvar x    => 
+    Let r' := reg_of_var ii x in
+    if r == r' then ok (REG r')
+    else 
+      asm_error ii
+        ("Invalid lval: found " ++ string_of_register r' ++ 
+         " instead of " ++ string_of_register r)
+  | _ => asm_error ii "Invalid lval: register expected"
+  end.
+
+(*Definition addr_of_lval ii l := 
+  match l with
+  | Lmem x e =>
+  | Lvar _ | Lnone _ _ | Laset _ _ => 
+    asm_error ii "Invalid lval: address expected"
+  end. *)
+
+Definition match_lval ii (m:oprd_map) (dko: desc_kind * option positive) (l:lval) := 
+  Let k := 
+    match dko.1 with
+    | Flag f => rflag_of_lval ii f l
+    | Reg  r => reg_of_lval ii r l 
+    | Ireg r => asm_error ii "can not have ireg as a lval"
+    | Addr   => asm_error ii "can not have addr as a lval: FIXME"
+    | Oprd   => asm_error ii "can not have oprd as a lval: FIXME"
+    | Condt  => asm_error ii "can not have condt as a lval"
+    end in
+  ok (set_oprd m dko.2 k).
+
+Fixpoint match_lvals ii (m:oprd_map) (ds:arg_desc) (ls:lvals) := 
+  match ds, ls with
+  | [::], [::] => ok m
+  | d::ds, l::ls => 
+    Let m := match_lval ii m d l in
+    match_lvals ii m ds ls
+  | _, _ => asm_error ii "wrong number of lval"
+  end.
+
+Definition rflag_of_expr ii f e :=
+  match e with
+  | Pvar x    => 
+    Let f' := rflag_of_var ii x in
+    if f == f' then ok (FLAG f)
+    else 
+      asm_error ii
+        ("Invalid expression: found " ++ string_of_rflag f' ++ 
+         " instead of " ++ string_of_rflag f)
+  | _ => asm_error ii "Invalid expression: flag expected"
+  end.
+
+Definition reg_of_expr ii r e :=
+  match e with
+  | Pvar x    => 
+    Let r' := reg_of_var ii x in
+    if r == r' then ok (REG r')
+    else 
+      asm_error ii
+        ("Invalid lval: found " ++ string_of_register r' ++ 
+         " instead of " ++ string_of_register r)
+  | _ => asm_error ii "Invalid lval: register expected"
+  end.
+
+Definition match_arg ii (m:oprd_map) (dko: desc_kind * option positive) (e:pexpr) := 
+  Let k := 
+    match dko.1 with
+    | Flag f => rflag_of_expr ii f e 
+    | Reg  r => reg_of_expr ii r e
+    | Ireg r => asm_error ii "can not have ireg as an expression: FIXME"
+    | Addr   => asm_error ii "can not have addr as an expression: FIXME"
+    | Oprd   => asm_error ii "can not have oprd as an expression: FIXME"
+    | Condt  => asm_error ii "can not have condt as a expression: FIXME"
+    end in
+  ok (set_oprd m dko.2 k).
+
+Fixpoint match_args ii (m:oprd_map) (ds:arg_desc) (es:pexprs) := 
+  match ds, es with
+  | [::], [::] => ok m
+  | d::ds, e::es => 
+    Let m := match_arg ii m d e in
+    match_args ii m ds es
+  | _, _ => asm_error ii "wrong number of arguments"
+  end.
+
+Definition get_oprd ii (o:oprd_kind) := 
+  match o with
+  | OPRD o => ok o
+  | _      => asm_error ii "invalid instruction descriptor: not an oprd"
+  end.
+
+Definition get_condt ii (o:oprd_kind) := 
+  match o with
+  | CONDT o => ok o
+  | _      => asm_error ii "invalid instruction descriptor: not an condt"
+  end.
+
+Fixpoint app_map ii (m:oprd_map) (p:positive) (ts: seq oprd_t) (mk: interp_instr ts) := 
+  match ts return interp_instr ts -> ciexec asm with
+  | [::] => fun i => ok i
+  | t :: ts => fun mk =>
+    match Mp.get m p with
+    | Some arg =>
+      Let arg := 
+        match t return ciexec (interp_t t) with
+        | Toprd  => get_oprd  ii arg
+        | Tcondt => get_condt ii arg
+        end in
+      @app_map ii m (p+1) ts (mk arg)
+        
+    | None => asm_error ii "invalid instruction descriptor"
+    end
+  end mk.
+
+Definition desc_opn ii o := 
+  match o with
+  | Ox86_MOV => ok mov_desc 
+  | _        => asm_error ii "no instruction descriptor"
+  end.
+      
+Definition assemble_opn ii ls o es := 
+  Let d := desc_opn ii o in
+  Let m := match_args ii (Mp.empty _) d.(dest_desc) es in
+  Let m := match_lvals ii m d.(src_desc) ls in
+  @app_map ii m 1 d.(instr_ty) d.(mk_instr).
+
+
+
+Definition assemble_i (li: linstr) : ciexec asm :=
+  let (ii, i) := li in
+  match i with
+  | Lassgn l _ e =>
+     Let dst := oprd_of_lval ii l in
+     Let src := oprd_of_pexpr ii e in
+     ciok (MOV dst src)
+
+  | Lopn l o p =>
+      assemble_opn ii l o p
+
+  | Llabel l =>
+      ciok (LABEL l)
+
+  | Lgoto l =>
+      ciok (JMP l)
+
+  | Lcond e l =>
+      Let cond := assemble_cond ii e in
+      ciok (Jcc l cond)
+  end.
+    
+Definition assemble_i (i:
+
+
+
+
+
+
+
 (* ** Conversion to assembly *
  * -------------------------------------------------------------------- *)
 
