@@ -64,18 +64,6 @@ by apply: on_vuP => [t ? <-|_ [<-]//]; apply: type_of_to_val.
 Qed.
 
 (* -------------------------------------------------------------------- *)
-Definition to_rbool (v : value) :=
-  match v with
-  | Vbool   b    => ok (Def b)
-  | Vundef sbool => ok Undef
-  | _            => type_error
-  end.
-
-(* -------------------------------------------------------------------- *)
-Definition of_rbool (v : RflagMap.rflagv) :=
-  if v is Def b then Vbool b else Vundef sbool.
-
-(* -------------------------------------------------------------------- *)
 Lemma to_rboolK rfv : to_rbool (of_rbool rfv) = ok rfv.
 Proof. by case: rfv. Qed.
 
@@ -185,14 +173,30 @@ by rewrite h1 /=.
 Qed.
 
 (* -------------------------------------------------------------------- *)
-Inductive xs86_equiv (c : lcmd) (s : lstate) (xs : x86_state) :=
+Inductive xs86_equiv (* (c : lcmd) *) (s : lstate) (xs : x86_state) :=
 | XS86Equiv of
     s.(lmem) = xs.(xmem)
+(*
   & assemble_c c = ok xs.(xc)
   & assemble_c s.(lc) = ok (drop xs.(xip) xs.(xc))
+*)
   & xs.(xip) <= size xs.(xc)
   & rflags_of_lvm s.(lvm) xs.(xrf)
   & regs_of_lvm s.(lvm) xs.(xreg).
+
+(* -------------------------------------------------------------------- *)
+Lemma L ii gd (gdc c : lcmd) (s s' : lstate) (xs xs' : x86_state)
+        (lv : lvals) d (o : sopn) (args : pexprs) (oprds : seq oprd_kind)
+:
+     xs86_equiv s xs
+  -> assemble_opn_r ii lv d args = ok oprds
+  -> s.(lc) = MkLI ii (Lopn lv o args) :: c
+  -> lsem gdc gd s s'
+  -> x86.eval_instr_seq gd (o, oprds) d xs = ok xs'
+  -> xs86_equiv s' xs'.
+Proof. Admitted.
+
+(* 
 
 (* -------------------------------------------------------------------- *)
 Lemma xs86_equiv_cons li1 li c s xs :

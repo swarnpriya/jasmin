@@ -25,8 +25,8 @@
 
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect.
-(* ------- *) Require Import xseq expr linear compiler_util.
-(* ------- *) Require Import low_memory x86_sem.
+(* ------- *) Require Import xseq expr linear sem compiler_util.
+(* ------- *) Require Import low_memory x86_sem gen_map memory.
 
 Import Ascii.
 Import Relations.
@@ -175,20 +175,121 @@ Fixpoint interp_instr (ts:seq oprd_t) :=
   end.
 
 Record instr_desc := MkID {
-   dest_desc : arg_desc;
-   src_desc  : arg_desc;
-   instr_ty   : seq oprd_t;
-   mk_instr  : interp_instr instr_ty;
+  dest_desc  : arg_desc;
+  src_desc   : arg_desc;
+  nargs_desc : nat;
 }.
 
+Definition oprd_map := Mp.t oprd_kind.
+
+Definition x86_instr_desc : Type := sopn * Mp.t oprd_kind.
+
+Definition write_oprd_kind (o : oprd_kind) (v : value) (s : x86_state) :=
+  match o with
+  | OPRD o          => Let w := to_word v in write_oprd o w s
+  | REG  r          => Let w := to_word v in ok (st_write_reg r w s)
+  | ADDR a          => Let w := to_word v in st_write_mem (decode_addr s a) w s
+  | IREG (Imm_ir _) => type_error
+  | IREG (Reg_ir r) => Let w := to_word v in ok (st_write_reg r w s)
+  | FLAG r          => Let b := to_bool v in ok (st_set_rflags r b s)
+  | CONDT _         => type_error
+  end.
+
+(* -------------------------------------------------------------------- *)
+Definition to_rbool (v : value) :=
+  match v with
+  | Vbool   b    => ok (Def b)
+  | Vundef sbool => ok Undef
+  | _            => type_error
+  end.
+
+(* -------------------------------------------------------------------- *)
+Definition of_rbool (v : RflagMap.rflagv) :=
+  if v is Def b then Vbool b else Vundef sbool.
+
+Definition read_oprd_kind gd (o : oprd_kind) (s : x86_state) :=
+  match o return result _ value with
+  | OPRD o =>
+      Let w := read_oprd gd o s in ok (Vword w)
+
+  | IREG (Reg_ir r)
+  | REG r =>
+      ok (Vword (s.(xreg) r))
+
+  | ADDR a =>
+      Let w := Memory.read_mem s.(xmem) (decode_addr s a) in ok (Vword w)
+
+  | IREG (Imm_ir i) =>
+      ok (Vword i)
+
+  | FLAG r =>
+      ok (of_rbool (s.(xrf) r))
+
+  | _ => type_error
+  end.
+
+Definition eval_read
+  (gd : glob_defs) (adesc : desc_kind * option positive)
+  (args : Mp.t oprd_kind) (s : x86_state)
+:=
+  match adesc with
+  | (Flag rf, None  ) => rmap Vbool (st_get_rflag rf s)
+  | (Reg  rg, None  ) => ok (Vword (s.(xreg) rg))
+  | (Addr   , Some i)
+  | (Oprd   , Some i) =>
+      Let op := o2r ErrType (Mp.get args i) in
+      read_oprd_kind gd op s
+  | (_      , _     ) => Error ErrType
+  end.
+
+Definition eval_write
+  (adesc : desc_kind * option positive) (args : Mp.t oprd_kind)
+  (v : value) (s0 s : x86_state)
+:=
+  match adesc with
+  | (Flag rf, None) =>
+      Let b := to_bool v in ok (st_set_rflags rf b s)
+
+  | (Reg rg, None) =>
+      Let w := to_word v in ok (st_write_reg rg w s)
+
+  | (Oprd, Some i)
+  | (Addr, Some i) =>
+      Let op := o2r ErrType (Mp.get args i) in
+      write_oprd_kind op v s
+
+  | (_, _) => Error ErrType
+  end.
+
+Definition eval_instr
+  (g : glob_defs) (xid : x86_instr_desc) (id : instr_desc) (s : x86_state)
+:=
+  Let args := mapM (fun src => eval_read g src xid.2 s) id.(src_desc) in
+  Let out  := sem_sopn xid.1 args in
+
+  fold2 ErrType
+    (fun desc v s' => eval_write desc xid.2 v s s')
+    id.(dest_desc) out s.
+
+(* instr_desc : instruction description (args, output, #  args) *)
+(* oprd : operator argument *)
+(* oprd_kind : operator argument value *)
+
+Definition eval_instr_seq
+  (g : glob_defs) (xid : sopn * seq oprd_kind) (id : instr_desc) (s : x86_state)
+:=
+  let: (_, args) :=
+    foldl (fun im x => ((im.1+1)%positive, Mp.set im.2 im.1 x))
+          (1%positive, Mp.empty _) xid.2
+  in eval_instr g (xid.1, args) id s.
+
 (* MOV *)
-
 Definition mov_desc := 
-  {| dest_desc := [:: (Oprd, Some 1%positive)];
-     src_desc  := [::(Oprd, Some 2%positive)];
-     instr_ty  := [:: Toprd; Toprd ];
-     mk_instr  := fun o1 o2 => MOV o1 o2 |}.
+  {| dest_desc  := [:: (Oprd, Some 1%positive)];
+     src_desc   := [:: (Oprd, Some 2%positive)];
+     nargs_desc := 2; |}.
 
+(* ADC *)
 Definition adc_desc := 
   {| dest_desc := [:: (Flag OF, None);
                       (Flag CF, None);
@@ -196,13 +297,10 @@ Definition adc_desc :=
                       (Flag PF, None);
                       (Flag ZF, None); 
                       (Oprd, Some 1%positive) ];
-     src_desc  := [:: (Oprd, Some 1%positive); (Oprd, Some 2%positive); (Flag CF, None) ];
-     instr_ty  := [:: Toprd; Toprd ];
-     mk_instr  := fun o1 o2 => ADC o1 o2 |}.
-
-Require Import gen_map.
-
-Definition oprd_map := Mp.t oprd_kind.
+     src_desc  := [:: (Oprd, Some 1%positive);
+                      (Oprd, Some 2%positive);
+                      (Flag CF, None) ];
+     nargs_desc := 2; |}.
 
 Definition set_oprd (m:oprd_map) o k := 
   oapp (fun p => Mp.set m p k) m o.
@@ -559,13 +657,22 @@ Definition desc_opn ii o :=
   | Ox86_ADC => ok adc_desc
   | _        => asm_error ii "no instruction descriptor"
   end.
-      
-Definition assemble_opn ii ls o es := 
-  Let d := desc_opn ii o in
+
+Definition assemble_opn_r ii ls d es := 
   Let m := match_args ii (Mp.empty _) d.(dest_desc) es in
   Let m := match_lvals ii m d.(src_desc) ls in
-  @app_map ii m 1 d.(instr_ty) d.(mk_instr).
+  mapM
+   (fun i =>
+      let err := (ii, Cerr_assembler (AsmErr_string "")) in
+      o2r err (Mp.get m (Pos.of_nat i.+1)))
+   (iota 0 d.(nargs_desc)).
 
+Definition assemble_opn ii ls o es := 
+  Let d := desc_opn ii o in
+  Let a := assemble_opn_r ii ls d es in
+  ciok (o, a).
+
+(*
 Definition assemble_i (li: linstr) : ciexec asm :=
   let (ii, i) := li in
   match i with
@@ -575,7 +682,7 @@ Definition assemble_i (li: linstr) : ciexec asm :=
      ciok (MOV dst src)
 
   | Lopn l o p =>
-      assemble_opn ii l o p
+     assemble_opn ii l o p
 
   | Llabel l =>
       ciok (LABEL l)
@@ -587,9 +694,4 @@ Definition assemble_i (li: linstr) : ciexec asm :=
       Let cond := assemble_cond ii e in
       ciok (Jcc l cond)
   end.
-    
-
-
-
-
-
+*)
