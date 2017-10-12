@@ -1,14 +1,48 @@
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect all_algebra.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 (* -------------------------------------------------------------------- *)
 Notation onth s n := (nth None (map Some s) n).
 
 Definition oseq {T : Type} (s : seq (option T)) :=
   if size s == size (pmap idfun s) then Some (pmap idfun s) else None.
 
+Lemma pmap_idfun_some {T : Type} (s : seq T) :
+  pmap idfun [seq Some x | x <- s] = s.
+Proof. by elim: s => /= [|x s ->]. Qed.
+
+Lemma oseqP {T : eqType} (s : seq (option T)) (u : seq T) :
+  (oseq s == Some u) = (s == [seq Some x | x <- u]).
+Proof.
+apply/eqP/eqP=> [|->] //; last first.
++ by rewrite /oseq pmap_idfun_some size_map eqxx.
+rewrite /oseq; case: ifP=> // /eqP eqsz [<-].
+rewrite pmapS_filter map_id -{1}[s]filter_predT.
+apply: eq_in_filter=> x x_in_s /=; move/esym/eqP: eqsz.
+by rewrite size_pmap -all_count => /allP /(_ _ x_in_s).
+Qed.
+
 (* -------------------------------------------------------------------- *)
-Parameter var : Type.
+Fixpoint all2 {T U : Type} (p : T -> U -> bool) s1 s2 :=
+  match s1, s2 with
+  | [::], [::] => true
+  | x1 :: s1, x2 :: s2 => p x1 x2 && all2 p s1 s2
+  | _, _ => false
+  end.
+
+Lemma all2P {T U : Type} (p : T -> U -> bool) s1 s2:
+    all2 p s1 s2
+  = (size s1 == size s2) && (all [pred xy | p xy.1 xy.2] (zip s1 s2)).
+Proof.
+by elim: s1 s2 => [|x s1 ih] [|y s2] //=; rewrite ih andbCA eqSS.
+Qed.
+
+(* -------------------------------------------------------------------- *)
+Parameter var : countType.
 Parameter mem : Type.
 
 Parameter CF : var.
@@ -54,6 +88,31 @@ Inductive arg_desc :=
 | ADImplicit of var
 | ADExplicit of nat.
 
+(* -------------------------------------------------------------------- *)
+Module ADEq.
+Definition code (ad : arg_desc) :=
+  match ad with
+  | ADImplicit x => GenTree.Node 0 [:: GenTree.Leaf (pickle x)]
+  | ADExplicit x => GenTree.Node 1 [:: GenTree.Leaf x]
+  end.
+
+Definition decode (c : GenTree.tree nat) :=
+  match c with
+  | GenTree.Node 0 [:: GenTree.Leaf x] =>
+      if unpickle x is Some x then Some (ADImplicit x) else None
+  | GenTree.Node 1 [:: GenTree.Leaf x] =>
+      Some (ADExplicit x)
+  | _ => None
+  end.
+
+Lemma codeK : pcancel code decode.
+Proof. by case=> //= x; rewrite pickleK. Qed.
+End ADEq.
+
+Definition arg_desc_EqMixin := PcanEqMixin ADEq.codeK.
+Canonical arg_desc_EqType := EqType arg_desc arg_desc_EqMixin.
+
+(* -------------------------------------------------------------------- *)
 Record instr_desc := {
   id_name : cmd_name;
   id_in   : seq arg_desc;
@@ -98,13 +157,44 @@ Lemma get_id_ok c : (get_id c).(id_name) = c.
 Proof. by case: c. Qed.
 
 (* -------------------------------------------------------------------- *)
-Definition check_cmd_arg (ad : arg_desc) (args : seq var) :=
+Definition check_cmd_arg (loargs : seq var) (x : var) (ad : arg_desc) :=
   match ad with
-  | ADImplicit _ => true
-  | ADExplicit n => n < size args
+  | ADImplicit y => x == y
+  | ADExplicit n => (n < size loargs) && (x == nth x loargs n)
   end.
 
 (* -------------------------------------------------------------------- *)
-Definition check_cmd_args (c : cmd_name) (args : seq var) :=
+Definition check_cmd_args
+  (c : cmd_name) (outx inx : seq var) (loargs : seq var)
+:=
   let: id := get_id c in
-  all (check_cmd_arg^~ args) (id.(id_in) ++ id.(id_out)).
+
+     all2 (check_cmd_arg loargs) outx id.(id_out)
+  && all2 (check_cmd_arg loargs) inx  id.(id_in ).
+
+(* -------------------------------------------------------------------- *)
+Lemma P (loargs hiargs : seq var) (ads : seq arg_desc) :
+     all2 (check_cmd_arg loargs) hiargs ads
+  -> oseq [seq sem_ad ad loargs | ad <- ads] = Some hiargs.
+Proof.
+rewrite all2P => /andP [/eqP eqsz h]; apply/eqP; rewrite oseqP.
+apply/eqP/(eq_from_nth (x0 := None)); rewrite ?(size_map, eqsz) //.
+move=> i lt_i_ads; have ad0 : arg_desc := (ADExplicit 0).
+rewrite (nth_map ad0) // (nth_map CF) ?eqsz // /sem_ad.
+set x1 := nth CF _ _; set x2 := nth ad0 _ _.
+have -/(allP h) /=: (x1, x2) \in zip hiargs ads.
++ by rewrite -nth_zip // mem_nth // size_zip eqsz minnn.
+rewrite /check_cmd_arg; case: x2 => [? /eqP->//|].
+by move=> n /andP[len /eqP->]; rewrite (nth_map x1).
+Qed.
+
+(* -------------------------------------------------------------------- *)
+Theorem L c outx inx loargs m1 m2 :
+     check_cmd_args c outx inx loargs
+  -> semc m1 (c, outx, inx) = Some m2
+  -> sem_id m1 (get_id c) loargs = Some m2.
+Proof.
+by case/andP=> h1 h2; rewrite /sem_id /semc (P h1) (P h2) get_id_ok.
+Qed.
+
+
