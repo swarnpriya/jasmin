@@ -45,7 +45,7 @@ Qed.
 Parameter var : countType.
 Parameter mem : Type.
 
-Parameter CF : var.
+Parameter vCF : var.
 
 Inductive value :=
   | VInt  of int
@@ -62,9 +62,17 @@ Definition sets (m : mem) (x : seq var) (v : seq value) :=
     Some (foldl (fun m xv => set m xv.1 xv.2) m (zip x v))
   else None.
 
+Inductive expr := EVar of var | EInt of int.
+
+Definition eval (m : mem) (e : expr) :=
+  match e return value with
+  | EVar x => get m x
+  | EInt i => i
+  end.
+
 Inductive cmd_name := ADDC.
 
-Definition cmd : Type := cmd_name * seq var * seq var.
+Definition cmd : Type := cmd_name * seq var * seq expr.
 
 Parameter addc : int * int * bool -> int * bool.
 
@@ -73,8 +81,8 @@ Definition sem_addc_val (args : seq value) :=
      let: (z, c) := addc (x, y, c) in Some [:: VInt z; VBool c]
   else None.
 
-Definition sem_addc (m : mem) (outv : seq var) (inv : seq var) :=
-  if sem_addc_val [seq get m x | x <- inv] is Some res then
+Definition sem_addc (m : mem) (outv : seq var) (inv : seq expr) :=
+  if sem_addc_val [seq eval m x | x <- inv] is Some res then
     sets m outv res
   else None.
 
@@ -113,25 +121,95 @@ Definition arg_desc_EqMixin := PcanEqMixin ADEq.codeK.
 Canonical arg_desc_EqType := EqType arg_desc arg_desc_EqMixin.
 
 (* -------------------------------------------------------------------- *)
+Inductive arg_ty := TYVar | TYLiteral | TYVL.
+
+Definition locmd : Type := cmd_name * seq var.
+
+Definition sem_ad_in (ad : arg_desc) (xs : seq expr) : option expr :=
+  match ad with
+  | ADImplicit x => Some (EVar x)
+  | ADExplicit n => onth xs n
+  end.
+
+Definition sem_ad_out (ad : arg_desc) (xs : seq expr) : option var :=
+  match ad with
+  | ADImplicit x => Some x
+  | ADExplicit n =>
+      if onth xs n is Some (EVar y) then Some y else None
+  end.
+
+(* -------------------------------------------------------------------- *)
+Inductive register := R1 | R2 | R3.
+Inductive flag     := CF.
+Inductive ireg     := IRReg of register | IRImm of int.
+
+Inductive low_instr :=
+| ADDC_lo of register & ireg.
+
+Record lomem := {
+  lm_reg : register -> int;
+  lm_fgs : flag -> bool;
+}.
+
+Parameter eval_reg : lomem -> register -> int.
+Parameter eval_ireg : lomem -> ireg -> int.
+Parameter eval_flag : lomem -> flag -> bool.
+Parameter write_flag : lomem -> flag -> bool -> lomem.
+Parameter write_reg : lomem -> register -> int -> lomem.
+
+Definition interp_ty (ty : arg_ty) :=
+  match ty with
+  | TYVar     => register
+  | TYLiteral => int
+  | TYVL      => ireg
+  end.
+
+Fixpoint interp_tys (tys : seq arg_ty) :=
+  if tys is ty :: tys then
+    interp_ty ty -> interp_tys tys
+  else low_instr.
+
+Parameter register_of_var : var -> option register.
+
+Definition foo1 {T} (ty : arg_ty) (arg : expr) :=
+  match ty, arg return (interp_ty ty -> T) -> option T with
+  | TYVar, EVar x => fun op =>
+      if register_of_var x is Some r then Some (op r) else None
+  | TYVL, EVar x => fun op =>
+      if register_of_var x is Some r then Some (op (IRReg r)) else None
+  | TYVL, EInt i => fun op => Some (op (IRImm i))
+  | TYLiteral, EInt i => fun op => Some (op i)
+  | _, _ => fun op => None
+  end.
+
+Fixpoint foon (tys : seq arg_ty) (args : seq expr) : interp_tys tys -> option low_instr :=
+  match tys, args return interp_tys tys -> option low_instr with
+  | ty :: tys, arg :: args => fun op =>
+      if @foo1 _ ty arg op is Some op then
+        @foon tys args op
+      else None
+
+  | [::], [::] =>
+      fun op => Some op
+
+  | _, _ =>
+      fun op => None
+  end.
+
+(* -------------------------------------------------------------------- *)
 Record instr_desc := {
   id_name : cmd_name;
   id_in   : seq arg_desc;
   id_out  : seq arg_desc;
+  id_lo   : seq arg_ty;
+  id_sem  : interp_tys id_lo;
 }.
 
-Definition locmd : Type := cmd_name * seq var.
-
-Definition sem_ad (ad : arg_desc) (xs : seq var) : option var :=
-  match ad with
-  | ADImplicit x => Some x
-  | ADExplicit n => onth xs n
-  end.
-
 Definition sem_id
-  (m : mem) (id : instr_desc) (xs : seq var) : option mem
+  (m : mem) (id : instr_desc) (xs : seq expr) : option mem
 :=
-  let: inx  := oseq [seq sem_ad ad xs | ad <- id.(id_in )] in
-  let: outx := oseq [seq sem_ad ad xs | ad <- id.(id_out)] in
+  let: inx  := oseq [seq sem_ad_in  ad xs | ad <- id.(id_in )] in
+  let: outx := oseq [seq sem_ad_out ad xs | ad <- id.(id_out)] in
 
   if (inx, outx) is (Some inx, Some outx) then
     match id.(id_name) with
@@ -140,10 +218,25 @@ Definition sem_id
   else None.
 
 (* -------------------------------------------------------------------- *)
+Definition sem_lo (m : lomem) (i : low_instr) : lomem :=
+  match i with
+  | ADDC_lo r x =>
+      let v1 := eval_reg  m r in
+      let v2 := eval_ireg m x in
+      let c  := eval_flag m CF in
+
+      let: (res, cf) := addc (v1, v2, c) in
+
+      write_reg (write_flag m CF c) r res
+  end.
+
+(* -------------------------------------------------------------------- *)
 Definition ADDC_desc := {|
   id_name := ADDC;
-  id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit CF];
-  id_out  := [:: ADExplicit 0; ADImplicit CF];
+  id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
+  id_out  := [:: ADExplicit 0; ADImplicit vCF];
+  id_lo   := [:: TYVar; TYVL];
+  id_sem  := ADDC_lo;
 |}.
 
 (* -------------------------------------------------------------------- *)
@@ -157,19 +250,30 @@ Lemma get_id_ok c : (get_id c).(id_name) = c.
 Proof. by case: c. Qed.
 
 (* -------------------------------------------------------------------- *)
-Definition check_cmd_arg (loargs : seq var) (x : var) (ad : arg_desc) :=
+Definition compile_lo (c : cmd_name) (args : seq expr) :=
+  @foon (get_id c).(id_lo) args (get_id c).(id_sem).
+
+(* -------------------------------------------------------------------- *)
+Definition check_cmd_arg (loargs : seq expr) (x : expr) (ad : arg_desc) :=
+  match ad with
+  | ADImplicit y => false (* x == y *)
+  | ADExplicit n => (n < size loargs) && (* x == nth x loargs n *) true
+  end.
+
+(* -------------------------------------------------------------------- *)
+Definition check_cmd_res (loargs : seq expr) (x : var) (ad : arg_desc) :=
   match ad with
   | ADImplicit y => x == y
-  | ADExplicit n => (n < size loargs) && (x == nth x loargs n)
+  | ADExplicit n => (n < size loargs) && (* EVar x == nth x loargs n *) true
   end.
 
 (* -------------------------------------------------------------------- *)
 Definition check_cmd_args
-  (c : cmd_name) (outx inx : seq var) (loargs : seq var)
+  (c : cmd_name) (outx : seq var) (inx : seq expr) (loargs : seq expr)
 :=
   let: id := get_id c in
 
-     all2 (check_cmd_arg loargs) outx id.(id_out)
+     all2 (check_cmd_res loargs) outx id.(id_out)
   && all2 (check_cmd_arg loargs) inx  id.(id_in ).
 
 (* -------------------------------------------------------------------- *)
@@ -196,5 +300,3 @@ Theorem L c outx inx loargs m1 m2 :
 Proof.
 by case/andP=> h1 h2; rewrite /sem_id /semc (P h1) (P h2) get_id_ok.
 Qed.
-
-
