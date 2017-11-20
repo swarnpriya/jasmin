@@ -85,26 +85,24 @@ Definition sem_addc_val (args : seq value) :=
      let: (z, c) := addc (x, y, c) in Some [:: VInt z; VBool c]
   else None.
 
-Definition sem_addc (m : mem) (outv : seq var) (inv : seq expr) :=
-  if sem_addc_val [seq eval m x | x <- inv] is Some res then
-    sets m outv res
-  else None.
-
 Definition sem_subc_val (args : seq value) :=
   if args is [:: VInt x; VInt y; VBool c] then
      let: (z, c) := subc (x, y, c) in Some [:: VInt z; VBool c]
   else None.
 
-Definition sem_subc (m : mem) (outv : seq var) (inv : seq expr) :=
-  if sem_subc_val [seq eval m x | x <- inv] is Some res then
+Definition sem_cmd (op : seq value -> option (seq value)) m outv inv :=
+  if op [seq eval m x | x <- inv] is Some res then
     sets m outv res
   else None.
 
 Definition semc (m : mem) (c : cmd) : option mem :=
-  match c with
-  | (ADDC, outv, inv) => sem_addc m outv inv
-  | (SUBC, outv, inv) => sem_subc m outv inv
-  end.
+  let: (c, outv, inv) := c in
+  let: op :=
+    match c with
+    | ADDC => sem_addc_val
+    | SUBC => sem_subc_val
+    end
+  in sem_cmd op m outv inv.
 
 (* -------------------------------------------------------------------- *)
 Inductive arg_desc :=
@@ -160,18 +158,30 @@ Inductive ireg     := IRReg of register | IRImm of int.
 
 Inductive low_instr :=
 | ADDC_lo of register & ireg
-| SUBC_lo of register & ireg.
+| SUBC_lo of register & int.
 
 Record lomem := {
   lm_reg : register -> int;
   lm_fgs : flag -> bool;
 }.
 
-Parameter eval_reg : lomem -> register -> int.
-Parameter eval_ireg : lomem -> ireg -> int.
-Parameter eval_flag : lomem -> flag -> bool.
+Parameter eval_reg   : lomem -> register -> int.
+Parameter eval_ireg  : lomem -> ireg -> int.
+Parameter eval_lit   : int -> int.
+Parameter eval_flag  : lomem -> flag -> bool.
 Parameter write_flag : lomem -> flag -> bool -> lomem.
-Parameter write_reg : lomem -> register -> int -> lomem.
+Parameter write_reg  : lomem -> register -> int -> lomem.
+
+Parameter register_of_var : var -> option register.
+Parameter var_of_register : register -> var.
+
+Parameter flag_of_var : var -> option flag.
+Parameter var_of_flag : flag -> var.
+
+Inductive lom_eqv (m : mem) (lom : lomem) :=
+  | MEqv of
+      (forall r, VInt  (lom.(lm_reg) r) = get m (var_of_register r))
+    & (forall f, VBool (lom.(lm_fgs) f) = get m (var_of_flag f)).
 
 Definition interp_ty (ty : arg_ty) :=
   match ty with
@@ -185,7 +195,6 @@ Fixpoint interp_tys (tys : seq arg_ty) :=
     interp_ty ty -> interp_tys tys
   else low_instr.
 
-Parameter register_of_var : var -> option register.
 
 Definition foo1 {T} (ty : arg_ty) (arg : expr) :=
   match ty, arg return (interp_ty ty -> T) -> option T with
@@ -201,8 +210,8 @@ Definition foo1 {T} (ty : arg_ty) (arg : expr) :=
 Fixpoint foon (tys : seq arg_ty) (args : seq expr)
   : interp_tys tys -> option low_instr :=
 
-  match tys, args return interp_tys tys -> option low_instr with
-  | ty :: tys, arg :: args => fun op =>
+  match args, tys return interp_tys tys -> option low_instr with
+  | arg :: args, ty :: tys => fun op =>
       if @foo1 _ ty arg op is Some op then
         @foon tys args op
       else None
@@ -230,10 +239,10 @@ Definition sem_id
   let: outx := oseq [seq sem_ad_out ad xs | ad <- id.(id_out)] in
 
   if (inx, outx) is (Some inx, Some outx) then
-    match id.(id_name) with
-    | ADDC => sem_addc m outx inx
-    | SUBC => sem_subc m outx inx
-    end
+    sem_cmd (match id.(id_name) with
+    | ADDC => sem_addc_val
+    | SUBC => sem_subc_val
+    end) m outx inx
   else None.
 
 (* -------------------------------------------------------------------- *)
@@ -250,7 +259,7 @@ Definition sem_lo (m : lomem) (i : low_instr) : lomem :=
 
   | SUBC_lo r x =>
       let v1 := eval_reg  m r in
-      let v2 := eval_ireg m x in
+      let v2 := eval_lit    x in
       let c  := eval_flag m CF in
 
       let: (res, cf) := subc (v1, v2, c) in
@@ -272,7 +281,7 @@ Definition SUBC_desc := {|
   id_name := SUBC;
   id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
   id_out  := [:: ADExplicit 0; ADImplicit vCF];
-  id_lo   := [:: TYVar; TYVL];
+  id_lo   := [:: TYVar; TYLiteral];
   id_sem  := SUBC_lo;
 |}.
 
@@ -354,3 +363,33 @@ Theorem L c outx inx loargs m1 m2 :
 Proof.
 by case/andP=> h1 h2; rewrite /sem_id /semc (Pin h2) (Pout h1) get_id_ok.
 Qed.
+
+(* -------------------------------------------------------------------- *)
+Definition compile (c : cmd_name) (args : seq expr) :=
+  let id := get_id c in foon args id.(id_sem).
+
+(* -------------------------------------------------------------------- *)
+Theorem L2 c vs m1 m2 loid lom :
+     compile c vs = Some loid
+  -> sem_id m1 (get_id c) vs = Some m2
+  -> lom_eqv m1 lom
+  -> lom_eqv m2 (sem_lo_gen lom loid).
+Proof.
+rewrite /compile /sem_id => h.
+case E1: (oseq _) => [args|//].
+case E2: (oseq _) => [out|//].
+rewrite get_id_ok; set op := (X in sem_cmd X).
+rewrite /sem_cmd; case E3: (op _) => [outv|//].
+case: c h E1 E2 op E3.
+rewrite /=.
+case: vs => [|v1[|v2[|[|]]]] //=.
+admit.
+
+move=> /=.
+
+rewrite /sets; case: eqP => // eqsz.
+case=> <-.
+
+
+ case: c h E1 E2 => h E1 E2.
+rewrite /sem_addc; case E3: (sem_addc_val _) => [out2|//].
