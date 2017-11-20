@@ -1,6 +1,8 @@
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect all_algebra.
 
+Require Import Utf8.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -153,8 +155,14 @@ Definition sem_ad_out (ad : arg_desc) (xs : seq expr) : option var :=
 
 (* -------------------------------------------------------------------- *)
 Inductive register := R1 | R2 | R3.
-Inductive flag     := CF.
+Inductive flag     : Set := CF.
 Inductive ireg     := IRReg of register | IRImm of int.
+
+Axiom register_eqMixin : Equality.mixin_of register.
+Canonical register_eqType := EqType _ register_eqMixin.
+
+Axiom flag_eqMixin : Equality.mixin_of flag.
+Canonical flag_eqType := EqType _ flag_eqMixin.
 
 Inductive low_instr :=
 | ADDC_lo of register & ireg
@@ -165,12 +173,27 @@ Record lomem := {
   lm_fgs : flag -> bool;
 }.
 
-Parameter eval_reg   : lomem -> register -> int.
-Parameter eval_ireg  : lomem -> ireg -> int.
-Parameter eval_lit   : int -> int.
-Parameter eval_flag  : lomem -> flag -> bool.
-Parameter write_flag : lomem -> flag -> bool -> lomem.
-Parameter write_reg  : lomem -> register -> int -> lomem.
+Definition eval_reg (m: lomem) (r: register) : int := lm_reg m r.
+Definition eval_lit (m: lomem) (i: int) : int := i.
+Definition eval_ireg  (m: lomem) (ir: ireg) : int := 
+  match ir with
+  | IRReg r => eval_reg m r
+  | IRImm i => eval_lit m i
+  end.
+
+Definition eval_flag (m: lomem) (f: flag) : bool := lm_fgs m f.
+Definition write_flag (m: lomem) (f: flag) (b: bool) :=
+  {| lm_reg := lm_reg m ; lm_fgs := λ f', if f' == f then b else lm_fgs m f' |}.
+Definition write_reg  (m: lomem) (r: register) (v: int) : lomem :=
+  {| lm_reg := λ r', if r' == r then v else lm_reg m r'; lm_fgs := lm_fgs m |}.
+
+Variant destination :=
+| DReg of register
+| DFlag of flag.
+
+Parameter compile_var : var -> option destination.
+
+Axiom compile_var_CF : compile_var vCF = Some (DFlag CF).
 
 Parameter register_of_var : var -> option register.
 Parameter var_of_register : register -> var.
@@ -255,16 +278,16 @@ Definition sem_lo (m : lomem) (i : low_instr) : lomem :=
 
       let: (res, cf) := addc (v1, v2, c) in
 
-      write_reg (write_flag m CF c) r res
+      write_reg (write_flag m CF cf) r res
 
   | SUBC_lo r x =>
       let v1 := eval_reg  m r in
-      let v2 := eval_lit    x in
+      let v2 := eval_lit m x in
       let c  := eval_flag m CF in
 
       let: (res, cf) := subc (v1, v2, c) in
 
-      write_reg (write_flag m CF c) r res
+      write_reg (write_flag m CF cf) r res
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -369,27 +392,107 @@ Definition compile (c : cmd_name) (args : seq expr) :=
   let id := get_id c in foon args id.(id_sem).
 
 (* -------------------------------------------------------------------- *)
-Theorem L2 c vs m1 m2 loid lom :
+Variant argument :=
+| AReg of register
+| AFlag of flag
+| AInt of int.
+
+Definition arg_of_dest (d: destination): argument :=
+  match d with
+  | DReg r => AReg r
+  | DFlag f => AFlag f
+  end.
+
+Definition arg_of_ireg (i: ireg) : argument :=
+  match i with
+  | IRReg r => AReg r
+  | IRImm i => AInt i
+  end.
+
+Definition sem_lo_ad_in (ad : arg_desc) (xs : seq ireg) : option argument :=
+  match ad with
+  | ADImplicit x => omap arg_of_dest (compile_var x)
+  | ADExplicit n => omap arg_of_ireg (onth xs n)
+  end.
+
+Definition sem_lo_ad_out (ad : arg_desc) (xs : seq ireg) : option destination :=
+  match ad with
+  | ADImplicit x => compile_var x
+  | ADExplicit n =>
+      if onth xs n is Some (IRReg y) then Some (DReg y) else None
+  end.
+
+Definition operands_of_instr (li: low_instr) : seq ireg :=
+  match li with
+  | ADDC_lo x y => [:: IRReg x ; y ]
+  | SUBC_lo x y => [:: IRReg x ; IRImm y ]
+  end.
+
+Definition eval_lo (m : lomem) (a : argument) : value :=
+  match a with
+  | AReg x => VInt (lm_reg m x)
+  | AFlag f => VBool (lm_fgs m f)
+  | AInt i => VInt i
+  end.
+
+Definition set_lo (d: destination) (v: value) (m: lomem) : option lomem :=
+  match d, v with
+  | DReg r, VInt i => Some (write_reg m r i)
+  | DFlag f, VBool b => Some (write_flag m f b)
+  | _, _ => None
+  end.
+
+Definition sets_lo (m : lomem) (x : seq destination) (v : seq value) :=
+  if size x == size v then
+    foldl (fun m xv => obind (set_lo xv.1 xv.2) m) (Some m) (zip x v)
+  else None.
+
+Definition sem_lo_cmd (op : seq value -> option (seq value)) m outv inv :=
+  if op [seq eval_lo m x | x <- inv] is Some res then
+    sets_lo m outv res
+  else None.
+
+Definition sem_lo_gen (m: lomem) (id: instr_desc) (li: low_instr) : option lomem :=
+  let xs := operands_of_instr li in
+  let: inx  := oseq [seq sem_lo_ad_in  ad xs | ad <- id.(id_in )] in
+  let: outx := oseq [seq sem_lo_ad_out ad xs | ad <- id.(id_out)] in
+
+  if (inx, outx) is (Some inx, Some outx) then
+    sem_lo_cmd (match id.(id_name) with
+    | ADDC => sem_addc_val
+    | SUBC => sem_subc_val
+    end) m outx inx
+  else None.
+
+Definition cmd_name_of_loid (loid: low_instr) : cmd_name :=
+  match loid with
+  | ADDC_lo _ _ => ADDC
+  | SUBC_lo _ _ => SUBC
+  end.
+
+Lemma eval_lo_arg_of_ireg m i :
+  eval_lo m (arg_of_ireg i) = eval_ireg m i.
+Proof. by case: i. Qed.
+
+Lemma sem_lo_gen_correct m loid :
+  sem_lo_gen m (get_id (cmd_name_of_loid loid)) loid = Some (sem_lo m loid).
+Proof.
+  case: loid.
+  - by move => r i; rewrite /sem_lo_gen /= compile_var_CF /= /sem_lo_cmd /= eval_lo_arg_of_ireg; case: addc.
+  by move => r i; rewrite /sem_lo_gen /= compile_var_CF /= /sem_lo_cmd /=; case: subc.
+Qed.
+
+(* -------------------------------------------------------------------- *)
+Theorem L2 c vs m1 m2 loid lom1:
      compile c vs = Some loid
   -> sem_id m1 (get_id c) vs = Some m2
-  -> lom_eqv m1 lom
-  -> lom_eqv m2 (sem_lo_gen lom loid).
+  -> lom_eqv m1 lom1
+  -> exists lom2, sem_lo_gen lom1 (get_id c) loid = Some lom2
+  /\ lom_eqv m2 lom2.
 Proof.
 rewrite /compile /sem_id => h.
 case E1: (oseq _) => [args|//].
 case E2: (oseq _) => [out|//].
 rewrite get_id_ok; set op := (X in sem_cmd X).
 rewrite /sem_cmd; case E3: (op _) => [outv|//].
-case: c h E1 E2 op E3.
-rewrite /=.
-case: vs => [|v1[|v2[|[|]]]] //=.
-admit.
-
-move=> /=.
-
-rewrite /sets; case: eqP => // eqsz.
-case=> <-.
-
-
- case: c h E1 E2 => h E1 E2.
-rewrite /sem_addc; case E3: (sem_addc_val _) => [out2|//].
+Abort.
