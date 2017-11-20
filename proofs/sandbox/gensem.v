@@ -474,13 +474,37 @@ Lemma eval_lo_arg_of_ireg m i :
   eval_lo m (arg_of_ireg i) = eval_ireg m i.
 Proof. by case: i. Qed.
 
+Definition evalrw := (compile_var_CF, eval_lo_arg_of_ireg).
+
 Lemma sem_lo_gen_correct m loid :
   sem_lo_gen m (get_id (cmd_name_of_loid loid)) loid = Some (sem_lo m loid).
 Proof.
-  case: loid.
-  - by move => r i; rewrite /sem_lo_gen /= compile_var_CF /= /sem_lo_cmd /= eval_lo_arg_of_ireg; case: addc.
-  by move => r i; rewrite /sem_lo_gen /= compile_var_CF /= /sem_lo_cmd /=; case: subc.
+case: loid.
+- move=> r i; rewrite /sem_lo_gen /= ?evalrw /sem_lo_cmd /= ?evalrw.
+  by case: addc.
+- move=> r i; rewrite /sem_lo_gen /= ?evalrw /sem_lo_cmd /= ?evalrw.
+  by case: subc.
 Qed.
+
+(* -------------------------------------------------------------------- *)
+Definition argument_of_expr (e : expr) : option argument :=
+  match e with
+  | EVar x => omap arg_of_dest (compile_var x)
+  | EInt i => Some (AInt i)
+  end.
+
+(* --------------------------------------------------------------------- *)
+Lemma L' id vs args loid :
+     foon vs (id_sem id) = Some loid
+  -> oseq [seq sem_ad_in ad vs | ad <- id_in id] = Some args
+  ->   oseq [seq sem_lo_ad_in ad (operands_of_instr loid) | ad <- id_in id]
+     = oseq [seq argument_of_expr e | e <- args].
+Proof.
+case: id => c iin _ ilo isem /= h.
+rewrite (rwP eqP) oseqP -(rwP eqP) => eq; congr oseq.
+elim: iin args eq => [|iin1 iin ih] [|arg args] //=.
+case=> eq1 /ih ->; congr (_ :: _).
+
 
 (* -------------------------------------------------------------------- *)
 Theorem L2 c vs m1 m2 loid lom1:
@@ -495,4 +519,6 @@ case E1: (oseq _) => [args|//].
 case E2: (oseq _) => [out|//].
 rewrite get_id_ok; set op := (X in sem_cmd X).
 rewrite /sem_cmd; case E3: (op _) => [outv|//].
+rewrite /sem_lo_gen.
+
 Abort.
