@@ -64,17 +64,21 @@ Definition sets (m : mem) (x : seq var) (v : seq value) :=
 
 Inductive expr := EVar of var | EInt of int.
 
+Axiom expr_eqMixin : Equality.mixin_of expr.
+Canonical expr_eqType := EqType expr expr_eqMixin.
+
 Definition eval (m : mem) (e : expr) :=
   match e return value with
   | EVar x => get m x
   | EInt i => i
   end.
 
-Inductive cmd_name := ADDC.
+Inductive cmd_name := ADDC | SUBC.
 
 Definition cmd : Type := cmd_name * seq var * seq expr.
 
 Parameter addc : int * int * bool -> int * bool.
+Parameter subc : int * int * bool -> int * bool.
 
 Definition sem_addc_val (args : seq value) :=
   if args is [:: VInt x; VInt y; VBool c] then
@@ -86,9 +90,20 @@ Definition sem_addc (m : mem) (outv : seq var) (inv : seq expr) :=
     sets m outv res
   else None.
 
+Definition sem_subc_val (args : seq value) :=
+  if args is [:: VInt x; VInt y; VBool c] then
+     let: (z, c) := subc (x, y, c) in Some [:: VInt z; VBool c]
+  else None.
+
+Definition sem_subc (m : mem) (outv : seq var) (inv : seq expr) :=
+  if sem_subc_val [seq eval m x | x <- inv] is Some res then
+    sets m outv res
+  else None.
+
 Definition semc (m : mem) (c : cmd) : option mem :=
   match c with
   | (ADDC, outv, inv) => sem_addc m outv inv
+  | (SUBC, outv, inv) => sem_subc m outv inv
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -144,7 +159,8 @@ Inductive flag     := CF.
 Inductive ireg     := IRReg of register | IRImm of int.
 
 Inductive low_instr :=
-| ADDC_lo of register & ireg.
+| ADDC_lo of register & ireg
+| SUBC_lo of register & ireg.
 
 Record lomem := {
   lm_reg : register -> int;
@@ -182,7 +198,9 @@ Definition foo1 {T} (ty : arg_ty) (arg : expr) :=
   | _, _ => fun op => None
   end.
 
-Fixpoint foon (tys : seq arg_ty) (args : seq expr) : interp_tys tys -> option low_instr :=
+Fixpoint foon (tys : seq arg_ty) (args : seq expr)
+  : interp_tys tys -> option low_instr :=
+
   match tys, args return interp_tys tys -> option low_instr with
   | ty :: tys, arg :: args => fun op =>
       if @foo1 _ ty arg op is Some op then
@@ -214,6 +232,7 @@ Definition sem_id
   if (inx, outx) is (Some inx, Some outx) then
     match id.(id_name) with
     | ADDC => sem_addc m outx inx
+    | SUBC => sem_subc m outx inx
     end
   else None.
 
@@ -228,6 +247,15 @@ Definition sem_lo (m : lomem) (i : low_instr) : lomem :=
       let: (res, cf) := addc (v1, v2, c) in
 
       write_reg (write_flag m CF c) r res
+
+  | SUBC_lo r x =>
+      let v1 := eval_reg  m r in
+      let v2 := eval_ireg m x in
+      let c  := eval_flag m CF in
+
+      let: (res, cf) := subc (v1, v2, c) in
+
+      write_reg (write_flag m CF c) r res
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -240,9 +268,19 @@ Definition ADDC_desc := {|
 |}.
 
 (* -------------------------------------------------------------------- *)
+Definition SUBC_desc := {|
+  id_name := SUBC;
+  id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
+  id_out  := [:: ADExplicit 0; ADImplicit vCF];
+  id_lo   := [:: TYVar; TYVL];
+  id_sem  := SUBC_lo;
+|}.
+
+(* -------------------------------------------------------------------- *)
 Definition get_id (c : cmd_name) :=
   match c with
   | ADDC => ADDC_desc
+  | SUBC => SUBC_desc
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -256,15 +294,15 @@ Definition compile_lo (c : cmd_name) (args : seq expr) :=
 (* -------------------------------------------------------------------- *)
 Definition check_cmd_arg (loargs : seq expr) (x : expr) (ad : arg_desc) :=
   match ad with
-  | ADImplicit y => false (* x == y *)
-  | ADExplicit n => (n < size loargs) && (* x == nth x loargs n *) true
+  | ADImplicit y => x == EVar y
+  | ADExplicit n => (n < size loargs) && (x == nth x loargs n)
   end.
 
 (* -------------------------------------------------------------------- *)
 Definition check_cmd_res (loargs : seq expr) (x : var) (ad : arg_desc) :=
   match ad with
   | ADImplicit y => x == y
-  | ADExplicit n => (n < size loargs) && (* EVar x == nth x loargs n *) true
+  | ADExplicit n => (n < size loargs) && (EVar x == nth (EVar x) loargs n)
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -277,19 +315,35 @@ Definition check_cmd_args
   && all2 (check_cmd_arg loargs) inx  id.(id_in ).
 
 (* -------------------------------------------------------------------- *)
-Lemma P (loargs hiargs : seq var) (ads : seq arg_desc) :
+Lemma Pin (loargs hiargs : seq expr) (ads : seq arg_desc) :
      all2 (check_cmd_arg loargs) hiargs ads
-  -> oseq [seq sem_ad ad loargs | ad <- ads] = Some hiargs.
+  -> oseq [seq sem_ad_in ad loargs | ad <- ads] = Some hiargs.
 Proof.
 rewrite all2P => /andP [/eqP eqsz h]; apply/eqP; rewrite oseqP.
 apply/eqP/(eq_from_nth (x0 := None)); rewrite ?(size_map, eqsz) //.
 move=> i lt_i_ads; have ad0 : arg_desc := (ADExplicit 0).
-rewrite (nth_map ad0) // (nth_map CF) ?eqsz // /sem_ad.
-set x1 := nth CF _ _; set x2 := nth ad0 _ _.
+rewrite (nth_map ad0) // (nth_map (EVar vCF)) ?eqsz // /sem_ad_in.
+set x1 := nth (EVar vCF) _ _; set x2 := nth ad0 _ _.
 have -/(allP h) /=: (x1, x2) \in zip hiargs ads.
 + by rewrite -nth_zip // mem_nth // size_zip eqsz minnn.
 rewrite /check_cmd_arg; case: x2 => [? /eqP->//|].
 by move=> n /andP[len /eqP->]; rewrite (nth_map x1).
+Qed.
+
+(* -------------------------------------------------------------------- *)
+Lemma Pout (loargs : seq expr) (hiargs : seq var) (ads : seq arg_desc) :
+     all2 (check_cmd_res loargs) hiargs ads
+  -> oseq [seq sem_ad_out ad loargs | ad <- ads] = Some hiargs.
+Proof.
+rewrite all2P => /andP [/eqP eqsz h]; apply/eqP; rewrite oseqP.
+apply/eqP/(eq_from_nth (x0 := None)); rewrite ?(size_map, eqsz) //.
+move=> i lt_i_ads; have ad0 : arg_desc := (ADExplicit 0).
+rewrite (nth_map ad0) // (nth_map vCF) ?eqsz // /sem_ad_out.
+set x1 := nth vCF _ _; set x2 := nth ad0 _ _.
+have -/(allP h) /=: (x1, x2) \in zip hiargs ads.
++ by rewrite -nth_zip // mem_nth // size_zip eqsz minnn.
+rewrite /check_cmd_res; case: x2 => [? /eqP->//|].
+by move=> n /andP[len /eqP]; rewrite (nth_map (EVar x1)) // => <-.
 Qed.
 
 (* -------------------------------------------------------------------- *)
@@ -298,5 +352,5 @@ Theorem L c outx inx loargs m1 m2 :
   -> semc m1 (c, outx, inx) = Some m2
   -> sem_id m1 (get_id c) loargs = Some m2.
 Proof.
-by case/andP=> h1 h2; rewrite /sem_id /semc (P h1) (P h2) get_id_ok.
+by case/andP=> h1 h2; rewrite /sem_id /semc (Pin h2) (Pout h1) get_id_ok.
 Qed.
