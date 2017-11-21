@@ -8,7 +8,11 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Notation "m >>= f" := (ssrfun.Option.bind f m) (at level 100).
+Notation "m >>= f" := (ssrfun.Option.bind f m) (at level 25, left associativity).
+
+Lemma foldl_bind_None {A B: Type} (f: A → B → option B) m :
+  foldl (λ a b, a >>= f b) None m = None.
+Proof. by elim: m. Qed.
 
 (* -------------------------------------------------------------------- *)
 
@@ -26,10 +30,30 @@ Coercion VBool : bool >-> value.
 Parameter get : mem -> var -> value.
 Parameter set : mem -> var -> value -> mem.
 
+Axiom get_set :
+  ∀ m x v x',
+    get (set m x v) x' = if x' == x then v else get m x'.
+
 Definition sets (m : mem) (x : seq var) (v : seq value) :=
   if size x == size v then
     Some (foldl (fun m xv => set m xv.1 xv.2) m (zip x v))
   else None.
+
+Lemma setsI m x v m' :
+  sets m x v = Some m' →
+  size x = size v ∧ m' = foldl (λ m xv, set m xv.1 xv.2) m (zip x v).
+Proof.
+  by rewrite/sets; case: eqP => // eqsz [].
+Qed.
+
+Lemma sets_consI m x xs v m' :
+  sets m (x :: xs) v = Some m' →
+  ∃ y ys, v = y :: ys ∧ sets (set m x y) xs ys = Some m'.
+Proof.
+  case/setsI; case: v => // y ys /= /succn_inj hsz ->.
+  exists y, ys; split; first reflexivity.
+  by rewrite /sets; case: eqP.
+Qed.
 
 Variant expr := EVar of var | EInt of int.
 
@@ -186,6 +210,17 @@ Parameter var_of_flag : flag -> var.
 Axiom var_of_uniq :
   uniq
     (map var_of_register [:: R1 ; R2 ; R3 ] ++ map var_of_flag [:: CF ]).
+
+Axiom var_of_register_inj : ∀ x y,
+  var_of_register x = var_of_register y →
+  x = y.
+
+Axiom var_of_flag_inj : ∀ x y,
+  var_of_flag x = var_of_flag y →
+  x = y.
+
+Axiom var_of_register_var_of_flag : ∀ r f,
+    ¬ var_of_register r = var_of_flag f.
 
 Definition register_of_var (v: var) : option register :=
   if v == var_of_register R1 then Some R1 else
@@ -592,6 +627,18 @@ Definition sets_lo (m : lomem) (x : seq destination) (v : seq value) :=
     foldl (fun m xv => obind (set_lo xv.1 xv.2) m) (Some m) (zip x v)
   else None.
 
+Lemma sets_lo_cons m d ds v vs :
+  sets_lo m (d :: ds) (v :: vs) = set_lo d v m >>= λ m', sets_lo m' ds vs.
+Proof.
+  rewrite {1} /sets_lo /=.
+  case: set_lo; last by case: eqP => // _; exact: foldl_bind_None.
+  case: eqP.
+  + move/succn_inj => eq_sz /=.
+     by move => m' /=; rewrite /sets_lo; case: eqP.
+  move => ne_sz /= m'.
+  by rewrite /sets_lo; case: eqP => // k; elim: ne_sz; rewrite k.
+Qed.
+
 Definition sem_lo_cmd (op : seq value -> option (seq value)) m outv inv :=
   if op [seq eval_lo m x | x <- inv] is Some res then
     sets_lo m outv res
@@ -671,6 +718,45 @@ Proof.
   by case eq1: register_of_var => [ z | ] // [] <-; rewrite eqm (var_of_register_of_var eq1).
 Qed.
 
+Lemma lom_eqv_set_register m lom x r i :
+  lom_eqv m lom →
+  register_of_var x = Some r →
+  lom_eqv (set m x (VInt i)) (write_reg lom r i).
+Proof.
+  case => hr hf hx; rewrite -(var_of_register_of_var hx) => {x hx}.
+  split => q; rewrite get_set /=.
+  + case: eqP; first by move ->; rewrite eq_refl.
+    move => ne; case: eqP => // /var_of_register_inj //.
+  case: eqP => // h; elim: (var_of_register_var_of_flag (esym h)).
+Qed.
+
+Lemma lom_eqv_set_flag m lom x f b :
+  lom_eqv m lom →
+  flag_of_var x = Some f →
+  lom_eqv (set m x (VBool b)) (write_flag lom f b).
+Proof.
+  case => hr hf hx; rewrite -(var_of_flag_of_var hx) => {x hx}.
+  split => q; rewrite get_set /=.
+  + case: eqP => // h; elim: (var_of_register_var_of_flag h).
+  case: eqP; first by move ->; rewrite eq_refl.
+  move => ne; case: eqP => // /var_of_flag_inj //.
+Qed.
+
+Lemma set_lom_eqv m lom x y v lom' :
+  lom_eqv m lom →
+  compile_var x = Some y →
+  set_lo y v lom = Some lom' →
+  lom_eqv (set m x v) lom'.
+Proof.
+  case => hr hf.
+  rewrite /compile_var.
+  case e1: register_of_var => [ r | ].
+  + case => <-; case: v => // i [] <-.
+    exact: lom_eqv_set_register.
+  case e2: flag_of_var => // [ i ] [] <-; case: v => //= b [] <-.
+  exact: lom_eqv_set_flag.
+Qed.
+
 Lemma toto_out ads vs out irs m1 lom1 outv m2 :
   lom_eqv m1 lom1 →
   all wf_implicit ads →
@@ -680,6 +766,42 @@ Lemma toto_out ads vs out irs m1 lom1 outv m2 :
   ∃ outx, omap (sem_lo_ad_out irs) ads = Some outx ∧
   ∃ lom2 : lomem, sets_lo lom1 outx outv = Some lom2 ∧ lom_eqv m2 lom2.
 Proof.
+  move => eqm hwf hirs.
+  elim: ads out outv m1 lom1 eqm hwf.
+  - move => out outv m1 lom1 eqm _ [] <- /setsI [hsz ->]; exists [::]; split => //.
+    by case: outv hsz => // _; exists lom1.
+  move => ad ads ih args' outv' m1 lom1 eqm h; rewrite /= in h; case/andP: h => hwf hwf'.
+  case/omap_consI => arg [] args [] -> ha has /sets_consI [v] [outv] [? hm2]; subst outv'.
+  case: ad ha hwf.
+  + move => x /= [] ?; subst arg.
+    case hd: compile_var => [ d | ] // _.
+    have : ∃ lom', set_lo d v lom1 = Some lom'.
+    admit.
+    case => lom' hlom'.
+    have eqm' := set_lom_eqv eqm hd hlom'.
+    case: (ih args outv (set m1 x v) lom' eqm' hwf' has hm2)
+      => dst [hdst] [lom2] [hlom2 eqm2].
+    exists (d :: dst); split; first by rewrite hdst.
+    exists lom2; split; first by rewrite sets_lo_cons hlom' /=. done.
+
+  move => n /=.
+  case eq1: onth => [ [] q | ] // [] ? _; subst q.
+  move: eq1 => /onthP - /(_ (EInt 0)) /andP [] hsz /eqP harg.
+  case: (onth_omap_size (EInt 0) hirs hsz) => y [hy]; rewrite harg.
+  case eqy: register_of_var => [ y' | ] // - [] ?; subst y.
+  have eqy' : compile_var arg = Some (DReg y') by rewrite /compile_var eqy.
+  have : ∃ i, v = VInt i.
+  admit.
+  case => i ?; subst v.
+  have : ∃ lom', set_lo (DReg y') i lom1 = Some lom' by eexists.
+  case => lom' hlom'.
+  have eqm' := set_lom_eqv eqm eqy' hlom'.
+  have := ih _ _ _ _ eqm' hwf' has hm2.
+  case => dst [hdst] [lom2] [hlom2 eqm2].
+  rewrite hy hdst /=.
+  eexists; split; first by reflexivity.
+  case: hlom' => ?; subst lom'.
+  by exists lom2.
 Admitted.
 
 (* -------------------------------------------------------------------- *)
