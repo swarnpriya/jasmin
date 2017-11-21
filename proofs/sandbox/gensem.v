@@ -73,12 +73,13 @@ Definition eval (m : mem) (e : expr) :=
   | EInt i => i
   end.
 
-Inductive cmd_name := ADDC | SUBC.
+Inductive cmd_name := ADDC | SUBC | MUL.
 
 Definition cmd : Type := cmd_name * seq var * seq expr.
 
 Parameter addc : int * int * bool -> int * bool.
 Parameter subc : int * int * bool -> int * bool.
+Parameter mul : int * int -> int * int.
 
 Definition sem_addc_val (args : seq value) :=
   if args is [:: VInt x; VInt y; VBool c] then
@@ -88,6 +89,11 @@ Definition sem_addc_val (args : seq value) :=
 Definition sem_subc_val (args : seq value) :=
   if args is [:: VInt x; VInt y; VBool c] then
      let: (z, c) := subc (x, y, c) in Some [:: VInt z; VBool c]
+  else None.
+
+Definition sem_mul_val (args : seq value) :=
+  if args is [:: VInt x; VInt y] then
+     let: (z, c) := mul (x, y) in Some [:: VInt z; VInt c]
   else None.
 
 Definition sem_cmd (op : seq value -> option (seq value)) m outv inv :=
@@ -101,6 +107,7 @@ Definition semc (m : mem) (c : cmd) : option mem :=
     match c with
     | ADDC => sem_addc_val
     | SUBC => sem_subc_val
+    | MUL => sem_mul_val
     end
   in sem_cmd op m outv inv.
 
@@ -167,12 +174,15 @@ Canonical ireg_eqType := EqType _ ireg_eqMixin.
 
 Inductive low_instr :=
 | ADDC_lo of register & ireg
-| SUBC_lo of register & int.
+| SUBC_lo of register & int
+| MUL_lo
+.
 
 Definition operands_of_instr (li: low_instr) : seq ireg :=
   match li with
   | ADDC_lo x y => [:: IRReg x ; y ]
   | SUBC_lo x y => [:: IRReg x ; IRImm y ]
+  | MUL_lo => [::]
   end.
 
 Record lomem := {
@@ -249,6 +259,8 @@ Definition compile_var (v: var) : option destination :=
 Definition vCF : var := var_of_flag CF.
 
 Axiom compile_var_CF : compile_var vCF = Some (DFlag CF).
+Axiom register_of_var_of_register :
+  ∀ r, register_of_var (var_of_register r) = Some r.
 
 Inductive lom_eqv (m : mem) (lom : lomem) :=
   | MEqv of
@@ -333,6 +345,7 @@ Definition sem_id
     sem_cmd (match id.(id_name) with
     | ADDC => sem_addc_val
     | SUBC => sem_subc_val
+    | MUL => sem_mul_val
     end) m outx inx
   else None.
 
@@ -356,6 +369,14 @@ Definition sem_lo (m : lomem) (i : low_instr) : lomem :=
       let: (res, cf) := subc (v1, v2, c) in
 
       write_reg (write_flag m CF cf) r res
+
+  | MUL_lo =>
+    let x1 := eval_reg m R1 in
+    let x2 := eval_reg m R2 in
+
+    let: (y1, y2) := mul (x1, x2) in
+
+    write_reg (write_reg m R1 y1) R2 y2
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -387,10 +408,25 @@ Proof.
 Defined.
 
 (* -------------------------------------------------------------------- *)
+Definition MUL_desc : instr_desc. refine {|
+  id_name := MUL;
+  id_in   := [:: ADImplicit (var_of_register R1); ADImplicit (var_of_register R2)];
+  id_out   := [:: ADImplicit (var_of_register R1); ADImplicit (var_of_register R2)];
+  id_lo   := [::];
+  id_sem  := MUL_lo;
+|}.
+Proof.
+  abstract by rewrite/= /compile_var !register_of_var_of_register.
+  abstract by rewrite/= /compile_var !register_of_var_of_register.
+  abstract by move => [] // loid [] <-.
+Defined.
+
+(* -------------------------------------------------------------------- *)
 Definition get_id (c : cmd_name) :=
   match c with
   | ADDC => ADDC_desc
   | SUBC => SUBC_desc
+  | MUL => MUL_desc
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -536,6 +572,7 @@ Definition sem_lo_gen (m: lomem) (id: instr_desc) (li: low_instr) : option lomem
     sem_lo_cmd (match id.(id_name) with
     | ADDC => sem_addc_val
     | SUBC => sem_subc_val
+    | MUL => sem_mul_val
     end) m outx inx
   else None.
 
@@ -543,6 +580,7 @@ Definition cmd_name_of_loid (loid: low_instr) : cmd_name :=
   match loid with
   | ADDC_lo _ _ => ADDC
   | SUBC_lo _ _ => SUBC
+  | MUL_lo => MUL
   end.
 
 Lemma eval_lo_arg_of_ireg m i :
@@ -559,6 +597,8 @@ case: loid.
   by case: addc.
 - move=> r i; rewrite /sem_lo_gen /= ?evalrw /sem_lo_cmd /= ?evalrw.
   by case: subc.
+- rewrite /sem_lo_gen /= /compile_var ! register_of_var_of_register /= /sem_lo_cmd /=.
+  by case: mul.
 Qed.
 
 (* -------------------------------------------------------------------- *)
