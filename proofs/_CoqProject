@@ -6,6 +6,7 @@
 -R logic Jasmin
 -R lang Jasmin
 
+ssrmisc/oseq.v
 3rdparty/Coqlib.v
 3rdparty/Integers.v
 3rdparty/ssrring.v
