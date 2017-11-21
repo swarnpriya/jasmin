@@ -160,19 +160,14 @@ Lemma onth_omap_size {T U : eqType} (f : T -> option U) x0 s i s' :
       onth s' i = Some y /\
       f (nth x0 s i) = Some y.
 Proof.
-move => h; rewrite (omap_size h) => sz.
-have hi := onth_omap i h.
-have := 
-have := (onth_nth_size _ sz).
-rewrite hi.
-  moI
-move/onth_omap => /(_ i) h sz.
-move/eqP; rewrite omap_map oseqP !onth_nth => /eqP.
-move/(congr1 (fun s => nth None s i)) => <-.
-move => h.
-have := nth_map h.
-
-move/nth_map.
+rewrite omap_map (rwP eqP) oseqP => eq lt_is.
+have eqsz: size s = size s'.
++ by move/eqP: eq => /(congr1 size); rewrite !size_map.
+have y0 : U by move: lt_is; rewrite eqsz; case: {+}s' => //.
+exists (nth y0 s' i); rewrite onth_nth -(eqP eq) (nth_map x0) //.
+suff: f (nth x0 s i) = Some (nth y0 s' i) by move=> h; split.
+move/eqP: (eq) => /(congr1 (fun s => nth None s i)).
+by rewrite (nth_map x0) // (nth_map y0) // -eqsz.
 Qed.
 
 (* -------------------------------------------------------------------- *)
