@@ -312,14 +312,23 @@ Definition foon (tys: seq arg_ty) (args: seq expr) (op: interp_tys tys) : option
   else None.
 
 (* -------------------------------------------------------------------- *)
+Definition cmd_name_of_loid (loid: low_instr) : cmd_name :=
+  match loid with
+  | ADDC_lo _ _ => ADDC
+  | SUBC_lo _ _ => SUBC
+  | MUL_lo => MUL
+  end.
+
+(* -------------------------------------------------------------------- *)
 Definition wf_implicit (ad: arg_desc) : bool :=
   if ad is ADImplicit x then
     compile_var x != None
   else true.
 
-Definition wf_sem (tys: seq arg_ty) (sem: interp_tys tys) : Prop :=
+Definition wf_sem (c: cmd_name) (tys: seq arg_ty) (sem: interp_tys tys) : Prop :=
   ∀ irs loid,
     typed_apply_iregs irs sem = Some loid →
+    cmd_name_of_loid loid = c ∧
     operands_of_instr loid = irs.
 
 (* -------------------------------------------------------------------- *)
@@ -332,7 +341,7 @@ Record instr_desc := {
 
   id_in_wf : all wf_implicit id_in;
   id_out_wf : all wf_implicit id_out;
-  id_sem_wf: wf_sem id_sem;
+  id_sem_wf: wf_sem id_name id_sem;
 }.
 
 Definition sem_id
@@ -576,13 +585,6 @@ Definition sem_lo_gen (m: lomem) (id: instr_desc) (li: low_instr) : option lomem
     end) m outx inx
   else None.
 
-Definition cmd_name_of_loid (loid: low_instr) : cmd_name :=
-  match loid with
-  | ADDC_lo _ _ => ADDC
-  | SUBC_lo _ _ => SUBC
-  | MUL_lo => MUL
-  end.
-
 Lemma eval_lo_arg_of_ireg m i :
   eval_lo m (arg_of_ireg i) = eval_ireg m i.
 Proof. by case: i. Qed.
@@ -690,13 +692,35 @@ rewrite get_id_ok; set op := (X in sem_cmd X).
 rewrite /sem_cmd; case E3: (op _) => [outv|//].
 rewrite /sem_lo_gen.
 move: h. rewrite /foon. case h: oseq => // [irs] hirs.
-rewrite (id_sem_wf hirs).
+rewrite (proj2 (id_sem_wf hirs)).
 rewrite /sem_lo_cmd.
 rewrite get_id_ok -/op.
 move => hsets heqm.
 have [ inx [ E4 E5 ] ] := toto_in heqm (id_in_wf _) h E1. rewrite E4.
 have [ outx [ E6 [ lom2 [ E7 E8 ] ] ] ] := toto_out heqm (id_out_wf _) h E2 hsets.
 rewrite E6 E5 E3. eauto.
+Qed.
+
+Lemma compile_cmd_name c vs loid :
+  compile c vs = Some loid →
+  cmd_name_of_loid loid = c.
+Proof.
+  rewrite /compile /foon.
+  case: oseq => // irs h.
+  have := @id_sem_wf (get_id c) irs loid h.
+  rewrite get_id_ok.
+  by case.
+Qed.
+
+Theorem L3 c vs m1 m2 loid lom :
+     compile c vs = Some loid
+  -> sem_id m1 (get_id c) vs = Some m2
+  -> lom_eqv m1 lom
+  -> lom_eqv m2 (sem_lo lom loid).
+Proof.
+  move => hc.
+  move/L2: (hc) => h /h {h} h /h {h} [lom'] [].
+  by rewrite -(compile_cmd_name hc) sem_lo_gen_correct => - [] <-.
 Qed.
 
 (* --------------------------------------------------------------------- *)
