@@ -16,7 +16,7 @@ Notation "m >>= f" := (ssrfun.Option.bind f m) (at level 100).
 Definition var := [countType of nat].
 Parameter mem : Type.
 
-Inductive value :=
+Variant value :=
   | VInt  of int
   | VBool of bool.
 
@@ -31,7 +31,7 @@ Definition sets (m : mem) (x : seq var) (v : seq value) :=
     Some (foldl (fun m xv => set m xv.1 xv.2) m (zip x v))
   else None.
 
-Inductive expr := EVar of var | EInt of int.
+Variant expr := EVar of var | EInt of int.
 
 Axiom expr_eqMixin : Equality.mixin_of expr.
 Canonical expr_eqType := EqType _ expr_eqMixin.
@@ -42,7 +42,7 @@ Definition eval (m : mem) (e : expr) :=
   | EInt i => i
   end.
 
-Inductive cmd_name := ADDC | SUBC | MUL.
+Variant cmd_name := ADDC | SUBC | MUL.
 
 Definition cmd : Type := cmd_name * seq var * seq expr.
 
@@ -81,7 +81,7 @@ Definition semc (m : mem) (c : cmd) : option mem :=
   in sem_cmd op m outv inv.
 
 (* -------------------------------------------------------------------- *)
-Inductive arg_desc :=
+Variant arg_desc :=
 | ADImplicit of var
 | ADExplicit of nat.
 
@@ -110,7 +110,7 @@ Definition arg_desc_EqMixin := PcanEqMixin ADEq.codeK.
 Canonical arg_desc_EqType := EqType arg_desc arg_desc_EqMixin.
 
 (* -------------------------------------------------------------------- *)
-Inductive arg_ty := TYVar | TYLiteral | TYVL.
+Variant arg_ty := TYVar | TYLiteral | TYVL.
 
 Definition locmd : Type := cmd_name * seq var.
 
@@ -128,9 +128,9 @@ Definition sem_ad_out (xs : seq expr) (ad : arg_desc) : option var :=
   end.
 
 (* -------------------------------------------------------------------- *)
-Inductive register := R1 | R2 | R3.
-Inductive flag     : Set := CF.
-Inductive ireg     := IRReg of register | IRImm of int.
+Variant register := R1 | R2 | R3.
+Variant flag     : Set := CF.
+Variant ireg     := IRReg of register | IRImm of int.
 
 Axiom register_eqMixin : Equality.mixin_of register.
 Canonical register_eqType := EqType _ register_eqMixin.
@@ -141,7 +141,7 @@ Canonical flag_eqType := EqType _ flag_eqMixin.
 Axiom ireg_eqMixin : Equality.mixin_of ireg.
 Canonical ireg_eqType := EqType _ ireg_eqMixin.
 
-Inductive low_instr :=
+Variant low_instr :=
 | ADDC_lo of register & ireg
 | SUBC_lo of register & int
 | MUL_lo
@@ -231,7 +231,7 @@ Axiom compile_var_CF : compile_var vCF = Some (DFlag CF).
 Axiom register_of_var_of_register :
   ∀ r, register_of_var (var_of_register r) = Some r.
 
-Inductive lom_eqv (m : mem) (lom : lomem) :=
+Variant lom_eqv (m : mem) (lom : lomem) :=
   | MEqv of
       (forall r, VInt  (lom.(lm_reg) r) = get m (var_of_register r))
     & (forall f, VBool (lom.(lm_fgs) f) = get m (var_of_flag f)).
