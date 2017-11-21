@@ -1,5 +1,6 @@
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect all_algebra.
+Require Import oseq.
 
 Require Import Utf8.
 
@@ -7,41 +8,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* -------------------------------------------------------------------- *)
-Notation onth s n := (nth None (map Some s) n).
-
-Definition oseq {T : Type} (s : seq (option T)) :=
-  if size s == size (pmap idfun s) then Some (pmap idfun s) else None.
-
-Lemma pmap_idfun_some {T : Type} (s : seq T) :
-  pmap idfun [seq Some x | x <- s] = s.
-Proof. by elim: s => /= [|x s ->]. Qed.
-
-Lemma oseqP {T : eqType} (s : seq (option T)) (u : seq T) :
-  (oseq s == Some u) = (s == [seq Some x | x <- u]).
-Proof.
-apply/eqP/eqP=> [|->] //; last first.
-+ by rewrite /oseq pmap_idfun_some size_map eqxx.
-rewrite /oseq; case: ifP=> // /eqP eqsz [<-].
-rewrite pmapS_filter map_id -{1}[s]filter_predT.
-apply: eq_in_filter=> x x_in_s /=; move/esym/eqP: eqsz.
-by rewrite size_pmap -all_count => /allP /(_ _ x_in_s).
-Qed.
-
-(* -------------------------------------------------------------------- *)
-Fixpoint all2 {T U : Type} (p : T -> U -> bool) s1 s2 :=
-  match s1, s2 with
-  | [::], [::] => true
-  | x1 :: s1, x2 :: s2 => p x1 x2 && all2 p s1 s2
-  | _, _ => false
-  end.
-
-Lemma all2P {T U : Type} (p : T -> U -> bool) s1 s2:
-    all2 p s1 s2
-  = (size s1 == size s2) && (all [pred xy | p xy.1 xy.2] (zip s1 s2)).
-Proof.
-by elim: s1 s2 => [|x s1 ih] [|y s2] //=; rewrite ih andbCA eqSS.
-Qed.
+Notation "m >>= f" := (ssrfun.Option.bind f m) (at level 100).
 
 (* -------------------------------------------------------------------- *)
 Parameter var : countType.
@@ -145,13 +112,13 @@ Inductive arg_ty := TYVar | TYLiteral | TYVL.
 
 Definition locmd : Type := cmd_name * seq var.
 
-Definition sem_ad_in (ad : arg_desc) (xs : seq expr) : option expr :=
+Definition sem_ad_in (xs : seq expr) (ad : arg_desc) : option expr :=
   match ad with
   | ADImplicit x => Some (EVar x)
   | ADExplicit n => onth xs n
   end.
 
-Definition sem_ad_out (ad : arg_desc) (xs : seq expr) : option var :=
+Definition sem_ad_out (xs : seq expr) (ad : arg_desc) : option var :=
   match ad with
   | ADImplicit x => Some x
   | ADExplicit n =>
@@ -281,7 +248,7 @@ Fixpoint interp_tys (tys : seq arg_ty) :=
 
 Definition ireg_of_expr (arg: expr) : option ireg :=
   match arg with
-  | EVar x => omap IRReg (register_of_var x)
+  | EVar x => ssrfun.omap IRReg (register_of_var x)
   | EInt i => Some (IRImm i)
   end.
 
@@ -294,8 +261,6 @@ Definition typed_apply_ireg {T} (ty: arg_ty) (arg: ireg) :
   | _, _ => λ _, None
   end.
 
-Notation "m >>= f" := (ssrfun.Option.bind f m) (at level 100).
-
 Fixpoint typed_apply_iregs (tys: seq arg_ty) (iregs: seq ireg)
   : interp_tys tys -> option low_instr :=
   match tys, iregs with
@@ -307,7 +272,7 @@ Fixpoint typed_apply_iregs (tys: seq arg_ty) (iregs: seq ireg)
   end.
 
 Definition foon (tys: seq arg_ty) (args: seq expr) (op: interp_tys tys) : option low_instr :=
-  if oseq (map ireg_of_expr args) is Some iregs then
+  if omap ireg_of_expr args is Some iregs then
     @typed_apply_iregs tys iregs op
   else None.
 
@@ -347,8 +312,8 @@ Record instr_desc := {
 Definition sem_id
   (m : mem) (id : instr_desc) (xs : seq expr) : option mem
 :=
-  let: inx  := oseq [seq sem_ad_in  ad xs | ad <- id.(id_in )] in
-  let: outx := oseq [seq sem_ad_out ad xs | ad <- id.(id_out)] in
+  let: inx  := omap (sem_ad_in xs) id.(id_in ) in
+  let: outx := omap (sem_ad_out xs) id.(id_out) in
 
   if (inx, outx) is (Some inx, Some outx) then
     sem_cmd (match id.(id_name) with
@@ -469,7 +434,7 @@ Definition check_cmd_args
      all2 (check_cmd_res loargs) outx id.(id_out)
   && all2 (check_cmd_arg loargs) inx  id.(id_in ).
 
-(* -------------------------------------------------------------------- *)
+(* --------------------------------------------------------------------
 Lemma Pin (loargs hiargs : seq expr) (ads : seq arg_desc) :
      all2 (check_cmd_arg loargs) hiargs ads
   -> oseq [seq sem_ad_in ad loargs | ad <- ads] = Some hiargs.
@@ -509,6 +474,7 @@ Theorem L c outx inx loargs m1 m2 :
 Proof.
 by case/andP=> h1 h2; rewrite /sem_id /semc (Pin h2) (Pout h1) get_id_ok.
 Qed.
+*)
 
 (* -------------------------------------------------------------------- *)
 Definition compile (c : cmd_name) (args : seq expr) :=
@@ -535,13 +501,13 @@ Definition arg_of_ireg (i: ireg) : argument :=
   | IRImm i => AInt i
   end.
 
-Definition sem_lo_ad_in (ad : arg_desc) (xs : seq ireg) : option argument :=
+Definition sem_lo_ad_in (xs : seq ireg) (ad : arg_desc) : option argument :=
   match ad with
-  | ADImplicit x => omap arg_of_dest (compile_var x)
-  | ADExplicit n => omap arg_of_ireg (onth xs n)
+  | ADImplicit x => ssrfun.omap arg_of_dest (compile_var x)
+  | ADExplicit n => ssrfun.omap arg_of_ireg (onth xs n)
   end.
 
-Definition sem_lo_ad_out (ad : arg_desc) (xs : seq ireg) : option destination :=
+Definition sem_lo_ad_out (xs : seq ireg) (ad : arg_desc) : option destination :=
   match ad with
   | ADImplicit x => compile_var x
   | ADExplicit n =>
@@ -574,8 +540,8 @@ Definition sem_lo_cmd (op : seq value -> option (seq value)) m outv inv :=
 
 Definition sem_lo_gen (m: lomem) (id: instr_desc) (li: low_instr) : option lomem :=
   let xs := operands_of_instr li in
-  let: inx  := oseq [seq sem_lo_ad_in  ad xs | ad <- id.(id_in )] in
-  let: outx := oseq [seq sem_lo_ad_out ad xs | ad <- id.(id_out)] in
+  let: inx  := omap (sem_lo_ad_in xs) id.(id_in ) in
+  let: outx := omap (sem_lo_ad_out xs) id.(id_out) in
 
   if (inx, outx) is (Some inx, Some outx) then
     sem_lo_cmd (match id.(id_name) with
@@ -606,35 +572,28 @@ Qed.
 (* -------------------------------------------------------------------- *)
 Definition argument_of_expr (e : expr) : option argument :=
   match e with
-  | EVar x => omap arg_of_dest (compile_var x)
+  | EVar x => ssrfun.omap arg_of_dest (compile_var x)
   | EInt i => Some (AInt i)
   end.
-
-Lemma onth_some {T} s n (v w: T) :
-  onth s n = Some v ↔ n < size s ∧ nth w s n = v.
-Proof.
-Admitted.
 
 Lemma toto_in ads vs args irs m lom :
   lom_eqv m lom →
   all wf_implicit ads →
-  oseq (map ireg_of_expr vs) = Some irs →
-  oseq [seq sem_ad_in ad vs | ad <- ads ] = Some args →
-  ∃ loargs, oseq [seq sem_lo_ad_in ad irs | ad <- ads ] = Some loargs ∧
+  omap ireg_of_expr vs = Some irs →
+  omap (sem_ad_in vs) ads = Some args →
+  ∃ loargs, omap (sem_lo_ad_in irs) ads = Some loargs ∧
   map (eval_lo lom) loargs = map (eval m) args.
 Proof.
   move => eqm hwf hirs.
-  elim: ads args hwf => //=.
+  elim: ads args hwf.
   - by move => args _ [] <-; exists [::].
-  move => ad ads ih args /andP [hwf hwf'] /eqP; rewrite oseqP => /eqP.
-  case: args ih => // arg args ih.
-  case h: sem_ad_in => //= [e] [?]; subst e.
-  move/eqP; rewrite -oseqP => /eqP /(ih _ hwf') {ih} [loargs] [hlo hlo'].
-  case: ad h hwf.
+  move => ad ads ih args' h; rewrite /= in h; case/andP: h => hwf hwf'.
+  case/omap_consI => arg [] args [] -> ha has.
+  case: (ih _ hwf' has) => {ih} loargs [hlo hlo'].
+  case: ad ha hwf.
   + move => x /= [] ?; subst arg.
     case hd: compile_var => [ d | ] // _.
-    exists (arg_of_dest d :: loargs); split.
-    * admit. (* oseqp *)
+    exists (arg_of_dest d :: loargs); split; first by rewrite /= hlo.
     rewrite/=; f_equal => //.
     case: eqm => hr hf.
     move: hd; rewrite/compile_var.
@@ -642,19 +601,26 @@ Proof.
     * by case => <- /=; rewrite hr (var_of_register_of_var eq1).
     case eq2: flag_of_var => [ f | ] //.
     by case => <- /=; rewrite hf (var_of_flag_of_var eq2).
-  move => /= x /(onth_some _ _ _ arg) [hx hx'].
-  rewrite  /sem_ad_in {1}/sem_lo_ad_in.
-  move: hirs => /eqP; rewrite oseqP => /eqP heq.
-  have oeq : onth irs x = Some (nth (IRReg R1) irs x).
-  rewrite (onth_some _ _ _ (IRReg R1)).
-  by rewrite - (size_map Some) -heq size_map.
-  move => _.
-  exists (arg_of_ireg (nth (IRReg R1) irs x) :: loargs).
-  split.
+  move => /= x /onthP - /(_ (EInt 0)) /andP [] hx /eqP hx' _; subst arg.
+  rewrite (onth_omap_size (EInt 0) hirs hx) -/(ireg_of_expr _).
+  rewrite (onth_omap x hirs) -/ireg_of_expr (onth_nth_size (EInt 0) hx) /=.
+  
+  have : onth vs x = Some (nth (EInt 0) vs x).
+  apply: onth_nth_size.
+
+  Search _ (Option.apply).
+  have : onth irs x = (onth vs x >>= ireg_of_expr) by exact: (onth_omap x hirs).
+  move => ->.
+  rewrite (omap_size hirs) in hx.
+  rewrite (onth_nth_size (IRReg R1) hx) /= hlo /=.
+  eexists; split; first by reflexivity.
+  rewrite /=; f_equal => //.
+  rewrite eval_lo_arg_of_ireg /=.
   apply/eqP; rewrite oseqP; apply /eqP => /=.
   rewrite oeq => //=.
   f_equal => //.
   by apply/eqP; rewrite -oseqP; apply/eqP.
+
   rewrite /=. f_equal => //.
   have : ireg_of_expr arg = Some (nth (IRReg R1) irs x).
   rewrite -oeq -hx'.
@@ -664,7 +630,7 @@ Proof.
   by case eq1: register_of_var => [ y | ] // [] <-; rewrite eqm (var_of_register_of_var eq1).
   by move => s; case: register_of_var.
   by move => ? [] ->.
-Admitted.
+Qed.
 
 Lemma toto_out ads vs out irs m1 lom1 outv m2 :
   lom_eqv m1 lom1 →

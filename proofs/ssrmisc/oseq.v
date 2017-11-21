@@ -1,6 +1,10 @@
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 (* -------------------------------------------------------------------- *)
 Lemma pmap_idfun_some {T : Type} (s : seq T) :
   pmap idfun [seq Some x | x <- s] = s.
@@ -45,6 +49,14 @@ Proof.
 move=> lt_is; apply/eqP/eqP.
 + by move/onthP => /(_ x0); rewrite lt_is => /eqP.
 + by move=> h; apply/(onthP x0); rewrite lt_is; apply/eqP.
+Qed.
+
+(* -------------------------------------------------------------------- *)
+Lemma onth_nth_size {T: eqType} (x0: T) s i :
+  i < size s ->
+  onth s i = Some (nth x0 s i).
+Proof.
+by move => sz; apply/eqP; rewrite (onth_sizeP x0).
 Qed.
 
 (* -------------------------------------------------------------------- *)
@@ -113,6 +125,25 @@ by case/mapP=> x x_in_s /esym fxE; exists x.
 Qed.
 
 (* -------------------------------------------------------------------- *)
+Lemma omap_consI {T U: Type} {f: T -> option U} {x} s s' :
+  omap f (x :: s) = Some s' ->
+  exists y s'', [/\ s' = y :: s'', f x = Some y & omap f s = Some s'' ].
+Proof.
+rewrite/=; case: (f _) => // y.
+case: omap => // s'' [] <-.
+by exists y, s''.
+Qed.
+
+(* -------------------------------------------------------------------- *)
+Lemma omap_size {T: Type} {U: eqType} (f: T -> option U) s s' :
+  omap f s = Some s' ->
+  size s = size s'.
+Proof.
+  rewrite omap_map => /eqP; rewrite oseqP => /eqP.
+  by rewrite -(size_map f s) -(size_map Some s') => ->.
+Qed.
+
+(* -------------------------------------------------------------------- *)
 Lemma onth_omap {T : Type} {U : eqType} (f : T -> option U) s i s' :
      [oseq f x | x <- s] = Some s'
   -> onth s' i = obind f (onth s i).
@@ -120,6 +151,16 @@ Proof.
 move/eqP; rewrite omap_map oseqP !onth_nth => /eqP.
 move/(congr1 (fun s => nth None s i)) => <-.
 by elim: s i => [|x s ih] [|i] /=.
+Qed.
+
+Lemma onth_omap_size {T : Type} {U : eqType} (f : T -> option U) x0 s i s' :
+     [oseq f x | x <- s] = Some s'
+  -> i < size s
+  -> onth s' i = f (nth x0 s i).
+Proof.
+move/eqP; rewrite omap_map oseqP !onth_nth => /eqP.
+move/(congr1 (fun s => nth None s i)) => <-.
+exact: nth_map.
 Qed.
 
 (* -------------------------------------------------------------------- *)
