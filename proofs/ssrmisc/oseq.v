@@ -153,14 +153,26 @@ move/(congr1 (fun s => nth None s i)) => <-.
 by elim: s i => [|x s ih] [|i] /=.
 Qed.
 
-Lemma onth_omap_size {T : Type} {U : eqType} (f : T -> option U) x0 s i s' :
+Lemma onth_omap_size {T U : eqType} (f : T -> option U) x0 s i s' :
      [oseq f x | x <- s] = Some s'
   -> i < size s
-  -> onth s' i = f (nth x0 s i).
+  -> exists y,
+      onth s' i = Some y /\
+      f (nth x0 s i) = Some y.
 Proof.
+move => h; rewrite (omap_size h) => sz.
+have hi := onth_omap i h.
+have := 
+have := (onth_nth_size _ sz).
+rewrite hi.
+  moI
+move/onth_omap => /(_ i) h sz.
 move/eqP; rewrite omap_map oseqP !onth_nth => /eqP.
 move/(congr1 (fun s => nth None s i)) => <-.
-exact: nth_map.
+move => h.
+have := nth_map h.
+
+move/nth_map.
 Qed.
 
 (* -------------------------------------------------------------------- *)
