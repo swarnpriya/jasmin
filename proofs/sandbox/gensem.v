@@ -47,8 +47,6 @@ Qed.
 Parameter var : countType.
 Parameter mem : Type.
 
-Parameter vCF : var.
-
 Inductive value :=
   | VInt  of int
   | VBool of bool.
@@ -67,7 +65,7 @@ Definition sets (m : mem) (x : seq var) (v : seq value) :=
 Inductive expr := EVar of var | EInt of int.
 
 Axiom expr_eqMixin : Equality.mixin_of expr.
-Canonical expr_eqType := EqType expr expr_eqMixin.
+Canonical expr_eqType := EqType _ expr_eqMixin.
 
 Definition eval (m : mem) (e : expr) :=
   match e return value with
@@ -164,9 +162,18 @@ Canonical register_eqType := EqType _ register_eqMixin.
 Axiom flag_eqMixin : Equality.mixin_of flag.
 Canonical flag_eqType := EqType _ flag_eqMixin.
 
+Axiom ireg_eqMixin : Equality.mixin_of ireg.
+Canonical ireg_eqType := EqType _ ireg_eqMixin.
+
 Inductive low_instr :=
 | ADDC_lo of register & ireg
 | SUBC_lo of register & int.
+
+Definition operands_of_instr (li: low_instr) : seq ireg :=
+  match li with
+  | ADDC_lo x y => [:: IRReg x ; y ]
+  | SUBC_lo x y => [:: IRReg x ; IRImm y ]
+  end.
 
 Record lomem := {
   lm_reg : register -> int;
@@ -191,15 +198,57 @@ Variant destination :=
 | DReg of register
 | DFlag of flag.
 
-Parameter compile_var : var -> option destination.
+Axiom destination_eqMixin : Equality.mixin_of destination.
+Canonical destination_eqType := EqType _ destination_eqMixin.
+
+Parameter var_of_register : register -> var.
+Parameter var_of_flag : flag -> var.
+
+Axiom var_of_uniq :
+  uniq
+    (map var_of_register [:: R1 ; R2 ; R3 ] ++ map var_of_flag [:: CF ]).
+
+Definition register_of_var (v: var) : option register :=
+  if v == var_of_register R1 then Some R1 else
+  if v == var_of_register R2 then Some R2 else
+  if v == var_of_register R3 then Some R3 else
+  None.
+
+Lemma var_of_register_of_var v r :
+  register_of_var v = Some r →
+  var_of_register r = v.
+Proof.
+  rewrite /register_of_var.
+  case: eqP; first by move => -> [] ->. move => _.
+  case: eqP; first by move => -> [] ->. move => _.
+  case: eqP; first by move => -> [] ->.
+  done.
+Qed.
+
+Definition flag_of_var (v: var) : option flag :=
+  if v == var_of_flag CF then Some CF else
+  None.
+
+Lemma var_of_flag_of_var v f :
+  flag_of_var v = Some f →
+  var_of_flag f = v.
+Proof.
+  by rewrite/flag_of_var; case: eqP => // -> [] <-.
+Qed.
+
+Definition compile_var (v: var) : option destination :=
+  match register_of_var v with
+  | Some r => Some (DReg r)
+  | None =>
+    match flag_of_var v with
+    | Some f => Some (DFlag f)
+    | None => None
+    end
+  end.
+
+Definition vCF : var := var_of_flag CF.
 
 Axiom compile_var_CF : compile_var vCF = Some (DFlag CF).
-
-Parameter register_of_var : var -> option register.
-Parameter var_of_register : register -> var.
-
-Parameter flag_of_var : var -> option flag.
-Parameter var_of_flag : flag -> var.
 
 Inductive lom_eqv (m : mem) (lom : lomem) :=
   | MEqv of
@@ -218,33 +267,48 @@ Fixpoint interp_tys (tys : seq arg_ty) :=
     interp_ty ty -> interp_tys tys
   else low_instr.
 
-
-Definition foo1 {T} (ty : arg_ty) (arg : expr) :=
-  match ty, arg return (interp_ty ty -> T) -> option T with
-  | TYVar, EVar x => fun op =>
-      if register_of_var x is Some r then Some (op r) else None
-  | TYVL, EVar x => fun op =>
-      if register_of_var x is Some r then Some (op (IRReg r)) else None
-  | TYVL, EInt i => fun op => Some (op (IRImm i))
-  | TYLiteral, EInt i => fun op => Some (op i)
-  | _, _ => fun op => None
+Definition ireg_of_expr (arg: expr) : option ireg :=
+  match arg with
+  | EVar x => omap IRReg (register_of_var x)
+  | EInt i => Some (IRImm i)
   end.
 
-Fixpoint foon (tys : seq arg_ty) (args : seq expr)
+Definition typed_apply_ireg {T} (ty: arg_ty) (arg: ireg) : 
+  (interp_ty ty → T) → option T :=
+  match ty, arg with
+  | TYVar, IRReg r => λ op, Some (op r)
+  | TYLiteral, IRImm i => λ op, Some (op i)
+  | TYVL, _ => λ op, Some (op arg)
+  | _, _ => λ _, None
+  end.
+
+Notation "m >>= f" := (ssrfun.Option.bind f m) (at level 100).
+
+Fixpoint typed_apply_iregs (tys: seq arg_ty) (iregs: seq ireg)
   : interp_tys tys -> option low_instr :=
-
-  match args, tys return interp_tys tys -> option low_instr with
-  | arg :: args, ty :: tys => fun op =>
-      if @foo1 _ ty arg op is Some op then
-        @foon tys args op
-      else None
-
-  | [::], [::] =>
-      fun op => Some op
-
-  | _, _ =>
-      fun op => None
+  match tys, iregs with
+  | [::], [::] => Some
+  | ty :: tys', ir :: iregs' => λ op,
+                          @typed_apply_ireg _ ty ir op >>=
+                          @typed_apply_iregs tys' iregs'
+  | _, _ => λ _, None
   end.
+
+Definition foon (tys: seq arg_ty) (args: seq expr) (op: interp_tys tys) : option low_instr :=
+  if oseq (map ireg_of_expr args) is Some iregs then
+    @typed_apply_iregs tys iregs op
+  else None.
+
+(* -------------------------------------------------------------------- *)
+Definition wf_implicit (ad: arg_desc) : bool :=
+  if ad is ADImplicit x then
+    compile_var x != None
+  else true.
+
+Definition wf_sem (tys: seq arg_ty) (sem: interp_tys tys) : Prop :=
+  ∀ irs loid,
+    typed_apply_iregs irs sem = Some loid →
+    operands_of_instr loid = irs.
 
 (* -------------------------------------------------------------------- *)
 Record instr_desc := {
@@ -253,6 +317,10 @@ Record instr_desc := {
   id_out  : seq arg_desc;
   id_lo   : seq arg_ty;
   id_sem  : interp_tys id_lo;
+
+  id_in_wf : all wf_implicit id_in;
+  id_out_wf : all wf_implicit id_out;
+  id_sem_wf: wf_sem id_sem;
 }.
 
 Definition sem_id
@@ -291,22 +359,32 @@ Definition sem_lo (m : lomem) (i : low_instr) : lomem :=
   end.
 
 (* -------------------------------------------------------------------- *)
-Definition ADDC_desc := {|
+Definition ADDC_desc : instr_desc. refine {|
   id_name := ADDC;
   id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
   id_out  := [:: ADExplicit 0; ADImplicit vCF];
   id_lo   := [:: TYVar; TYVL];
   id_sem  := ADDC_lo;
 |}.
+Proof.
+  abstract by rewrite/= compile_var_CF.
+  abstract by rewrite/= compile_var_CF.
+  abstract by move => irs loid; case: irs => // [] // [] // x [] // y [] // [] <-.
+Defined.
 
 (* -------------------------------------------------------------------- *)
-Definition SUBC_desc := {|
+Definition SUBC_desc : instr_desc. refine {|
   id_name := SUBC;
   id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
   id_out  := [:: ADExplicit 0; ADImplicit vCF];
   id_lo   := [:: TYVar; TYLiteral];
   id_sem  := SUBC_lo;
 |}.
+Proof.
+  abstract by rewrite/= compile_var_CF.
+  abstract by rewrite/= compile_var_CF.
+  abstract by case => // [] // [] // x [] // [] // n [] // loid [] <-.
+Defined.
 
 (* -------------------------------------------------------------------- *)
 Definition get_id (c : cmd_name) :=
@@ -397,6 +475,9 @@ Variant argument :=
 | AFlag of flag
 | AInt of int.
 
+Axiom argument_eqMixin : Equality.mixin_of argument.
+Canonical argument_eqType := EqType argument argument_eqMixin.
+
 Definition arg_of_dest (d: destination): argument :=
   match d with
   | DReg r => AReg r
@@ -420,12 +501,6 @@ Definition sem_lo_ad_out (ad : arg_desc) (xs : seq ireg) : option destination :=
   | ADImplicit x => compile_var x
   | ADExplicit n =>
       if onth xs n is Some (IRReg y) then Some (DReg y) else None
-  end.
-
-Definition operands_of_instr (li: low_instr) : seq ireg :=
-  match li with
-  | ADDC_lo x y => [:: IRReg x ; y ]
-  | SUBC_lo x y => [:: IRReg x ; IRImm y ]
   end.
 
 Definition eval_lo (m : lomem) (a : argument) : value :=
@@ -493,18 +568,72 @@ Definition argument_of_expr (e : expr) : option argument :=
   | EInt i => Some (AInt i)
   end.
 
-(* --------------------------------------------------------------------- *)
-Lemma L' id vs args loid :
-     foon vs (id_sem id) = Some loid
-  -> oseq [seq sem_ad_in ad vs | ad <- id_in id] = Some args
-  ->   oseq [seq sem_lo_ad_in ad (operands_of_instr loid) | ad <- id_in id]
-     = oseq [seq argument_of_expr e | e <- args].
+Lemma onth_some {T} s n (v w: T) :
+  onth s n = Some v ↔ n < size s ∧ nth w s n = v.
 Proof.
-case: id => c iin _ ilo isem /= h.
-rewrite (rwP eqP) oseqP -(rwP eqP) => eq; congr oseq.
-elim: iin args eq => [|iin1 iin ih] [|arg args] //=.
-case=> eq1 /ih ->; congr (_ :: _).
+Admitted.
 
+Lemma toto_in ads vs args irs m lom :
+  lom_eqv m lom →
+  all wf_implicit ads →
+  oseq (map ireg_of_expr vs) = Some irs →
+  oseq [seq sem_ad_in ad vs | ad <- ads ] = Some args →
+  ∃ loargs, oseq [seq sem_lo_ad_in ad irs | ad <- ads ] = Some loargs ∧
+  map (eval_lo lom) loargs = map (eval m) args.
+Proof.
+  move => eqm hwf hirs.
+  elim: ads args hwf => //=.
+  - by move => args _ [] <-; exists [::].
+  move => ad ads ih args /andP [hwf hwf'] /eqP; rewrite oseqP => /eqP.
+  case: args ih => // arg args ih.
+  case h: sem_ad_in => //= [e] [?]; subst e.
+  move/eqP; rewrite -oseqP => /eqP /(ih _ hwf') {ih} [loargs] [hlo hlo'].
+  case: ad h hwf.
+  + move => x /= [] ?; subst arg.
+    case hd: compile_var => [ d | ] // _.
+    exists (arg_of_dest d :: loargs); split.
+    * admit. (* oseqp *)
+    rewrite/=; f_equal => //.
+    case: eqm => hr hf.
+    move: hd; rewrite/compile_var.
+    case eq1: register_of_var => [ r | ].
+    * by case => <- /=; rewrite hr (var_of_register_of_var eq1).
+    case eq2: flag_of_var => [ f | ] //.
+    by case => <- /=; rewrite hf (var_of_flag_of_var eq2).
+  move => /= x /(onth_some _ _ _ arg) [hx hx'].
+  rewrite  /sem_ad_in {1}/sem_lo_ad_in.
+  move: hirs => /eqP; rewrite oseqP => /eqP heq.
+  have oeq : onth irs x = Some (nth (IRReg R1) irs x).
+  rewrite (onth_some _ _ _ (IRReg R1)).
+  by rewrite - (size_map Some) -heq size_map.
+  move => _.
+  exists (arg_of_ireg (nth (IRReg R1) irs x) :: loargs).
+  split.
+  apply/eqP; rewrite oseqP; apply /eqP => /=.
+  rewrite oeq => //=.
+  f_equal => //.
+  by apply/eqP; rewrite -oseqP; apply/eqP.
+  rewrite /=. f_equal => //.
+  have : ireg_of_expr arg = Some (nth (IRReg R1) irs x).
+  rewrite -oeq -hx'.
+  admit. (* onth / omap *)
+  case: nth {hx'} arg => [ r | i ] [] //=.
+  move => s; case: eqm => eqm _.
+  by case eq1: register_of_var => [ y | ] // [] <-; rewrite eqm (var_of_register_of_var eq1).
+  by move => s; case: register_of_var.
+  by move => ? [] ->.
+Admitted.
+
+Lemma toto_out ads vs out irs m1 lom1 outv m2 :
+  lom_eqv m1 lom1 →
+  all wf_implicit ads →
+  oseq (map ireg_of_expr vs) = Some irs →
+  oseq [seq sem_ad_out ad vs | ad <- ads ] = Some out →
+  sets m1 out outv = Some m2 →
+  ∃ outx, oseq [seq sem_lo_ad_out ad irs | ad <- ads ] = Some outx ∧
+  ∃ lom2 : lomem, sets_lo lom1 outx outv = Some lom2 ∧ lom_eqv m2 lom2.
+Proof.
+Admitted.
 
 (* -------------------------------------------------------------------- *)
 Theorem L2 c vs m1 m2 loid lom1:
@@ -520,5 +649,34 @@ case E2: (oseq _) => [out|//].
 rewrite get_id_ok; set op := (X in sem_cmd X).
 rewrite /sem_cmd; case E3: (op _) => [outv|//].
 rewrite /sem_lo_gen.
+move: h. rewrite /foon. case h: oseq => // [irs] hirs.
+rewrite (id_sem_wf hirs).
+rewrite /sem_lo_cmd.
+rewrite get_id_ok -/op.
+move => hsets heqm.
+have [ inx [ E4 E5 ] ] := toto_in heqm (id_in_wf _) h E1. rewrite E4.
+have [ outx [ E6 [ lom2 [ E7 E8 ] ] ] ] := toto_out heqm (id_out_wf _) h E2 hsets.
+rewrite E6 E5 E3. eauto.
+Qed.
 
-Abort.
+(* --------------------------------------------------------------------- *)
+Lemma L' id vs args loid :
+     foon vs (id_sem id) = Some loid
+  -> oseq [seq sem_ad_in ad vs | ad <- id_in id] = Some args
+  ->   oseq [seq sem_lo_ad_in ad (operands_of_instr loid) | ad <- id_in id]
+     = oseq [seq argument_of_expr e | e <- args].
+Proof.
+case: id => c iin _ ilo isem /= h.
+rewrite (rwP eqP) oseqP -(rwP eqP) => eq; congr oseq.
+move: h. rewrite /foon.
+elim: iin args eq => [|iin1 iin ih] [|arg args] //=.
+case=> eq1 /ih {ih iin} ->; congr (_ :: _) => {args}.
+elim: ilo isem h eq1 => /=.
+- case: vs => // ? []
+
+have :
+  operands_of_instr loid = oseq (map argument_of_expr vs).
+elim: 
+rewrite/operands_of_instr.
+
+
