@@ -602,43 +602,23 @@ Proof.
     case eq2: flag_of_var => [ f | ] //.
     by case => <- /=; rewrite hf (var_of_flag_of_var eq2).
   move => /= x /onthP - /(_ (EInt 0)) /andP [] hx /eqP hx' _; subst arg.
-  rewrite (onth_omap_size (EInt 0) hirs hx) -/(ireg_of_expr _).
-  rewrite (onth_omap x hirs) -/ireg_of_expr (onth_nth_size (EInt 0) hx) /=.
-  
-  have : onth vs x = Some (nth (EInt 0) vs x).
-  apply: onth_nth_size.
-
-  Search _ (Option.apply).
-  have : onth irs x = (onth vs x >>= ireg_of_expr) by exact: (onth_omap x hirs).
-  move => ->.
-  rewrite (omap_size hirs) in hx.
-  rewrite (onth_nth_size (IRReg R1) hx) /= hlo /=.
+  case: (onth_omap_size (EInt 0) hirs hx) => y [hy eqy].
+  rewrite hy /= hlo /=.
   eexists; split; first by reflexivity.
   rewrite /=; f_equal => //.
   rewrite eval_lo_arg_of_ireg /=.
-  apply/eqP; rewrite oseqP; apply /eqP => /=.
-  rewrite oeq => //=.
-  f_equal => //.
-  by apply/eqP; rewrite -oseqP; apply/eqP.
-
-  rewrite /=. f_equal => //.
-  have : ireg_of_expr arg = Some (nth (IRReg R1) irs x).
-  rewrite -oeq -hx'.
-  admit. (* onth / omap *)
-  case: nth {hx'} arg => [ r | i ] [] //=.
-  move => s; case: eqm => eqm _.
-  by case eq1: register_of_var => [ y | ] // [] <-; rewrite eqm (var_of_register_of_var eq1).
-  by move => s; case: register_of_var.
-  by move => ? [] ->.
+  case eqx: nth eqy => [ vx | i ]; last by case => <-.
+  case: eqm => eqm _.
+  by case eq1: register_of_var => [ z | ] // [] <-; rewrite eqm (var_of_register_of_var eq1).
 Qed.
 
 Lemma toto_out ads vs out irs m1 lom1 outv m2 :
   lom_eqv m1 lom1 →
   all wf_implicit ads →
-  oseq (map ireg_of_expr vs) = Some irs →
-  oseq [seq sem_ad_out ad vs | ad <- ads ] = Some out →
+  omap ireg_of_expr vs = Some irs →
+  omap (sem_ad_out vs) ads = Some out →
   sets m1 out outv = Some m2 →
-  ∃ outx, oseq [seq sem_lo_ad_out ad irs | ad <- ads ] = Some outx ∧
+  ∃ outx, omap (sem_lo_ad_out irs) ads = Some outx ∧
   ∃ lom2 : lomem, sets_lo lom1 outx outv = Some lom2 ∧ lom_eqv m2 lom2.
 Proof.
 Admitted.
@@ -652,12 +632,12 @@ Theorem L2 c vs m1 m2 loid lom1:
   /\ lom_eqv m2 lom2.
 Proof.
 rewrite /compile /sem_id => h.
-case E1: (oseq _) => [args|//].
-case E2: (oseq _) => [out|//].
+case E1: (omap _) => [args|//].
+case E2: (omap _) => [out|//].
 rewrite get_id_ok; set op := (X in sem_cmd X).
 rewrite /sem_cmd; case E3: (op _) => [outv|//].
 rewrite /sem_lo_gen.
-move: h. rewrite /foon. case h: oseq => // [irs] hirs.
+move: h. rewrite /foon. case h: omap => // [irs] hirs.
 rewrite (proj2 (id_sem_wf hirs)).
 rewrite /sem_lo_cmd.
 rewrite get_id_ok -/op.
@@ -672,7 +652,7 @@ Lemma compile_cmd_name c vs loid :
   cmd_name_of_loid loid = c.
 Proof.
   rewrite /compile /foon.
-  case: oseq => // irs h.
+  case: omap => // irs h.
   have := @id_sem_wf (get_id c) irs loid h.
   rewrite get_id_ok.
   by case.
@@ -688,25 +668,3 @@ Proof.
   move/L2: (hc) => h /h {h} h /h {h} [lom'] [].
   by rewrite -(compile_cmd_name hc) sem_lo_gen_correct => - [] <-.
 Qed.
-
-(* --------------------------------------------------------------------- *)
-Lemma L' id vs args loid :
-     foon vs (id_sem id) = Some loid
-  -> oseq [seq sem_ad_in ad vs | ad <- id_in id] = Some args
-  ->   oseq [seq sem_lo_ad_in ad (operands_of_instr loid) | ad <- id_in id]
-     = oseq [seq argument_of_expr e | e <- args].
-Proof.
-case: id => c iin _ ilo isem /= h.
-rewrite (rwP eqP) oseqP -(rwP eqP) => eq; congr oseq.
-move: h. rewrite /foon.
-elim: iin args eq => [|iin1 iin ih] [|arg args] //=.
-case=> eq1 /ih {ih iin} ->; congr (_ :: _) => {args}.
-elim: ilo isem h eq1 => /=.
-- case: vs => // ? []
-
-have :
-  operands_of_instr loid = oseq (map argument_of_expr vs).
-elim: 
-rewrite/operands_of_instr.
-
-
