@@ -93,15 +93,17 @@ Definition sem_cmd (op : seq value -> option (seq value)) m outv inv :=
     sets m outv res
   else None.
 
+Definition semop (c : cmd_name) := 
+  match c with
+  | ADDC => sem_addc_val
+  | SUBC => sem_subc_val
+  | MUL => sem_mul_val
+  end.
+
 Definition semc (m : mem) (c : cmd) : option mem :=
   let: (c, outv, inv) := c in
-  let: op :=
-    match c with
-    | ADDC => sem_addc_val
-    | SUBC => sem_subc_val
-    | MUL => sem_mul_val
-    end
-  in sem_cmd op m outv inv.
+  let: op := semop c in
+  sem_cmd op m outv inv.
 
 (* End high level language *)
 
@@ -287,26 +289,6 @@ Fixpoint typed_apply_iregs (tys: seq arg_ty) (iregs: seq ireg)
   | _, _ => λ _, None
   end.
 
-(* -------------------------------------------------------------------- *)
-Definition cmd_name_of_loid (loid: low_instr) : cmd_name :=
-  match loid with
-  | ADDC_lo _ _ => ADDC
-  | SUBC_lo _ _ => SUBC
-  | MUL_lo => MUL
-  end.
-
-Definition operands_of_loid (li: low_instr) : seq ireg :=
-  match li with
-  | ADDC_lo x y => [:: IRReg x ; y ]
-  | SUBC_lo x y => [:: IRReg x ; IRImm y ]
-  | MUL_lo => [::]
-  end.
-
-Definition wf_sem (c: cmd_name) (tys: seq arg_ty) (sem: interp_tys tys) : Prop :=
-  ∀ irs loid,
-    typed_apply_iregs irs sem = Some loid →
-    cmd_name_of_loid loid = c ∧
-    operands_of_loid loid = irs.
 
 (* -------------------------------------------------------------------- *)
 Variant arg_desc :=
@@ -320,18 +302,6 @@ Definition wf_implicit (ad: arg_desc) : bool :=
   if ad is ADImplicit x then
     compile_var x != None
   else true.
-
-Record instr_desc := {
-  id_name : cmd_name;
-  id_in   : seq arg_desc;
-  id_out  : seq arg_desc;
-  id_lo   : seq arg_ty;
-  id_sem  : interp_tys id_lo;
-
-  id_in_wf : all wf_implicit id_in;
-  id_out_wf : all wf_implicit id_out;
-  id_sem_wf: wf_sem id_name id_sem;
-}.
 
 (* -------------------------------------------------------------------- *)
 (* Generated ASM semantics                                              *)
@@ -393,18 +363,58 @@ Definition sem_lo_cmd (op : seq value -> option (seq value)) m outv inv :=
     sets_lo m outv res
   else None.
 
-Definition sem_lo_gen (m: lomem) (id: instr_desc) (li: low_instr) : option lomem :=
+Definition cmd_name_of_loid (loid: low_instr) : cmd_name :=
+  match loid with
+  | ADDC_lo _ _ => ADDC
+  | SUBC_lo _ _ => SUBC
+  | MUL_lo => MUL
+  end.
+
+Definition operands_of_loid (li: low_instr) : seq ireg :=
+  match li with
+  | ADDC_lo x y => [:: IRReg x ; y ]
+  | SUBC_lo x y => [:: IRReg x ; IRImm y ]
+  | MUL_lo => [::]
+  end.
+
+Definition sem_lo_gen_aux (m: lomem) 
+     (c:cmd_name) (outx inx: seq arg_desc) (li: low_instr) : option lomem :=
   let xs := operands_of_loid li in
-  let: inx  := omap (sem_lo_ad_in xs) id.(id_in ) in
-  let: outx := omap (sem_lo_ad_out xs) id.(id_out) in
+  let inx  := omap (sem_lo_ad_in xs) inx in
+  let outx := omap (sem_lo_ad_out xs) outx in
 
   if (inx, outx) is (Some inx, Some outx) then
-    sem_lo_cmd (match id.(id_name) with
-    | ADDC => sem_addc_val
-    | SUBC => sem_subc_val
-    | MUL => sem_mul_val
-    end) m outx inx
+    sem_lo_cmd (semop c) m outx inx
   else None.
+
+(* -------------------------------------------------------------------- *)
+
+Definition wf_sem (c: cmd_name) (tys: seq arg_ty) (sem: interp_tys tys) : Prop :=
+  ∀ irs loid,
+    typed_apply_iregs irs sem = Some loid →
+    cmd_name_of_loid loid = c ∧
+    operands_of_loid loid = irs.
+
+Definition gen_sem_correct (tys: seq arg_ty) id_name id_out id_in (sem:interp_tys tys) := 
+  ∀ m irs loid,
+    typed_apply_iregs irs sem = Some loid →
+    sem_lo_gen_aux m id_name id_out id_in loid = Some (sem_lo m loid).     
+
+Record instr_desc := {
+  id_name : cmd_name;
+  id_in   : seq arg_desc;
+  id_out  : seq arg_desc;
+  id_lo   : seq arg_ty;
+  id_sem  : interp_tys id_lo;
+
+  id_in_wf : all wf_implicit id_in;
+  id_out_wf : all wf_implicit id_out;
+  id_sem_wf: wf_sem id_name id_sem;
+  id_gen_sem_wf : gen_sem_correct id_name id_out id_in id_sem;
+}.
+
+Definition sem_lo_gen (m: lomem) (id: instr_desc) (li: low_instr) : option lomem :=
+  sem_lo_gen_aux m id.(id_name) id.(id_out) id.(id_in) li.
 
 (* -------------------------------------------------------------------- *)
 (* Generated mixed semantics                                            *)
@@ -428,16 +438,17 @@ Definition sem_id
   let: outx := omap (sem_ad_out xs) id.(id_out) in
 
   if (inx, outx) is (Some inx, Some outx) then
-    sem_cmd (match id.(id_name) with
-    | ADDC => sem_addc_val
-    | SUBC => sem_subc_val
-    | MUL => sem_mul_val
-    end) m outx inx
+    sem_cmd (semop id.(id_name)) m outx inx
   else None.
-
 
 (* -------------------------------------------------------------------- *)
 (* Definitions of descriptors                                           *)
+
+Lemma eval_lo_arg_of_ireg m i :
+  eval_lo m (arg_of_ireg i) = eval_ireg m i.
+Proof. by case: i. Qed.
+
+Definition evalrw := (compile_var_CF, eval_lo_arg_of_ireg).
 
 Definition ADDC_desc : instr_desc. refine {|
   id_name := ADDC;
@@ -450,6 +461,10 @@ Proof.
   abstract by rewrite/= compile_var_CF.
   abstract by rewrite/= compile_var_CF.
   abstract by move => irs loid; case: irs => // [] // [] // x [] // y [] // [] <-.
+  abstract 
+    by move=> r [] // [] // x [] // y [] // loid [<-];
+    rewrite /sem_lo_gen_aux /= ?evalrw /sem_lo_cmd /= ?evalrw;
+    case: addc.
 Defined.
 
 Definition SUBC_desc : instr_desc. refine {|
@@ -463,6 +478,10 @@ Proof.
   abstract by rewrite/= compile_var_CF.
   abstract by rewrite/= compile_var_CF.
   abstract by case => // [] // [] // x [] // [] // n [] // loid [] <-.
+  abstract 
+    by move=> r [] // [] // x [] // [] // n [] // loid [] <-;
+    rewrite /sem_lo_gen_aux /= ?evalrw /sem_lo_cmd /= ?evalrw;
+    case: subc.
 Defined.
 
 Definition MUL_desc : instr_desc. refine {|
@@ -476,6 +495,10 @@ Proof.
   abstract by rewrite/= /compile_var !register_of_var_of_register.
   abstract by rewrite/= /compile_var !register_of_var_of_register.
   abstract by move => [] // loid [] <-.
+  abstract 
+    by move => r [] // loid [] <-;
+    rewrite /sem_lo_gen_aux /= /compile_var !register_of_var_of_register /=
+    /sem_lo_cmd /=; case: mul.
 Defined.
 
 Definition get_id (c : cmd_name) :=
@@ -619,10 +642,6 @@ Definition ireg_of_expr (arg: expr) : option ireg :=
   | EInt i => Some (IRImm i)
   end.
 
-Lemma eval_lo_arg_of_ireg m i :
-  eval_lo m (arg_of_ireg i) = eval_ireg m i.
-Proof. by case: i. Qed.
-
 Lemma toto_in ads vs args irs m lom :
   lom_eqv m lom →
   all wf_implicit ads →
@@ -759,9 +778,8 @@ Admitted.
 
 (* -------------------------------------------------------------------- *)
 Definition compile_lo (tys: seq arg_ty) (args: seq expr) (op: interp_tys tys) : option low_instr :=
-  if omap ireg_of_expr args is Some iregs then
-    @typed_apply_iregs tys iregs op
-  else None.
+  omap ireg_of_expr args >>= fun iregs =>
+    @typed_apply_iregs tys iregs op.
 
 
 Definition compile_gen (c : cmd_name) (args : seq expr) :=
@@ -779,7 +797,7 @@ case E1: (omap _) => [args|//].
 case E2: (omap _) => [out|//].
 rewrite get_id_ok; set op := (X in sem_cmd X).
 rewrite /sem_cmd; case E3: (op _) => [outv|//].
-rewrite /sem_lo_gen.
+rewrite /sem_lo_gen /sem_lo_gen_aux.
 move: h. rewrite /compile_lo. case h: omap => // [irs] hirs.
 rewrite (proj2 (id_sem_wf hirs)).
 rewrite /sem_lo_cmd.
@@ -792,20 +810,6 @@ Qed.
 
 (* -------------------------------------------------------------------- *)
 (* From generated ASM semantics to TCB ASM semantics                    *)
-
-Definition evalrw := (compile_var_CF, eval_lo_arg_of_ireg).
-
-Lemma sem_lo_gen_correct m loid :
-  sem_lo_gen m (get_id (cmd_name_of_loid loid)) loid = Some (sem_lo m loid).
-Proof.
-case: loid.
-- move=> r i; rewrite /sem_lo_gen /= ?evalrw /sem_lo_cmd /= ?evalrw.
-  by case: addc.
-- move=> r i; rewrite /sem_lo_gen /= ?evalrw /sem_lo_cmd /= ?evalrw.
-  by case: subc.
-- rewrite /sem_lo_gen /= /compile_var ! register_of_var_of_register /= /sem_lo_cmd /=.
-  by case: mul.
-Qed.
 
 Lemma compile_cmd_name c vs loid :
   compile_gen c vs = Some loid →
@@ -826,7 +830,10 @@ Theorem L3 c vs m1 m2 loid lom :
 Proof.
   move => hc.
   move/L2: (hc) => h/h{h} h/h{h} [lom'] [].
-  by rewrite -(compile_cmd_name hc) sem_lo_gen_correct => - [] <-.
+  rewrite -(compile_cmd_name hc).
+  move /obindI : (hc) => [irs [? Hwt]].
+  have := (id_gen_sem_wf lom Hwt).  
+  by rewrite /sem_lo_gen (compile_cmd_name hc) => -> [<-].
 Qed.
 
 (* -------------------------------------------------------------------- *)
