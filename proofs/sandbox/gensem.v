@@ -11,7 +11,9 @@ Unset Printing Implicit Defensive.
 Notation "m >>= f" := (ssrfun.Option.bind f m) (at level 100).
 
 (* -------------------------------------------------------------------- *)
-Parameter var : countType.
+
+
+Definition var := [countType of nat].
 Parameter mem : Type.
 
 Inductive value :=
@@ -297,11 +299,16 @@ Definition wf_sem (c: cmd_name) (tys: seq arg_ty) (sem: interp_tys tys) : Prop :
     operands_of_instr loid = irs.
 
 (* -------------------------------------------------------------------- *)
+Inductive source_position := 
+  | InArgs of nat
+  | InRes  of nat.
+
 Record instr_desc := {
   id_name : cmd_name;
   id_in   : seq arg_desc;
   id_out  : seq arg_desc;
   id_lo   : seq arg_ty;
+  id_lo_d : seq source_position;
   id_sem  : interp_tys id_lo;
 
   id_in_wf : all wf_implicit id_in;
@@ -359,6 +366,7 @@ Definition ADDC_desc : instr_desc. refine {|
   id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
   id_out  := [:: ADExplicit 0; ADImplicit vCF];
   id_lo   := [:: TYVar; TYVL];
+  id_lo_d := [:: InArgs 0; InArgs 1];
   id_sem  := ADDC_lo;
 |}.
 Proof.
@@ -373,6 +381,7 @@ Definition SUBC_desc : instr_desc. refine {|
   id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
   id_out  := [:: ADExplicit 0; ADImplicit vCF];
   id_lo   := [:: TYVar; TYLiteral];
+  id_lo_d := [:: InArgs 0; InArgs 1];
   id_sem  := SUBC_lo;
 |}.
 Proof.
@@ -387,6 +396,7 @@ Definition MUL_desc : instr_desc. refine {|
   id_in   := [:: ADImplicit (var_of_register R1); ADImplicit (var_of_register R2)];
   id_out   := [:: ADImplicit (var_of_register R1); ADImplicit (var_of_register R2)];
   id_lo   := [::];
+  id_lo_d := [::];
   id_sem  := MUL_lo;
 |}.
 Proof.
@@ -434,12 +444,13 @@ Definition check_cmd_args
      all2 (check_cmd_res loargs) outx id.(id_out)
   && all2 (check_cmd_arg loargs) inx  id.(id_in ).
 
-(* --------------------------------------------------------------------
+(* -------------------------------------------------------------------- *)
 Lemma Pin (loargs hiargs : seq expr) (ads : seq arg_desc) :
      all2 (check_cmd_arg loargs) hiargs ads
-  -> oseq [seq sem_ad_in ad loargs | ad <- ads] = Some hiargs.
+  -> omap (sem_ad_in loargs) ads = Some hiargs.
 Proof.
-rewrite all2P => /andP [/eqP eqsz h]; apply/eqP; rewrite oseqP.
+rewrite all2P => /andP [/eqP eqsz h];rewrite omap_map.
+apply/eqP; rewrite oseqP.
 apply/eqP/(eq_from_nth (x0 := None)); rewrite ?(size_map, eqsz) //.
 move=> i lt_i_ads; have ad0 : arg_desc := (ADExplicit 0).
 rewrite (nth_map ad0) // (nth_map (EVar vCF)) ?eqsz // /sem_ad_in.
@@ -447,15 +458,16 @@ set x1 := nth (EVar vCF) _ _; set x2 := nth ad0 _ _.
 have -/(allP h) /=: (x1, x2) \in zip hiargs ads.
 + by rewrite -nth_zip // mem_nth // size_zip eqsz minnn.
 rewrite /check_cmd_arg; case: x2 => [? /eqP->//|].
-by move=> n /andP[len /eqP->]; rewrite (nth_map x1).
+by move=> n /andP[len /eqP->];apply /eqP;rewrite (onth_sizeP x1).
 Qed.
 
 (* -------------------------------------------------------------------- *)
 Lemma Pout (loargs : seq expr) (hiargs : seq var) (ads : seq arg_desc) :
      all2 (check_cmd_res loargs) hiargs ads
-  -> oseq [seq sem_ad_out ad loargs | ad <- ads] = Some hiargs.
+  -> omap (sem_ad_out loargs) ads = Some hiargs.
 Proof.
-rewrite all2P => /andP [/eqP eqsz h]; apply/eqP; rewrite oseqP.
+rewrite all2P => /andP [/eqP eqsz h]; rewrite omap_map.
+apply/eqP; rewrite oseqP.
 apply/eqP/(eq_from_nth (x0 := None)); rewrite ?(size_map, eqsz) //.
 move=> i lt_i_ads; have ad0 : arg_desc := (ADExplicit 0).
 rewrite (nth_map ad0) // (nth_map vCF) ?eqsz // /sem_ad_out.
@@ -463,7 +475,7 @@ set x1 := nth vCF _ _; set x2 := nth ad0 _ _.
 have -/(allP h) /=: (x1, x2) \in zip hiargs ads.
 + by rewrite -nth_zip // mem_nth // size_zip eqsz minnn.
 rewrite /check_cmd_res; case: x2 => [? /eqP->//|].
-by move=> n /andP[len /eqP]; rewrite (nth_map (EVar x1)) // => <-.
+by move=> n /andP[len /eqP];rewrite (onth_nth_size (EVar x1) len) => <-.
 Qed.
 
 (* -------------------------------------------------------------------- *)
@@ -474,7 +486,83 @@ Theorem L c outx inx loargs m1 m2 :
 Proof.
 by case/andP=> h1 h2; rewrite /sem_id /semc (Pin h2) (Pout h1) get_id_ok.
 Qed.
-*)
+
+Section FOLD.
+
+  Context {T R : Type} (f : T -> R -> option R).
+
+  Fixpoint ofoldl (l : seq T) (r:R) := 
+    match l with 
+    | [::] => Some r 
+    | t::l => f t r >>= ofoldl l
+    end.
+
+End FOLD.
+
+Section FOLD2.
+
+  Context {T1 T2 R : Type} (f : T1 -> T2 -> R -> option R).
+
+  Fixpoint ofold2l (l1 : seq T1) (l2 : seq T2) (r:R) := 
+    match l1, l2 with 
+    | [::], [::] => Some r 
+    | t1::l1, t2::l2 => f t1 t2 r >>= ofold2l l1 l2
+    | _, _ => None
+    end.
+
+End FOLD2.
+
+Lemma obindI {T1 T2:Type} {f:T1 -> option T2} {o t2} : 
+  (o >>= f) = Some t2 -> exists t1, o = Some t1 /\ f t1 = Some t2.
+Proof. by case: o => [t1|]//=;exists t1. Qed.
+
+(* -------------------------------------------------------------------- *)
+(* Definition of the "hi compiler"                                      *) 
+
+(* -------------------------------------------------------------------- *)
+Definition get_loarg (outx: seq var) (inx:seq expr) (d:source_position) := 
+  match d with
+  | InArgs x => onth inx x
+  | InRes  x => ssrfun.omap EVar (onth outx x)
+  end.
+
+Definition compile_hi_cmd (c : cmd_name) (outx : seq var) (inx : seq expr) := 
+  let: id := get_id c in
+  omap (get_loarg outx inx) id.(id_lo_d) >>= fun loargs =>
+    if check_cmd_args c outx inx loargs then Some loargs
+    else None.
+
+Lemma compile_hiP (c : cmd_name) (outx : seq var) (inx : seq expr) loargs :
+  compile_hi_cmd c outx inx = Some loargs ->
+  check_cmd_args c outx inx loargs.
+Proof. by move=> /obindI [loargs'] [H1];case:ifP => // ? [<-]. Qed.
+
+Definition nmap (T:Type) := nat -> option T.
+Definition nget (T:Type) (m:nmap T) (n:nat) := m n.
+Definition nset (T:Type) (m:nmap T) (n:nat) (t:T) := 
+  fun x => if x == n then Some t else nget m x.
+Definition nempty (T:Type) := fun n:nat => @None T.
+
+
+Definition set_expr (m:nmap source_position) (n:nat) (x:source_position) :=
+  match nget m n with
+  | Some _ => m 
+  | None   => nset m n x
+  end.
+
+Definition compile_hi_arg (p:nat -> source_position) (ad: arg_desc) (i:nat) (m: nmap source_position) := 
+  match ad with
+  | ADImplicit _ => m
+  | ADExplicit n => set_expr m n (p i)
+  end.
+
+Definition mk_loargs (c : cmd_name)  :=
+  let: id := get_id c in
+  let m := foldl (fun m p => compile_hi_arg InArgs p.1 p.2 m) (nempty _)
+                 (zip id.(id_in) (iota 0 (size id.(id_in)))) in
+  let m := foldl (fun m p => compile_hi_arg InRes p.1 p.2 m) m
+                 (zip id.(id_out) (iota 0 (size id.(id_out)))) in 
+  odflt [::] (omap (nget m) (iota 0 (size id.(id_lo)))).
 
 (* -------------------------------------------------------------------- *)
 Definition compile (c : cmd_name) (args : seq expr) :=
