@@ -308,7 +308,6 @@ Record instr_desc := {
   id_in   : seq arg_desc;
   id_out  : seq arg_desc;
   id_lo   : seq arg_ty;
-  id_lo_d : seq source_position;
   id_sem  : interp_tys id_lo;
 
   id_in_wf : all wf_implicit id_in;
@@ -366,7 +365,6 @@ Definition ADDC_desc : instr_desc. refine {|
   id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
   id_out  := [:: ADExplicit 0; ADImplicit vCF];
   id_lo   := [:: TYVar; TYVL];
-  id_lo_d := [:: InArgs 0; InArgs 1];
   id_sem  := ADDC_lo;
 |}.
 Proof.
@@ -381,7 +379,6 @@ Definition SUBC_desc : instr_desc. refine {|
   id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
   id_out  := [:: ADExplicit 0; ADImplicit vCF];
   id_lo   := [:: TYVar; TYLiteral];
-  id_lo_d := [:: InArgs 0; InArgs 1];
   id_sem  := SUBC_lo;
 |}.
 Proof.
@@ -396,7 +393,6 @@ Definition MUL_desc : instr_desc. refine {|
   id_in   := [:: ADImplicit (var_of_register R1); ADImplicit (var_of_register R2)];
   id_out   := [:: ADImplicit (var_of_register R1); ADImplicit (var_of_register R2)];
   id_lo   := [::];
-  id_lo_d := [::];
   id_sem  := MUL_lo;
 |}.
 Proof.
@@ -487,31 +483,6 @@ Proof.
 by case/andP=> h1 h2; rewrite /sem_id /semc (Pin h2) (Pout h1) get_id_ok.
 Qed.
 
-Section FOLD.
-
-  Context {T R : Type} (f : T -> R -> option R).
-
-  Fixpoint ofoldl (l : seq T) (r:R) := 
-    match l with 
-    | [::] => Some r 
-    | t::l => f t r >>= ofoldl l
-    end.
-
-End FOLD.
-
-Section FOLD2.
-
-  Context {T1 T2 R : Type} (f : T1 -> T2 -> R -> option R).
-
-  Fixpoint ofold2l (l1 : seq T1) (l2 : seq T2) (r:R) := 
-    match l1, l2 with 
-    | [::], [::] => Some r 
-    | t1::l1, t2::l2 => f t1 t2 r >>= ofold2l l1 l2
-    | _, _ => None
-    end.
-
-End FOLD2.
-
 Lemma obindI {T1 T2:Type} {f:T1 -> option T2} {o t2} : 
   (o >>= f) = Some t2 -> exists t1, o = Some t1 /\ f t1 = Some t2.
 Proof. by case: o => [t1|]//=;exists t1. Qed.
@@ -526,23 +497,12 @@ Definition get_loarg (outx: seq var) (inx:seq expr) (d:source_position) :=
   | InRes  x => ssrfun.omap EVar (onth outx x)
   end.
 
-Definition compile_hi_cmd (c : cmd_name) (outx : seq var) (inx : seq expr) := 
-  let: id := get_id c in
-  omap (get_loarg outx inx) id.(id_lo_d) >>= fun loargs =>
-    if check_cmd_args c outx inx loargs then Some loargs
-    else None.
-
-Lemma compile_hiP (c : cmd_name) (outx : seq var) (inx : seq expr) loargs :
-  compile_hi_cmd c outx inx = Some loargs ->
-  check_cmd_args c outx inx loargs.
-Proof. by move=> /obindI [loargs'] [H1];case:ifP => // ? [<-]. Qed.
-
+(* FIXME: provide a more efficiant version of map on nat here *)
 Definition nmap (T:Type) := nat -> option T.
 Definition nget (T:Type) (m:nmap T) (n:nat) := m n.
 Definition nset (T:Type) (m:nmap T) (n:nat) (t:T) := 
   fun x => if x == n then Some t else nget m x.
 Definition nempty (T:Type) := fun n:nat => @None T.
-
 
 Definition set_expr (m:nmap source_position) (n:nat) (x:source_position) :=
   match nget m n with
@@ -563,6 +523,17 @@ Definition mk_loargs (c : cmd_name)  :=
   let m := foldl (fun m p => compile_hi_arg InRes p.1 p.2 m) m
                  (zip id.(id_out) (iota 0 (size id.(id_out)))) in 
   odflt [::] (omap (nget m) (iota 0 (size id.(id_lo)))).
+
+Definition compile_hi_cmd (c : cmd_name) (outx : seq var) (inx : seq expr) := 
+  let: id := get_id c in
+  omap (get_loarg outx inx) (mk_loargs c) >>= fun loargs =>
+    if check_cmd_args c outx inx loargs then Some loargs
+    else None.
+
+Lemma compile_hiP (c : cmd_name) (outx : seq var) (inx : seq expr) loargs :
+  compile_hi_cmd c outx inx = Some loargs ->
+  check_cmd_args c outx inx loargs.
+Proof. by move=> /obindI [loargs'] [H1];case:ifP => // ? [<-]. Qed.
 
 (* -------------------------------------------------------------------- *)
 Definition compile (c : cmd_name) (args : seq expr) :=
