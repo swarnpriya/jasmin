@@ -293,7 +293,7 @@ Fixpoint typed_apply_iregs (tys: seq arg_ty) (iregs: seq ireg)
 (* -------------------------------------------------------------------- *)
 Variant arg_desc :=
 | ADImplicit of var
-| ADExplicit of nat.
+| ADExplicit of nat.  (* FIXME: Add var option for instruction like SHL *)
 
 Axiom arg_desc_eqMixin : Equality.mixin_of arg_desc.
 Canonical arg_desc_eqType := EqType _ arg_desc_eqMixin.
@@ -407,6 +407,8 @@ Record instr_desc := {
   id_lo   : seq arg_ty;
   id_sem  : interp_tys id_lo;
 
+  (* FIXME : Add the functionnal semantic of the operator in the record,
+             this require to the have its syntatic type *)
   id_in_wf : all wf_implicit id_in;
   id_out_wf : all wf_implicit id_out;
   id_sem_wf: wf_sem id_name id_sem;
