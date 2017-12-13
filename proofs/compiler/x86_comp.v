@@ -13,12 +13,11 @@ Unset Printing Implicit Defensive.
 (* -------------------------------------------------------------------- *)
 (* Compilation of variables                                             *) 
 Variant destination :=
+| Daddr of address 
 | DReg  of register
 | DFlag of rflag.
 
-Scheme Equality for destination.
-
-Definition destination_eqMixin := comparableClass destination_eq_dec.
+Axiom destination_eqMixin : Equality.mixin_of destination. 
 Canonical destination_eqType := EqType destination destination_eqMixin.
 
 Definition string_of_register r :=
@@ -159,7 +158,6 @@ Definition compile_var (v: var) : option destination :=
     end
   end.
 
-
 Lemma register_of_var_of_register r :
   register_of_var (var_of_register r) = Some r.
 Proof.
@@ -168,15 +166,16 @@ Proof.
 Qed.
 
 (* -------------------------------------------------------------------- *)
-Variant arg_ty := TYoprd | TYreg | TYireg | Tyopt_oprd_w.
+Variant arg_ty := TYcondt | TYoprd | TYreg | TYireg | Tyopt_oprd_w.
 
 Scheme Equality for arg_ty.
 
 Definition arg_ty_eqMixin := comparableClass arg_ty_eq_dec.
 Canonical arg_ty_eqType := EqType arg_ty arg_ty_eqMixin.
 
-Definition interp_ty (ty : arg_ty) :=
+Definition interp_ty (ty : arg_ty) : Type :=
   match ty with
+  | TYcondt => condt
   | TYoprd  => oprd
   | TYreg   => register
   | TYireg  => ireg
@@ -203,21 +202,37 @@ Fixpoint typed_apply_gargs (tys: seq arg_ty) (iregs: seq garg)
   match tys, iregs with
   | [::], [::] => Some
   | ty :: tys', ir :: iregs' => λ op,
-                          @typed_apply_garg _ ty ir op >>=
-                          @typed_apply_gargs tys' iregs'
+                          (@typed_apply_garg _ ty ir op >>=
+                           @typed_apply_gargs tys' iregs')%O
   | _, _ => λ _, None
   end.
 
-
 (* -------------------------------------------------------------------- *)
 
+(* Describe where to recover the argument in the intermediate language *)
 Variant arg_desc :=
 | ADImplicit of var
 | ADExplicit of nat & option var. 
+ (* [ADExplicit i (Some x)] in this case the ith argument should be the variable x (see SHL) *)
 
- (* FIXME: Add var option for instruction like SHL *)
+Definition arg_desc_beq ad1 ad2 := 
+  match ad1, ad2 with
+  | ADImplicit x1, ADImplicit x2 => x1 == x2
+  | ADExplicit i1 ox1, ADExplicit i2 ox2 => (i1 == i2) && (ox1 == ox2)
+  | _, _ => false
+  end.
 
-Axiom arg_desc_eqMixin : Equality.mixin_of arg_desc.
+Lemma arg_desc_beq_axiom : Equality.axiom arg_desc_beq.
+Proof.
+  move=> [x1 | i1 ox1] [x2 | i2 ox2] //=.
+  + by case: (x1 =P x2) => [-> | neq ];constructor;congruence.
+  + by constructor.
+  + by constructor.
+  case: (i1 =P i2) => [-> | neq ];last by constructor;congruence.
+  by case: (_ =P _) => [-> | neq ];constructor;congruence.
+Qed.
+
+Definition arg_desc_eqMixin := Equality.Mixin arg_desc_beq_axiom .
 Canonical arg_desc_eqType := EqType _ arg_desc_eqMixin.
 
 Definition wf_implicit (ad: arg_desc) : bool :=
@@ -229,20 +244,42 @@ Definition wf_implicit (ad: arg_desc) : bool :=
 (* Generated ASM semantics                                              *)
 
 Variant argument :=
-| AReg of register
-| AFlag of flag
-| AInt of int.
+ | Aflag  of rflag
+ | Aoprd  of oprd
+ | Acondt of condt.
 
 Axiom argument_eqMixin : Equality.mixin_of argument.
 Canonical argument_eqType := EqType argument argument_eqMixin.
 
 Definition arg_of_dest (d: destination): argument :=
   match d with
-  | DReg r => AReg r
-  | DFlag f => AFlag f
+  | Daddr addr => Aoprd (Adr_op addr)
+  | DReg  r    => Aoprd (Reg_op r)
+  | DFlag f    => Aflag f
   end.
 
-Definition arg_of_ireg (i: ireg) : argument :=
+Print garg.
+Show Match arg_ty.
+Definition arg_of_garg (i: garg) : argument :=
+  let (ty, arg) := i in
+  match ty return interp_ty ty -> argument with
+  | TYcondt =>
+    | TYoprd =>
+    | TYreg =>
+    | TYireg =>
+    | Tyopt_oprd_w =>
+    end
+      
+
+match # with
+ | TYcondt =>
+ | TYoprd =>
+ | TYreg =>
+ | TYireg =>
+ | Tyopt_oprd_w =>
+ end
+|
+  
   match i with
   | IRReg r => AReg r
   | IRImm i => AInt i

@@ -63,7 +63,7 @@ Variant condt : Type :=
 
 (* -------------------------------------------------------------------- *)
 Variant asm : Type :=
-| LABEL of positive
+| LABEL of label
 
   (* Data transfert *)
 | MOV    of         oprd & oprd    (* copy *)
