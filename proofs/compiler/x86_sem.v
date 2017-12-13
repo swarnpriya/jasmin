@@ -33,7 +33,7 @@ Record address : Type := mkAddress {
 (* -------------------------------------------------------------------- *)
 Variant oprd : Type :=
 | Imm_op     of word
-| Glo_op of global
+| Glo_op     of global
 | Reg_op     of register
 | Adr_op     of address.
 
