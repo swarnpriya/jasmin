@@ -425,7 +425,7 @@ Lemma xfind_label (c c' : lcmd) xc lbl :
 Proof.
 elim: c c' xc => [|i c ih] c' xc //=; case: ifPn.
 + case: i => ii [] //= lbl'; rewrite /is_label /= => /eqP<-.
-  case=> [<-] /=; rewrite /assemble_c /=; case: mapM => //=.
+  case=> <- /=; rewrite /assemble_c /=; case: mapM => //=.
   move=> sa [<-]; exists 0; split=> //=; rewrite ?drop0 //.
   by rewrite /find_label /= eqxx ltnS.
 move=> Nlbl eqc'; rewrite /assemble_c /=.
@@ -471,7 +471,7 @@ case: i => ii /=; rewrite /is_label /=; case=> //=.
   * case: as_singleton => // l; case: as_triple => // -[[e1 e2] e3].
     by t_xrbindP=> vl _ v1 _ v2 _ v3 _; case: ifP.
 + by case: as_singleton => // ?; case: as_quadruple => // [[[[]]]]????; t_xrbindP.
-+ by move=> lbl2 /eqP nq [[/esym]].
++ by move=> lbl2 /eqP nq [/esym].
 + by move=> p l _; case: assemble_cond.
 Qed.
 
@@ -987,6 +987,7 @@ move=> ?; subst s2 => /=; case: e ok_w ok_ve => // -[] //=.
 move=> z -[?] -[?]; subst w ve op => /=; rewrite /decode_addr /=.
 rewrite I64.mul_commut I64.mul_one I64.add_zero I64.add_commut.
 rewrite /st_write_mem (xgetreg eqv ok_r ok_vx (erefl _)).
+case: xs1 eqv => xm xc xip eqv. rewrite /mem_write_mem /=.
 by case: {+}eqv => <- okc okd ipE rfE rgE; rewrite ok_m /=; findok.
 Qed.
 
@@ -1307,7 +1308,7 @@ have ok_xrs: pred_of_rfis ii xrs by do! split.
 have := xflagsok eqv eq_lc _ ok_xrs ok_s2.
 set u1 := st_update_rflags _ _; set u2 := st_update_rflags _ _.
 suff ->: u2 = u1 by apply; rewrite /is_rf_map /= !(h1, h2, h3, h4, h5).
-congr X86State; apply/eq_rfmapP => rf.
+congr X86State; congr X86Mem; apply/eq_rfmapP => rf.
 by rewrite /RflagMap.update !ffunE; case: rf.
 Qed.
 
@@ -1340,7 +1341,7 @@ have ok_xrs: pred_of_rfis ii xrs by do! split.
 have := xflagsok eqv eq_lc _ ok_xrs ok_s2.
 set u1 := st_update_rflags _ _; set u2 := st_update_rflags _ _.
 suff ->: u2 = u1 by apply; rewrite /is_rf_map /= !(h1, h2, h3, h4).
-congr X86State; apply/eq_rfmapP => rf.
+congr X86State; congr X86Mem; apply/eq_rfmapP => rf.
 by rewrite /RflagMap.update !ffunE; case: rf.
 Qed.
 
@@ -1372,7 +1373,7 @@ have ok_xrs: pred_of_rfis ii xrs by do! split.
 have := xflagsok eqv eq_lc _ ok_xrs ok_s2.
 set u1 := st_update_rflags _ _; set u2 := st_update_rflags _ _.
 suff ->: u2 = u1 by apply; rewrite /is_rf_map /= !(h1, h2, h3, h4, h5).
-congr X86State; apply/eq_rfmapP => rf.
+congr X86State; congr X86Mem; apply/eq_rfmapP => rf.
 by rewrite /RflagMap.update !ffunE; case: rf.
 Qed.
 
@@ -1411,7 +1412,7 @@ case: b ok_s2 => ok_s2;
   have := xflagsok eqv eq_lc _ ok_xrs ok_s2;
   set u1 := st_update_rflags _ _; set u2 := st_update_rflags _ _;
   (suff ->: u2 = u1 by apply; rewrite /is_rf_map /= !(h1, h2, h3, h4, h5));
-  congr X86State; apply/eq_rfmapP => rf;
+  congr X86State; congr X86Mem; apply/eq_rfmapP => rf;
   by rewrite /RflagMap.update !ffunE; case: rf.
 Qed.
 
@@ -1438,7 +1439,7 @@ have ok_xrs: pred_of_rfis ii xrs by do! split.
 have := xflagsok eqv eq_lc _ ok_xrs ok_s2.
 set u1 := st_update_rflags _ _; set u2 := st_update_rflags _ _.
 suff ->: u2 = u1 by apply; rewrite /is_rf_map /= !(h1, h2, h3, h4, h5).
-congr X86State; apply/eq_rfmapP => rf.
+congr X86State; congr X86Mem; apply/eq_rfmapP => rf.
 by rewrite /RflagMap.update !ffunE; case: rf.
 Qed.
 
@@ -1451,7 +1452,7 @@ Proof.
 move=> eqv1 h; case: h eqv1 => {s1 s2}.
 + case=> lm vm [|i li] //= s2 ii x tg e cs [-> <-] /= {cs}.
   rewrite /to_estate /=; t_xrbindP => v ok_v ok_s2.
-  case: xs1 => xm xr xf xc ip -/dup[] [/= <-] ok_xc.
+  case: xs1 => - [xm xr xf] xc ip -/dup[] [/= <-] ok_xc.
   rewrite /assemble_c /=; t_xrbindP => a op1 ok_op1 op2 ok_op2.
   case=> ok_a tla ok_tla drop_xc _ xfE xrE eqv1.
   rewrite /fetch_and_eval /=; have lt_ip: ip < size xc.
@@ -1464,7 +1465,7 @@ move=> eqv1 h; case: h eqv1 => {s1 s2}.
   by split=> //=; rewrite /assemble_c ok_tla tlaE.
 + case=> lm vm [|_ _] //= s2 ii xs o es cs [-> ->] /=.
   rewrite /to_estate /=; t_xrbindP=> vs aout ok_aout ok_vs.
-  move=> ok_wr; case: xs1 => xm xr xf xc ip -/dup[] [/= <-] ok_xc.
+  move=> ok_wr; case: xs1 => - [xm xr xf] xc ip -/dup[] [/= <-] ok_xc.
   rewrite /assemble_c /=; t_xrbindP => a ok_a sa ok_sa drop_xc _.
   move=> xfE xrE eqv1; rewrite /fetch_and_eval /=.
   have /xs86_equiv_cons := eqv1 => /(_ _ _ (erefl _)) /=.
@@ -1544,7 +1545,7 @@ move=> eqv1 h; case: h eqv1 => {s1 s2}.
       move=> v1 ok_v1 h0 v2 ok_v2 h3 ok_es' ??; subst h0 aout.
       case: (xread_ok eqv' ok1 ok_v1) => wv1 ok_wv1 ?; subst v1.
       case: (xread_ireg_ok eqv' ok2 ok_v2) => wv2 ok_wv2 ?; subst v2.
-      set xs' := X86State _ _ _ _ _ in eqv' ok_wv1 ok_wv2 |- *.
+      set xs' := X86State _ _ _ in eqv' ok_wv1 ok_wv2 |- *.
       case: sh Eo ok_vs => [sh|].
       + case: eqP ok_es' => // ?; subst es' => -[?]; subst h3.
         case: sh => Eo ok_vs -[?]; subst a => {aE} /=.
@@ -1697,7 +1698,7 @@ move=> eqv1 h; case: h eqv1 => {s1 s2}.
       move/(_ (erefl _)); set xs' := st_update_rflags _ _ => ok_xs'.
       have := xwrite_ok ok_xs' ok_op1 ok_s2 => -[xs'' ok_xs'' eqv''].
       exists xs'' => //; rewrite -ok_xs''; congr write_oprd.
-      rewrite /xs' /st_update_rflags /=; f_equal => //.
+      rewrite /xs' /st_update_rflags /=; do 2 f_equal => //.
       by apply/eq_rfmapP=> rf; rewrite /RflagMap.update !ffunE; case: rf.
     case: o ok_vs => //=;case: es ok_aout => //= -[<-] [?] _;subst vs.
     case El': as_singleton => [de|] //.
@@ -1709,10 +1710,11 @@ move=> eqv1 h; case: h eqv1 => {s1 s2}.
     have := (xaluop eqv' _ ok_of ok_cf ok_sf ok_sp ok_zf ok_s').
     move/(_ (erefl _)); set xs' := st_update_rflags _ _ => ok_xs'.
     have := xwrite_ok ok_xs' Hd ok_s2 => -[xs'' ok_xs'' eqv''].
-    set xs := X86State _ _ _ _ _; have: exists w, read_oprd gd d xs = ok w.
+    set xs := X86State _ _ _; have: exists w, read_oprd gd d xs = ok w.
     + move: ok_xs'' => /=; case: {+}d => //= [r _|a]; first by exists (xr r).
       have ->: (decode_addr xs a) = (decode_addr xs' a) by case: a.
-      apply: rbindP => mem Hmem _; apply /Memory.readV.
+      rewrite /st_write_mem /mem_write_mem.
+      t_xrbindP => m mem Hmem <- _; apply /Memory.readV.
       by apply /Memory.writeV; exists mem; eauto.
     by case=> w -> /=; rewrite I64.xor_idem; exists xs''; rewrite -?ok_xs''.
   + case El: lvals_as_cnt_vars => [[[xof xsf xpf xzf] ol]|//].
@@ -1794,7 +1796,7 @@ move=> eqv1 h; case: h eqv1 => {s1 s2}.
   apply: (xwrite_ok _ Hx ok_wr); split => //=.
   by rewrite /assemble_c ok_sa saE.
 + case=> lv vm [|_ _] //= ii lbl cs [-> ->].
-  case: xs1 => xm xr xf xc ip -/dup[] [/= <-] ok_xc.
+  case: xs1 => - [xm xr xf] xc ip -/dup[] [/= <-] ok_xc.
   rewrite /assemble_c /=; t_xrbindP => sa ok_sa drop_xc le_ip_c xfE xrE.
   move=> eqv1; rewrite /fetch_and_eval /=; have lt_ip: ip < size xc.
   * by rewrite leqNgt; apply/negP=> /drop_oversize; rewrite -drop_xc.
@@ -1803,7 +1805,7 @@ move=> eqv1 h; case: h eqv1 => {s1 s2}.
   eexists; first by reflexivity. rewrite /st_write_ip /setc /=.
   by split=> //=; rewrite /assemble_c ok_sa tlaE.
 + case=> [lv vm] [|_ _] //= ii lbl cs csf [-> ->] /=.
-  move=> ok_csf; case: xs1 => xm xr xf xc ip -/dup[] [/= <-] ok_xc.
+  move=> ok_csf; case: xs1 => - [xm xr xf] xc ip -/dup[] [/= <-] ok_xc.
   rewrite /assemble_c /setc /=; t_xrbindP => tla ok_tla drop_xc.
   move=> le_ip xfE xrE eqv1; rewrite /fetch_and_eval /=.
   have lt_ip: ip < size xc; first (rewrite leqNgt; apply/negP).
@@ -1815,7 +1817,7 @@ move=> eqv1 h; case: h eqv1 => {s1 s2}.
   by eexists; first by reflexivity.
 + move=> ii [lv vm] [|i li] //= e lbl cst csf [-> ->] {li} /=.
   rewrite /to_estate /=; t_xrbindP=> v ok_v vl_v ok_csf.
-  case: xs1 => xm xr xf xc ip -/dup[] [/= <-] ok_xc.
+  case: xs1 => - [xm xr xf] xc ip -/dup[] [/= <-] ok_xc.
   rewrite /assemble_c /setc /=; t_xrbindP=> a ct ok_ct [ok_a] /=.
   move=> tla ok_tla drop_xc le_ip xfE xrE eqv1; rewrite /fetch_and_eval /=.
   have lt_ip: ip < size xc; first (rewrite leqNgt; apply/negP).
@@ -1828,7 +1830,7 @@ move=> eqv1 h; case: h eqv1 => {s1 s2}.
   by eexists; first by reflexivity.
 + move=> ii [lv vm] [|i li] //= e lbl cs [-> ->] {li} /=.
   rewrite /to_estate /=; t_xrbindP => v ok_v ok_bv; rewrite /setc /=.
-  case: xs1 => xm xr xf xc ip -/dup[] [/= <-] ok_xc.
+  case: xs1 => - [xm xr xf] xc ip -/dup[] [/= <-] ok_xc.
   rewrite /assemble_c /setc /=; t_xrbindP=> a ct ok_ct [ok_a] /=.
   move=> tla ok_tla drop_xc le_ip xfE xrE eqv1; rewrite /fetch_and_eval /=.
   have lt_ip: ip < size xc; first (rewrite leqNgt; apply/negP).

@@ -248,56 +248,83 @@ Section GLOB_DEFS.
 Context (gd: glob_defs).
 
 (* -------------------------------------------------------------------- *)
+Record x86_mem : Type :=
+  X86Mem {
+      xmem : mem;
+      xreg : regmap;
+      xrf : rflagmap;
+    }.
+
 Record x86_state := X86State {
-  xmem : mem;
-  xreg : regmap;
-  xrf  : rflagmap;
+  xm :> x86_mem;
   xc   : seq asm;
   xip  : nat;
 }.
 
 (* -------------------------------------------------------------------- *)
+Definition mem_write_reg (r: register) (w: word) (m: x86_mem) :=
+  {|
+    xmem := m.(xmem);
+    xreg := RegMap.set m.(xreg) r w;
+    xrf  := m.(xrf);
+  |}.
+
 Definition st_write_reg (r : register) (w : word) (s : x86_state) :=
-  {| xmem := s.(xmem);
-     xreg := RegMap.set s.(xreg) r w;
-     xrf  := s.(xrf);
+  {| xm := mem_write_reg r w s;
      xc   := s.(xc);
      xip  := s.(xip); |}.
 
 (* -------------------------------------------------------------------- *)
-Definition st_get_rflag (rf : rflag) (s : x86_state) :=
+Definition st_get_rflag (rf : rflag) (s : x86_mem) :=
   if s.(xrf) rf is Def b then ok b else type_error.
 
 (* -------------------------------------------------------------------- *)
+Definition mem_set_rflags (rf : rflag) (b : bool) (s : x86_mem) :=
+  {|
+    xmem := s.(xmem);
+    xreg := s.(xreg);
+    xrf  := RflagMap.set s.(xrf) rf b;
+  |}.
+
+Definition mem_unset_rflags (rf : rflag) (s : x86_mem) :=
+  {|
+    xmem := s.(xmem);
+    xreg := s.(xreg);
+    xrf  := RflagMap.oset s.(xrf) rf Undef;
+  |}.
+
 Definition st_set_rflags (rf : rflag) (b : bool) (s : x86_state) :=
-  {| xmem := s.(xmem);
-     xreg := s.(xreg);
-     xrf  := RflagMap.set s.(xrf) rf b;
+  {| xm := mem_set_rflags rf b s;
      xc   := s.(xc);
      xip  := s.(xip); |}.
 
 (* -------------------------------------------------------------------- *)
 Definition st_update_rflags f (s : x86_state) :=
-  {| xmem := s.(xmem);
+  {| xm := {|
+     xmem := s.(xmem);
      xreg := s.(xreg);
      xrf  := RflagMap.update s.(xrf) f;
+     |};
      xc   := s.(xc);
      xip  := s.(xip); |}.
 
 (* -------------------------------------------------------------------- *)
-Definition st_write_mem (l : word) (w : word) (s : x86_state) :=
+Definition mem_write_mem (l : word) (w : word) (s : x86_mem) :=
   Let m := write_mem s.(xmem) l w in ok
   {| xmem := m;
      xreg := s.(xreg);
      xrf  := s.(xrf);
+  |}.
+
+Definition st_write_mem (l : word) (w : word) (s : x86_state) :=
+  Let m := mem_write_mem l w s in ok
+  {| xm := m;
      xc   := s.(xc);
      xip  := s.(xip); |}.
 
 (* -------------------------------------------------------------------- *)
 Definition st_write_ip (ip : nat) (s : x86_state) :=
-  {| xmem := s.(xmem);
-     xreg := s.(xreg);
-     xrf  := s.(xrf);
+  {| xm := s.(xm);
      xc   := s.(xc);
      xip  := ip; |}.
 
@@ -311,7 +338,7 @@ Coercion word_of_scale (s : scale) : word :=
   end.
 
 (* -------------------------------------------------------------------- *)
-Definition decode_addr (s : x86_state) (a : address) : word := nosimpl (
+Definition decode_addr (s : x86_mem) (a : address) : word := nosimpl (
   let: disp   := a.(ad_disp) in
   let: base   := odflt I64.zero (omap (s.(xreg)) a.(ad_base)) in
   let: scale  := word_of_scale a.(ad_scale) in
@@ -329,7 +356,7 @@ Definition write_oprd (o : oprd) (w : word) (s : x86_state) :=
   end.
 
 (* -------------------------------------------------------------------- *)
-Definition read_oprd (o : oprd) (s : x86_state) :=
+Definition read_oprd (o : oprd) (s : x86_mem) :=
   match o with
   | Imm_op v => ok v
   | Glo_op g => if get_global_word gd g is Some v then ok v else type_error
