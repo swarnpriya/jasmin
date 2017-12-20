@@ -582,6 +582,28 @@ Definition MUL_desc : instr_desc := {|
   id_gen_sem := gsc_MUL;
 |}.
 
+Lemma gsc_IMUL :
+  @gen_sem_correct [:: TYoprd ] Ox86_IMUL (implicit_flags ++ [:: R RDX; R RAX])
+                   [:: R RAX; E 0] [::] (λ x, IMUL x None).
+Proof.
+  rewrite /gen_sem_correct /low_sem_aux /=.
+  move => x gd m m'.
+  t_xrbindP => vs ? ? ? vy -> <- <- <- /= [<-] [<-] /=; repeat f_equal.
+  rewrite /mem_update_rflags /mem_unset_rflags /=; f_equal.
+  by apply/ffunP; case; rewrite !ffunE.
+Qed.
+
+Definition IMUL_desc : instr_desc := {|
+  id_name  := Ox86_IMUL;
+  id_out   := implicit_flags ++ [:: R RDX ; R RAX ];
+  id_in    := [:: R RAX; E 0];
+  id_tys   := [:: TYoprd ];
+  id_instr := λ x, IMUL x None;
+  id_in_wf := erefl;
+  id_out_wf := erefl;
+  id_gen_sem := gsc_IMUL;
+|}.
+
 Definition get_id (c : cmd_name) :=
   match c with
   | ADDC => ADDC_desc
