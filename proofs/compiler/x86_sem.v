@@ -689,13 +689,7 @@ Definition eval_SETcc ct o s : x86_result :=
 
 (* -------------------------------------------------------------------- *)
 Definition eval_LEA o1 o2 s : x86_result :=
-  Let addr :=
-    match o2 with
-    | Imm_op w => ok w
-    | Adr_op a => ok (decode_addr s a)
-    | _        => type_error
-    end in
-
+  Let addr := read_oprd o2 s in
   write_oprd o1 addr s.
 
 (* -------------------------------------------------------------------- *)
