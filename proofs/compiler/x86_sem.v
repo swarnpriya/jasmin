@@ -734,7 +734,7 @@ Definition eval_XOR o1 o2 s : x86_result :=
 
 (* -------------------------------------------------------------------- *)
 Definition eval_NOT o s : x86_result :=
-  Let v := read_oprd o s in write_oprd o v s.
+  Let v := read_oprd o s in write_oprd o (I64.not v) s.
 
 (* -------------------------------------------------------------------- *)
 Definition eval_SHL o ir s : x86_result :=
