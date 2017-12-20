@@ -561,6 +561,27 @@ Definition SBB_desc : instr_desc := {|
   id_gen_sem := gsc_SBB;
 |}.
 
+Lemma gsc_MUL :
+  @gen_sem_correct [:: TYoprd ] Ox86_MUL (implicit_flags ++ [:: R RDX; R RAX]) [:: R RAX; E 0] [::] MUL.
+Proof.
+  rewrite /gen_sem_correct /low_sem_aux /= /eval_MUL.
+  move => x gd m m'.
+  t_xrbindP => vs ? ? ? vy -> <- <- <- /= [<-] [<-] /=; repeat f_equal.
+  rewrite /mem_update_rflags /mem_unset_rflags /=; f_equal.
+  by apply/ffunP; case; rewrite !ffunE.
+Qed.
+
+Definition MUL_desc : instr_desc := {|
+  id_name  := Ox86_MUL;
+  id_out   := implicit_flags ++ [:: R RDX ; R RAX ];
+  id_in    := [:: R RAX; E 0];
+  id_tys   := [:: TYoprd ];
+  id_instr := MUL;
+  id_in_wf := erefl;
+  id_out_wf := erefl;
+  id_gen_sem := gsc_MUL;
+|}.
+
 Definition get_id (c : cmd_name) :=
   match c with
   | ADDC => ADDC_desc
