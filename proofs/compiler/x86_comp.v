@@ -453,6 +453,58 @@ Local Coercion E n := ADExplicit n None.
 Local Coercion F f := ADImplicit (var_of_flag f).
 Local Coercion R f := ADImplicit (var_of_register f).
 
+Lemma gsc_ADD :
+   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADD (implicit_flags ++ [:: E 0]) [:: E 0; E 1] [::] ADD.
+Proof.
+  move=> [] // => [ x | x] y gd m m';rewrite /low_sem_aux /= /eval_ADD /=.
+  + t_xrbindP => vs ??? vy -> <- <- <- /=.
+    move=> [<-] /= [<-].
+    repeat f_equal;rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
+    by apply /ffunP;case;rewrite !ffunE.
+  t_xrbindP => vs ??? -> <- ?? vy -> <- <- <- /=.
+  move=> [<-] /= <-.
+  rewrite /sets_low /=;f_equal.
+  rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
+  by apply /ffunP;case;rewrite !ffunE.
+Qed.
+
+Definition ADD_desc : instr_desc := {|
+  id_name  := Ox86_ADD;
+  id_out   := implicit_flags ++ [::E 0];
+  id_in    := [:: E 0; E 1];
+  id_tys   := [:: TYoprd; TYoprd];
+  id_instr := ADD;
+  id_in_wf := erefl;
+  id_out_wf := erefl;
+  id_gen_sem := gsc_ADD;
+|}.
+
+Lemma gsc_SUB :
+   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_SUB (implicit_flags ++ [:: E 0]) [:: E 0; E 1] [::] SUB.
+Proof.
+  move=> [] // => [ x | x] y gd m m';rewrite /low_sem_aux /= /eval_SUB /=.
+  + t_xrbindP => vs ??? vy -> <- <- <- /=.
+    move=> [<-] /= [<-].
+    repeat f_equal;rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
+    by apply /ffunP;case;rewrite !ffunE.
+  t_xrbindP => vs ??? -> <- ?? vy -> <- <- <- /=.
+  move=> [<-] /= <-.
+  rewrite /sets_low /=;f_equal.
+  rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
+  by apply /ffunP;case;rewrite !ffunE.
+Qed.
+
+Definition SUB_desc : instr_desc := {|
+  id_name  := Ox86_SUB;
+  id_out   := implicit_flags ++ [::E 0];
+  id_in    := [:: E 0; E 1];
+  id_tys   := [:: TYoprd; TYoprd];
+  id_instr := SUB;
+  id_in_wf := erefl;
+  id_out_wf := erefl;
+  id_gen_sem := gsc_SUB;
+|}.
+
 Lemma gsc_ADC : 
    @gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADC (implicit_flags ++ [:: E 0]) [:: E 0; E 1; F CF] [::] ADC.
 Proof.
@@ -470,7 +522,7 @@ Proof.
   by apply /ffunP;case;rewrite !ffunE.
 Qed.
 
-Definition ADDC_desc : instr_desc := {|
+Definition ADC_desc : instr_desc := {|
   id_name  := Ox86_ADC;
   id_out   := implicit_flags ++ [::E 0];
   id_in    := [:: E 0; E 1; F CF];
@@ -481,60 +533,33 @@ Definition ADDC_desc : instr_desc := {|
   id_gen_sem := gsc_ADC;
 |}.
 
-Lemma gsc_ADD : 
-   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADD (implicit_flags ++ [:: E 0]) [:: E 0; E 1] [::] ADD.
+Lemma gsc_SBB :
+   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_SBB (implicit_flags ++ [:: E 0]) [:: E 0; E 1; F CF] [::] SBB.
 Proof.
-  move=> [] // => [ x | x] y gd m m';rewrite /low_sem_aux /= /eval_ADD /=. 
+  move=> [] // => [ x | x] y gd m m';rewrite /low_sem_aux /= /eval_SBB /=.
   + t_xrbindP => vs ??? vy -> <- <- <- /=.
     rewrite /st_get_rflag_lax /st_get_rflag.
-    move=> [<-] /= [<-].
+    case: ((xrf m) CF) => //= b [<-] /= [<-].
     repeat f_equal;rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
     by apply /ffunP;case;rewrite !ffunE.
   t_xrbindP => vs ??? -> <- ?? vy -> <- <- <- /=.
   rewrite /st_get_rflag_lax /st_get_rflag.
-  move=> [<-] /= <-.
+  case: ((xrf m) CF) => //= b [<-] /= <-.
   rewrite /sets_low /=;f_equal.
   rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
   by apply /ffunP;case;rewrite !ffunE.
 Qed.
 
-
-
-
-
-Definition SUBC_desc : instr_desc. refine {|
-  id_name := SUBC;
-  id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
-  id_out  := [:: ADExplicit 0; ADImplicit vCF];
-  id_lo   := [:: TYVar; TYLiteral];
-  id_sem  := SUBC_lo;
+Definition SBB_desc : instr_desc := {|
+  id_name  := Ox86_SBB;
+  id_out   := implicit_flags ++ [::E 0];
+  id_in    := [:: E 0; E 1; F CF];
+  id_tys   := [:: TYoprd; TYoprd];
+  id_instr := SBB;
+  id_in_wf := erefl;
+  id_out_wf := erefl;
+  id_gen_sem := gsc_SBB;
 |}.
-Proof.
-  abstract by rewrite/= compile_var_CF.
-  abstract by rewrite/= compile_var_CF.
-  abstract by case => // [] // [] // x [] // [] // n [] // loid [] <-.
-  abstract 
-    by move=> r [] // [] // x [] // [] // n [] // loid [] <-;
-    rewrite /sem_lo_gen_aux /= ?evalrw /sem_lo_cmd /= ?evalrw;
-    case: subc.
-Defined.
-
-Definition MUL_desc : instr_desc. refine {|
-  id_name := MUL;
-  id_in   := [:: ADImplicit (var_of_register R1); ADImplicit (var_of_register R2)];
-  id_out   := [:: ADImplicit (var_of_register R1); ADImplicit (var_of_register R2)];
-  id_lo   := [::];
-  id_sem  := MUL_lo;
-|}.
-Proof.
-  abstract by rewrite/= /compile_var !register_of_var_of_register.
-  abstract by rewrite/= /compile_var !register_of_var_of_register.
-  abstract by move => [] // loid [] <-.
-  abstract 
-    by move => r [] // loid [] <-;
-    rewrite /sem_lo_gen_aux /= /compile_var !register_of_var_of_register /=
-    /sem_lo_cmd /=; case: mul.
-Defined.
 
 Definition get_id (c : cmd_name) :=
   match c with
