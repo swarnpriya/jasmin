@@ -244,10 +244,6 @@ Notation Undef    := RflagMap.Undef.
 Definition regmap0   : regmap   := [ffun x => I64.repr 0].
 Definition rflagmap0 : rflagmap := [ffun x => Undef].
 
-Section GLOB_DEFS.
-
-Context (gd: glob_defs).
-
 (* -------------------------------------------------------------------- *)
 Record x86_mem : Type :=
   X86Mem {
@@ -261,6 +257,14 @@ Record x86_state := X86State {
   xc   : seq asm;
   xip  : nat;
 }.
+
+Notation x86_result := (result error x86_mem).
+Notation x86_result_state := (result error x86_state).
+
+(* -------------------------------------------------------------------- *)
+Section GLOB_DEFS.
+
+Context (gd: glob_defs).
 
 (* -------------------------------------------------------------------- *)
 Definition mem_write_reg (r: register) (w: word) (m: x86_mem) :=
@@ -505,10 +509,8 @@ Definition all_undef := fun rf =>
   | DF => None
   end.
 
-(* -------------------------------------------------------------------- *)
-Notation x86_result := (result error x86_mem).
-Notation x86_result_state := (result error x86_state).
 
+(* -------------------------------------------------------------------- *)
 Implicit Types (ct : condt) (s : x86_mem) (o : oprd) (ir : ireg).
 Implicit Types (lbl : label).
 

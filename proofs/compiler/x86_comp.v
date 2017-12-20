@@ -192,7 +192,7 @@ Fixpoint tys_t_rec (ty: Type) tys : Type :=
   | ty' :: tys' => tys_t_rec (ty * interp_ty ty') tys'
   end.
 
-Definition tys_t (tys: seq arg_ty) : Type :=
+Definition tys_tuple (tys: seq arg_ty) : Type :=
   match tys with
   | [::] => unit
   | ty :: tys => tys_t_rec (interp_ty ty) tys
@@ -278,7 +278,7 @@ Definition arg_of_garg (i: garg) : argument :=
   | Goprd o => Aoprd o
   end.
 
-Definition sem_lo_ad_in (xs : seq garg) (ad : arg_desc) : option argument :=
+Definition low_sem_ad_in (xs : seq garg) (ad : arg_desc) : option argument :=
   match ad with
   | ADImplicit x => ssrfun.omap arg_of_dest (compile_var x)
   | ADExplicit n None => ssrfun.omap arg_of_garg (onth xs n)
@@ -288,7 +288,7 @@ Definition sem_lo_ad_in (xs : seq garg) (ad : arg_desc) : option argument :=
     if r1 == r2 then r1 else None
   end.
 
-Definition sem_lo_ad_out (xs : seq garg) (ad : arg_desc) : option destination :=
+Definition low_sem_ad_out (xs : seq garg) (ad : arg_desc) : option destination :=
   match ad with
   | ADImplicit x => compile_var x
   | ADExplicit n None =>
@@ -304,14 +304,14 @@ Definition sem_lo_ad_out (xs : seq garg) (ad : arg_desc) : option destination :=
 Definition st_get_rflag_lax (f: rflag) (m: x86_mem) : value :=
   if m.(xrf) f is Def b then Vbool b else Vundef sbool.
 
-Definition eval_lo gd (m : x86_mem) (a : argument) : exec value :=
+Definition eval_low gd (m : x86_mem) (a : argument) : exec value :=
   match a with
   | Aflag f => ok (st_get_rflag_lax f m)
   | Aoprd o => read_oprd gd o m >>= λ w, ok (Vword w)
   | Acondt c => eval_cond c m.(xrf) >>= λ b, ok (Vbool b)
   end.
 
-Definition set_lo (d: destination) (v: value) (m: x86_mem) : result _ x86_mem :=
+Definition set_low (d: destination) (v: value) (m: x86_mem) : result _ x86_mem :=
   match d, v with
   | DAddr a, Vword w =>
     let x := decode_addr m a in
@@ -322,122 +322,185 @@ Definition set_lo (d: destination) (v: value) (m: x86_mem) : result _ x86_mem :=
   | _, _ => type_error
   end.
 
-Definition sets_lo (m : x86_mem) (x : seq destination) (v : seq value) :=
+Definition sets_low (m : x86_mem) (x : seq destination) (v : seq value) :=
   if size x == size v then
-    foldl (fun m xv => Result.bind (set_lo xv.1 xv.2) m) (ok m) (zip x v)
+    foldl (fun m xv => Result.bind (set_low xv.1 xv.2) m) (ok m) (zip x v)
   else type_error.
 
-Definition sem_lo_cmd gd (op : values → exec values) m outx inx :=
-  mapM (eval_lo gd m) inx >>= op >>= sets_lo m outx.
-
-(*
-Definition cmd_name_of_loid (loid: low_instr) : cmd_name :=
-  match loid with
-  | ADDC_lo _ _ => ADDC
-  | SUBC_lo _ _ => SUBC
-  | MUL_lo => MUL
-  end.
-
-Definition operands_of_loid (li: low_instr) : seq ireg :=
-  match li with
-  | ADDC_lo x y => [:: IRReg x ; y ]
-  | SUBC_lo x y => [:: IRReg x ; IRImm y ]
-  | MUL_lo => [::]
- end.
-
-*)
-
-Definition sem_lo_gen_aux (gd: glob_defs) (m: x86_mem) (op: sopn)
+Definition low_sem_aux (gd: glob_defs) (m: x86_mem) (op: sopn)
            (outx inx: seq arg_desc) (xs: seq garg) : exec x86_mem :=
-  let inx := omap (sem_lo_ad_in xs) inx in
-  let outx := omap (sem_lo_ad_out xs) outx in
+  let inx := omap (low_sem_ad_in xs) inx in
+  let outx := omap (low_sem_ad_out xs) outx in
   if (inx, outx) is (Some inx, Some outx) then
-    sem_lo_cmd gd (sem_sopn op) m outx inx
+    mapM (eval_low gd m) inx >>= sem_sopn op >>= sets_low m outx
   else type_error.
-
 
 (* -------------------------------------------------------------------- *)
+Definition mk_garg ty : interp_ty ty -> garg := 
+  match ty with
+  | TYcondt => Gcondt 
+  | TYoprd => Goprd
+  | TYreg  => fun r => Goprd (Reg_op r)
+  | TYireg => fun ir => Goprd (match ir with Imm_ir i => Imm_op i | Reg_ir r => Reg_op r end)
+  end.
+
+Fixpoint seq_of_tys_t_rec ty tys : (ty -> list garg) -> tys_t_rec ty tys -> list garg := 
+  match tys with
+  | [::] => fun k t => k t 
+  | ty'::tys => fun k => @seq_of_tys_t_rec (ty * interp_ty ty')%type tys 
+     (fun (p:ty * interp_ty ty') => rcons (k p.1) (@mk_garg ty' p.2))
+  end.
+
+Definition seq_of_tys_tuple tys : tys_tuple tys -> list garg := 
+  match tys with
+  | [::] => fun tt => [::]
+  | ty::tys => @seq_of_tys_t_rec (interp_ty ty) tys (fun a => [::@mk_garg ty a])
+  end.
+
+Fixpoint gen_sem_correct tys id_name id_out id_in args  : interp_tys tys -> Prop := 
+  match tys with
+  | [::] => fun asm => 
+    ∀ gd m m',
+       low_sem_aux gd m id_name id_out id_in args = ok m' ->
+       eval_instr_mem gd asm m = ok m'
+  | ty::tys => fun asm => 
+    forall (x:interp_ty ty), @gen_sem_correct tys id_name id_out id_in (args ++ [::@mk_garg ty x]) (asm x)
+  end.
+
 (*
-Definition wf_sem (c: sopn) (tys: seq arg_ty) (sem: interp_tys tys) : Prop :=
-  ∀ irs loid,
-    typed_apply_iregs irs sem = Some loid →
-    cmd_name_of_loid loid = c ∧
-    operands_of_loid loid = irs.
+
+Definition gen_sem_correct (id_tys: seq arg_ty) id_name id_out id_in id_instr := 
+   
+  ∀ gd args m m',
+      low_sem_aux gd m id_name id_out id_in (@seq_of_tys_tuple id_tys args) = ok m' ->
+       eval_instr_mem gd (typed_apply_gargs id_instr (@seq_of_tys_tuple id_tys args) id_instr) m = ok m'.
+
 *)
-
-Definition gen_sem_correct (tys: seq arg_ty) id_name id_out id_in (sem:interp_tys tys) := 
-  ∀ m irs loid,
-    typed_apply_iregs irs sem = Some loid →
-    sem_lo_gen_aux m id_name id_out id_in loid = Some (sem_lo m loid).     
-
-Record instr_desc := {
-  id_name : cmd_name;
-  id_in   : seq arg_desc;
+Record instr_desc := mk_instr_desc {
+  id_name : sopn;
   id_out  : seq arg_desc;
-  id_lo   : seq arg_ty;
-  id_sem  : interp_tys id_lo;
+  id_in   : seq arg_desc;
+  id_tys  : seq arg_ty;
+  id_instr: interp_tys id_tys;
 
   (* FIXME : Add the functionnal semantic of the operator in the record,
              this require to the have its syntatic type *)
   id_in_wf : all wf_implicit id_in;
   id_out_wf : all wf_implicit id_out;
-  id_sem_wf: wf_sem id_name id_sem;
-  id_gen_sem_wf : gen_sem_correct id_name id_out id_in id_sem;
+  id_gen_sem : gen_sem_correct id_name id_out id_in [::] id_instr;
 }.
 
-Definition sem_lo_gen (m: lomem) (id: instr_desc) (li: low_instr) : option lomem :=
-  sem_lo_gen_aux m id.(id_name) id.(id_out) id.(id_in) li.
+Definition low_sem gd m (id: instr_desc) (gargs: seq garg) : x86_result :=
+  low_sem_aux gd m id.(id_name) id.(id_out) id.(id_in) gargs.
 
 (* -------------------------------------------------------------------- *)
 (* Generated mixed semantics                                            *)
 
-Definition sem_ad_in (xs : seq expr) (ad : arg_desc) : option expr :=
-  match ad with
-  | ADImplicit x => Some (EVar x)
-  | ADExplicit n => onth xs n
+Definition is_var x e := 
+  match e with
+  | Pvar (VarI x' _) => x == x'
+  | _ => false
   end.
 
-Definition sem_ad_out (xs : seq expr) (ad : arg_desc) : option var :=
+Definition mixed_sem_ad_in (xs : seq pexpr) (ad : arg_desc) : option pexpr :=
   match ad with
-  | ADImplicit x => Some x
-  | ADExplicit n =>
-      if onth xs n is Some (EVar y) then Some y else None
+  | ADImplicit x => Some (Pvar (VarI x xH)) 
+  | ADExplicit n None => onth xs n
+  | ADExplicit n (Some x) =>
+    onth xs n >>= fun e => if is_var x e then Some e else None
+  end%O.
+
+Definition lval_of_pexpr e := 
+  match e with
+  | Pvar v    => Some (Lvar v)
+  | Pload x e => Some (Lmem x e)
+  | _         => None
   end.
 
-Definition sem_id
-  (m : mem) (id : instr_desc) (xs : seq expr) : option mem :=
-  let: inx  := omap (sem_ad_in xs) id.(id_in ) in
-  let: outx := omap (sem_ad_out xs) id.(id_out) in
+Definition mixed_sem_ad_out (xs : seq pexpr) (ad : arg_desc) : option lval :=
+  match ad with
+  | ADImplicit x => Some (Lvar (VarI x xH))
+  | ADExplicit n None =>
+    onth xs n >>= lval_of_pexpr
+  | _ => None
+  end%O.
 
+Definition mixed_sem gd m (id : instr_desc) (xs : seq pexpr) :=
+  let: inx  := omap (mixed_sem_ad_in xs) id.(id_in ) in
+  let: outx := omap (mixed_sem_ad_out xs) id.(id_out) in
   if (inx, outx) is (Some inx, Some outx) then
-    sem_cmd (semop id.(id_name)) m outx inx
-  else None.
+    sem_pexprs gd m inx >>= sem_sopn id.(id_name) >>= (write_lvals gd m outx) 
+  else type_error.
 
 (* -------------------------------------------------------------------- *)
 (* Definitions of descriptors                                           *)
 
-Lemma eval_lo_arg_of_ireg m i :
+(*Lemma eval_lo_arg_of_ireg m i :
   eval_lo m (arg_of_ireg i) = eval_ireg m i.
-Proof. by case: i. Qed.
+Proof. by case: i. Qed. 
 
 Definition evalrw := (compile_var_CF, eval_lo_arg_of_ireg).
 
-Definition ADDC_desc : instr_desc. refine {|
-  id_name := ADDC;
-  id_in   := [:: ADExplicit 0; ADExplicit 1; ADImplicit vCF];
-  id_out  := [:: ADExplicit 0; ADImplicit vCF];
-  id_lo   := [:: TYVar; TYVL];
-  id_sem  := ADDC_lo;
-|}.
+*)
+
+Definition implicit_flags := 
+  map (ADImplicit \o var_of_flag) [::OF; CF; SF; PF; ZF].
+
+Definition implicit_flags_noCF := 
+  map (ADImplicit \o var_of_flag) [::OF; SF; PF; ZF].
+
+Local Coercion E n := ADExplicit n None.
+Local Coercion F f := ADImplicit (var_of_flag f).
+Local Coercion R f := ADImplicit (var_of_register f).
+
+Lemma gsc_ADC : 
+   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADC (implicit_flags ++ [:: E 0]) [:: E 0; E 1; F CF] [::] ADC.
 Proof.
-  abstract by rewrite/= compile_var_CF.
-  abstract by rewrite/= compile_var_CF.
-  abstract by move => irs loid; case: irs => // [] // [] // x [] // y [] // [] <-.
-  abstract 
-    by move=> r [] // [] // x [] // y [] // loid [<-];
-    rewrite /sem_lo_gen_aux /= ?evalrw /sem_lo_cmd /= ?evalrw;
-    case: addc.
-Defined.
+  move=> [] // => [ x | x] y gd m m';rewrite /low_sem_aux /= /eval_ADC /=. 
+  + t_xrbindP => vs ??? vy -> <- <- <- /=.
+    rewrite /st_get_rflag_lax /st_get_rflag.
+    case: ((xrf m) CF) => //= b [<-] /= [<-].
+    repeat f_equal;rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
+    by apply /ffunP;case;rewrite !ffunE.
+  t_xrbindP => vs ??? -> <- ?? vy -> <- <- <- /=.
+  rewrite /st_get_rflag_lax /st_get_rflag.
+  case: ((xrf m) CF) => //= b [<-] /= <-.
+  rewrite /sets_low /=;f_equal.
+  rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
+  by apply /ffunP;case;rewrite !ffunE.
+Qed.
+
+Definition ADDC_desc : instr_desc := {|
+  id_name  := Ox86_ADC;
+  id_out   := implicit_flags ++ [::E 0];
+  id_in    := [:: E 0; E 1; F CF];
+  id_tys   := [:: TYoprd; TYoprd];
+  id_instr := ADC; 
+  id_in_wf := erefl;
+  id_out_wf := erefl;
+  id_gen_sem := gsc_ADC;
+|}.
+
+Lemma gsc_ADD : 
+   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADD (implicit_flags ++ [:: E 0]) [:: E 0; E 1] [::] ADD.
+Proof.
+  move=> [] // => [ x | x] y gd m m';rewrite /low_sem_aux /= /eval_ADD /=. 
+  + t_xrbindP => vs ??? vy -> <- <- <- /=.
+    rewrite /st_get_rflag_lax /st_get_rflag.
+    move=> [<-] /= [<-].
+    repeat f_equal;rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
+    by apply /ffunP;case;rewrite !ffunE.
+  t_xrbindP => vs ??? -> <- ?? vy -> <- <- <- /=.
+  rewrite /st_get_rflag_lax /st_get_rflag.
+  move=> [<-] /= <-.
+  rewrite /sets_low /=;f_equal.
+  rewrite /mem_update_rflags /mem_set_rflags /=;f_equal.
+  by apply /ffunP;case;rewrite !ffunE.
+Qed.
+
+
+
+
 
 Definition SUBC_desc : instr_desc. refine {|
   id_name := SUBC;
