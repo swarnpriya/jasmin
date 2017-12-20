@@ -779,55 +779,11 @@ Definition SHLD_desc := make_instr_desc SHLD_gsc.
 
 
 
->>>>>>> Add declaration of most of the instructions
-
-Lemma gsc_MUL :
-  @gen_sem_correct [:: TYoprd ] Ox86_MUL (implicit_flags ++ [:: R RDX; R RAX]) [:: R RAX; E 0] [::] MUL.
-Proof.
-  rewrite /gen_sem_correct /low_sem_aux /= /eval_MUL.
-  move => x gd m m'.
-  t_xrbindP => vs ? ? ? vy -> <- <- <- /= [<-] [<-] /=; repeat f_equal.
-  rewrite /mem_update_rflags /mem_unset_rflags /=; f_equal.
-  by apply/ffunP; case; rewrite !ffunE.
-Qed.
-
-<<<<<<< HEAD
-Definition MUL_desc : instr_desc := {|
-  id_name  := Ox86_MUL;
-  id_out   := implicit_flags ++ [:: R RDX ; R RAX ];
-  id_in    := [:: R RAX; E 0];
-  id_tys   := [:: TYoprd ];
-  id_instr := MUL;
-  id_in_wf := erefl;
-  id_out_wf := erefl;
-  id_gen_sem := gsc_MUL;
-|}.
-
-Lemma gsc_IMUL :
-  @gen_sem_correct [:: TYoprd ] Ox86_IMUL (implicit_flags ++ [:: R RDX; R RAX])
-                   [:: R RAX; E 0] [::] (λ x, IMUL x None).
-Proof.
-  rewrite /gen_sem_correct /low_sem_aux /=.
-  move => x gd m m'.
-  t_xrbindP => vs ? ? ? vy -> <- <- <- /= [<-] [<-] /=; repeat f_equal.
-  rewrite /mem_update_rflags /mem_unset_rflags /=; f_equal.
-  by apply/ffunP; case; rewrite !ffunE.
-Qed.
-
-Definition IMUL_desc : instr_desc := {|
-  id_name  := Ox86_IMUL;
-  id_out   := implicit_flags ++ [:: R RDX ; R RAX ];
-  id_in    := [:: R RAX; E 0];
-  id_tys   := [:: TYoprd ];
-  id_instr := λ x, IMUL x None;
-  id_in_wf := erefl;
-  id_out_wf := erefl;
-  id_gen_sem := gsc_IMUL;
-|}.
-=======
 
 
->>>>>>> Add declaration of most of the instructions
+
+
+
 
 Definition get_id (c : cmd_name) :=
   match c with
