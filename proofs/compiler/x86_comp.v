@@ -166,7 +166,7 @@ Proof.
 Qed.
 
 (* -------------------------------------------------------------------- *)
-Variant arg_ty := TYcondt | TYoprd | TYreg | TYireg.
+Variant arg_ty := TYcondt | TYoprd | TYreg | TYireg | TYimm.
 
 Scheme Equality for arg_ty.
 
@@ -179,6 +179,7 @@ Definition interp_ty (ty : arg_ty) : Type :=
   | TYoprd  => oprd
   | TYreg   => register
   | TYireg  => ireg
+  | TYimm => word
   end.
 
 Fixpoint interp_tys (tys : seq arg_ty) :=
@@ -342,6 +343,7 @@ Definition mk_garg ty : interp_ty ty -> garg :=
   | TYoprd => Goprd
   | TYreg  => fun r => Goprd (Reg_op r)
   | TYireg => fun ir => Goprd (match ir with Imm_ir i => Imm_op i | Reg_ir r => Reg_op r end)
+  | TYimm => fun i => Goprd (Imm_op i)
   end.
 
 Fixpoint seq_of_tys_t_rec ty tys : (ty -> list garg) -> tys_t_rec ty tys -> list garg := 
@@ -367,6 +369,8 @@ Fixpoint gen_sem_correct tys id_name id_out id_in args  : interp_tys tys -> Prop
     forall (x:interp_ty ty), @gen_sem_correct tys id_name id_out id_in (args ++ [::@mk_garg ty x]) (asm x)
   end.
 
+Arguments gen_sem_correct : clear implicits.
+
 (*
 
 Definition gen_sem_correct (id_tys: seq arg_ty) id_name id_out id_in id_instr := 
@@ -376,6 +380,7 @@ Definition gen_sem_correct (id_tys: seq arg_ty) id_name id_out id_in id_instr :=
        eval_instr_mem gd (typed_apply_gargs id_instr (@seq_of_tys_tuple id_tys args) id_instr) m = ok m'.
 
 *)
+
 Record instr_desc := mk_instr_desc {
   id_name : sopn;
   id_out  : seq arg_desc;
@@ -385,7 +390,7 @@ Record instr_desc := mk_instr_desc {
 
   (* FIXME : Add the functionnal semantic of the operator in the record,
              this require to the have its syntatic type *)
-  id_gen_sem : gen_sem_correct id_name id_out id_in [::] id_instr;
+  id_gen_sem : gen_sem_correct id_tys id_name id_out id_in [::] id_instr;
   id_in_wf   : all wf_implicit id_in;
   id_out_wf  : all wf_implicit id_out;
 }.
@@ -453,12 +458,11 @@ Local Coercion E n := ADExplicit n None.
 Local Coercion F f := ADImplicit (var_of_flag f).
 Local Coercion R f := ADImplicit (var_of_register f).
 
-
 Notation make_instr_desc gen_sem := (mk_instr_desc gen_sem erefl erefl).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma MOV_gsc : 
-  @gen_sem_correct [:: TYoprd; TYoprd] Ox86_MOV [:: E 0] [:: E 1] [::] MOV.
+  gen_sem_correct [:: TYoprd; TYoprd] Ox86_MOV [:: E 0] [:: E 1] [::] MOV.
 Proof.
   move=> [] // => [ x | x] y gd m m';rewrite /low_sem_aux /= /eval_MOV /=;
   by t_xrbindP => ???? -> <- <- [<-] <-.   
@@ -485,7 +489,7 @@ Proof.
 Qed.
 
 Lemma CMOVcc_gsc : 
-  @gen_sem_correct [:: TYcondt; TYoprd; TYoprd] 
+  gen_sem_correct [:: TYcondt; TYoprd; TYoprd]
      Ox86_CMOVcc [:: E 1] [:: E 0; E 2; E 1] [::] CMOVcc.
 Proof.
   move=> ct [] // => [x | x] y gd m m';
@@ -509,8 +513,8 @@ Ltac update_set :=
              /mem_write_reg /=;
      repeat f_equal; apply /ffunP; case; rewrite !ffunE.
 
-Lemma ADD_gsc : 
-   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADD 
+Lemma ADD_gsc :
+   gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADD
      (implicit_flags ++ [:: E 0]) 
      [:: E 0; E 1] [::] ADD.
 Proof.
@@ -523,7 +527,7 @@ Definition ADD_desc := make_instr_desc ADD_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma SUB_gsc : 
-   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_SUB
+   gen_sem_correct [:: TYoprd; TYoprd] Ox86_SUB
       (implicit_flags ++ [:: E 0]) [:: E 0; E 1] [::] SUB.
 Proof.
   move=> [] // => [ x | x] y gd m m'; rewrite /low_sem_aux /= /eval_SUB /=.
@@ -535,7 +539,7 @@ Definition SUB_desc := make_instr_desc SUB_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma MUL_gsc :
-  @gen_sem_correct [:: TYoprd] Ox86_MUL 
+  gen_sem_correct [:: TYoprd] Ox86_MUL
       (implicit_flags ++ [:: R RDX; R RAX])
       [:: R RAX; E 0] [::] MUL.
 Proof.
@@ -547,7 +551,7 @@ Definition MUL_desc := make_instr_desc MUL_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma IMUL_gsc :
-  @gen_sem_correct [:: TYoprd ] Ox86_IMUL (implicit_flags ++ [:: R RDX; R RAX])
+  gen_sem_correct [:: TYoprd ] Ox86_IMUL (implicit_flags ++ [:: R RDX; R RAX])
                    [:: R RAX; E 0] [::] (λ x, IMUL x None).
 Proof.
   rewrite /gen_sem_correct /low_sem_aux /= => x gd m m'.
@@ -557,12 +561,41 @@ Qed.
 Definition IMUL_desc   := make_instr_desc IMUL_gsc.
 
 (* ----------------------------------------------------------------------------- *)
-(* FIXME                                                                         *)
-(*Definition IMUL64_desc := make_instr_desc IMUL64_gsc. *)
+Lemma IMUL64_gsc :
+  gen_sem_correct [:: TYoprd ; TYoprd] Ox86_IMUL64
+                   (implicit_flags ++ [:: E 0]) [:: E 0; E 1] [::]
+                   (λ x y, IMUL x (Some (y, None))).
+Proof.
+  rewrite /gen_sem_correct /low_sem_aux /=.
+  case => // x y gd m m' /=.
+  + t_xrbindP => vs ? ? ? vy -> <- <- <-.
+    t_xrbindP => vx [<-] ? [<-] [<-] [<-] /=; update_set.
+  t_xrbindP => vs ? ? ? -> <- ? ? ? -> <- <- <-.
+  t_xrbindP => ? [<-] ? [<-] [<-] <-.
+  update_set.
+Qed.
+
+Definition IMUL64_desc := make_instr_desc IMUL64_gsc.
+
+Lemma IMUL64imm_gsc :
+  gen_sem_correct [:: TYoprd ; TYoprd ; TYimm] Ox86_IMUL64imm
+                   (implicit_flags ++ [:: E 0]) [:: E 1; E 2] [::]
+    (λ (x y : interp_ty TYoprd) (z : interp_ty TYimm), IMUL x (Some (y, Some z))).
+Proof.
+  rewrite /gen_sem_correct /low_sem_aux /=.
+  case => // d x y gd m m' /=.
+  + t_xrbindP => vs ? ? ? -> <- <-.
+    t_xrbindP => ? [<-] ? [<-] [<-] [<-] /=; update_set.
+  t_xrbindP => vs ? ? ? -> <- <-.
+  t_xrbindP => ? [<-] ? [<-] [<-] <-.
+  update_set.
+Qed.
+
+Definition IMUL64imm_desc := make_instr_desc IMUL64imm_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma DIV_gsc : 
-  @gen_sem_correct [:: TYoprd] Ox86_DIV 
+  gen_sem_correct [:: TYoprd] Ox86_DIV
       (implicit_flags ++ [:: R RAX; R RDX])
       [:: R RDX; R RAX; E 0] [::] DIV.
 Proof.
@@ -575,7 +608,7 @@ Definition DIV_desc := make_instr_desc DIV_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma IDIV_gsc :
-  @gen_sem_correct [:: TYoprd] Ox86_IDIV
+  gen_sem_correct [:: TYoprd] Ox86_IDIV
       (implicit_flags ++ [:: R RAX; R RDX])
       [:: R RDX; R RAX; E 0] [::] IDIV.
 Proof.
@@ -588,7 +621,7 @@ Definition IDIV_desc := make_instr_desc IDIV_gsc.
           
 (* ----------------------------------------------------------------------------- *)
 Lemma ADC_gsc : 
-   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADC 
+   gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADC
        (implicit_flags ++ [:: E 0]) 
        [:: E 0; E 1; F CF] [::] ADC.
 Proof.
@@ -605,7 +638,7 @@ Definition ADC_desc := make_instr_desc ADC_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma SBB_gsc : 
-   @gen_sem_correct [:: TYoprd; TYoprd] Ox86_SBB 
+   gen_sem_correct [:: TYoprd; TYoprd] Ox86_SBB
        (implicit_flags ++ [:: E 0]) 
        [:: E 0; E 1; F CF] [::] SBB.
 Proof.
@@ -622,7 +655,7 @@ Definition SBB_desc := make_instr_desc SBB_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma NEG_gsc :
-  @gen_sem_correct [:: TYoprd] Ox86_NEG 
+  gen_sem_correct [:: TYoprd] Ox86_NEG
      (implicit_flags ++ [:: E 0])
      [:: E 0] [::] NEG.
 Proof.
@@ -635,7 +668,7 @@ Definition NEG_desc := make_instr_desc NEG_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma INC_gsc :
-  @gen_sem_correct [:: TYoprd] Ox86_INC 
+  gen_sem_correct [:: TYoprd] Ox86_INC
      (implicit_flags_noCF ++ [:: E 0])
      [:: E 0] [::] INC.
 Proof.
@@ -648,7 +681,7 @@ Definition INC_desc := make_instr_desc INC_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma DEC_gsc :
-  @gen_sem_correct [:: TYoprd] Ox86_DEC 
+  gen_sem_correct [:: TYoprd] Ox86_DEC
      (implicit_flags_noCF ++ [:: E 0])
      [:: E 0] [::] DEC.
 Proof.
@@ -661,7 +694,7 @@ Definition DEC_desc := make_instr_desc DEC_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma SETcc_gsc :
-  @gen_sem_correct [:: TYcondt; TYoprd] Ox86_SETcc 
+  gen_sem_correct [:: TYcondt; TYoprd] Ox86_SETcc
      [:: E 1]
      [:: E 0] [::] SETcc.
 Proof.
@@ -675,7 +708,7 @@ Definition SETcc_desc := make_instr_desc SETcc_gsc.
 (* FIXME oprd for the second argument ? *)
 (* ICI on a un probleme car la reconstruction des arguments est pas direct *)
 Lemma LEA_gsc :
-  @gen_sem_correct [:: TYoprd; TYoprd] Ox86_LEA 
+  gen_sem_correct [:: TYoprd; TYoprd] Ox86_LEA
      [:: E 0]
      [:: E 0; E 1] [::] LEA.
 Proof.
@@ -685,7 +718,7 @@ Definition LEA_desc := make_instr_desc LEA_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma TEST_gsc :
-  @gen_sem_correct [:: TYoprd; TYoprd] Ox86_TEST 
+  gen_sem_correct [:: TYoprd; TYoprd] Ox86_TEST
      implicit_flags
      [:: E 0; E 1] [::] TEST.
 Proof.
@@ -697,7 +730,7 @@ Definition TEST_desc := make_instr_desc TEST_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma CMP_gsc :
-  @gen_sem_correct [:: TYoprd; TYoprd] Ox86_CMP 
+  gen_sem_correct [:: TYoprd; TYoprd] Ox86_CMP
      implicit_flags
      [:: E 0; E 1] [::] CMP.
 Proof.
@@ -709,7 +742,7 @@ Definition CMP_desc := make_instr_desc CMP_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma AND_gsc :
-  @gen_sem_correct [:: TYoprd; TYoprd] Ox86_AND 
+  gen_sem_correct [:: TYoprd; TYoprd] Ox86_AND
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] AND.
 Proof.
@@ -722,7 +755,7 @@ Definition AND_desc := make_instr_desc AND_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma OR_gsc :
-  @gen_sem_correct [:: TYoprd; TYoprd] Ox86_OR 
+  gen_sem_correct [:: TYoprd; TYoprd] Ox86_OR
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] OR.
 Proof.
@@ -735,7 +768,7 @@ Definition OR_desc := make_instr_desc OR_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma XOR_gsc :
-  @gen_sem_correct [:: TYoprd; TYoprd] Ox86_XOR 
+  gen_sem_correct [:: TYoprd; TYoprd] Ox86_XOR
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] XOR.
 Proof.
@@ -748,7 +781,7 @@ Definition XOR_desc := make_instr_desc XOR_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma NOT_gsc :
-  @gen_sem_correct [:: TYoprd] Ox86_NOT 
+  gen_sem_correct [:: TYoprd] Ox86_NOT
      [:: E 0]
      [:: E 0] [::] NOT.
 Proof.
@@ -768,7 +801,7 @@ Lemma read_oprd_ireg gd y m :
 Proof. by case: y => //. Qed.
 
 Lemma SHL_gsc :
-  @gen_sem_correct [:: TYoprd; TYireg] Ox86_SHL 
+  gen_sem_correct [:: TYoprd; TYireg] Ox86_SHL
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] SHL.
 Proof.
@@ -783,7 +816,7 @@ Definition SHL_desc := make_instr_desc SHL_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma SHR_gsc :
-  @gen_sem_correct [:: TYoprd; TYireg] Ox86_SHR 
+  gen_sem_correct [:: TYoprd; TYireg] Ox86_SHR
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] SHR.
 Proof.
@@ -793,7 +826,7 @@ Definition SHR_desc := make_instr_desc SHR_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma SAR_gsc :
-  @gen_sem_correct [:: TYoprd; TYireg] Ox86_SAR 
+  gen_sem_correct [:: TYoprd; TYireg] Ox86_SAR
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] SAR.
 Proof.
@@ -803,53 +836,13 @@ Definition SAR_desc := make_instr_desc SAR_gsc.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma SHLD_gsc :
-  @gen_sem_correct [:: TYoprd; TYreg; TYireg] Ox86_SHLD 
+  gen_sem_correct [:: TYoprd; TYreg; TYireg] Ox86_SHLD
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1; E 2] [::] SHLD.
 Proof.
 Admitted.
 
 Definition SHLD_desc := make_instr_desc SHLD_gsc.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 Definition get_id (c : cmd_name) :=
   match c with

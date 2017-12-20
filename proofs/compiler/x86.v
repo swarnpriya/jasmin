@@ -444,6 +444,7 @@ Definition kind_of_sopn (o : sopn) :=
   | Ox86_CMOVcc => OK_MOVcc
   | Ox86_LEA    => OK_LEA
   (* Not Implemented ... *)
+  | Ox86_IMUL64imm
   | Ox86_IMUL | Ox86_DIV | Ox86_IDIV | Ox86_SETcc | Ox86_TEST | Ox86_NOT => OK_None
   (* Should not be done *)
   | Omulu | Oaddcarry | Osubcarry => OK_None

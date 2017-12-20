@@ -799,6 +799,7 @@ Definition sem_sopn (o:sopn) :  values -> exec values :=
   | Ox86_MUL     => app_ww   x86_mul
   | Ox86_IMUL    => app_ww   x86_imul
   | Ox86_IMUL64  => app_ww   x86_imul64
+  | Ox86_IMUL64imm => app_ww   x86_imul64
   | Ox86_DIV     => app_www  x86_div
   | Ox86_IDIV    => app_www  x86_idiv
   | Ox86_ADC     => app_wwb  x86_adc
