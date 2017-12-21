@@ -333,7 +333,7 @@ Definition low_sem_aux (gd: glob_defs) (m: x86_mem) (op: sopn)
   let inx := omap (low_sem_ad_in xs) inx in
   let outx := omap (low_sem_ad_out xs) outx in
   if (inx, outx) is (Some inx, Some outx) then
-    mapM (eval_low gd m) inx >>= sem_sopn op >>= sets_low m outx
+    mapM (eval_low gd m) inx >>= exec_sopn op >>= sets_low m outx
   else type_error.
 
 (* -------------------------------------------------------------------- *)
@@ -434,19 +434,11 @@ Definition mixed_sem gd m (id : instr_desc) (xs : seq pexpr) :=
   let: inx  := omap (mixed_sem_ad_in xs) id.(id_in ) in
   let: outx := omap (mixed_sem_ad_out xs) id.(id_out) in
   if (inx, outx) is (Some inx, Some outx) then
-    sem_pexprs gd m inx >>= sem_sopn id.(id_name) >>= (write_lvals gd m outx) 
+    sem_sopn gd id.(id_name) m outx inx
   else type_error.
 
 (* -------------------------------------------------------------------- *)
 (* Definitions of descriptors                                           *)
-
-(*Lemma eval_lo_arg_of_ireg m i :
-  eval_lo m (arg_of_ireg i) = eval_ireg m i.
-Proof. by case: i. Qed. 
-
-Definition evalrw := (compile_var_CF, eval_lo_arg_of_ireg).
-
-*)
 
 Definition implicit_flags := 
   map (ADImplicit \o var_of_flag) [::OF; CF; SF; PF; ZF].
@@ -493,13 +485,14 @@ Lemma CMOVcc_gsc :
      Ox86_CMOVcc [:: E 1] [:: E 0; E 2; E 1] [::] CMOVcc.
 Proof.
   move=> ct [] // => [x | x] y gd m m';
-  rewrite /low_sem_aux /= /eval_CMOVcc /= /eval_MOV /=.
-  + t_xrbindP => ??? b -> <- ?? vy Hy <- <- <- [<-] [<-] /=. 
-    case: ifP => ?;[ rewrite Hy | f_equal ] => //.
-    by case: (m) => /= ???; rewrite /mem_write_reg /=; f_equal; apply RegMap_set_id.
-  t_xrbindP => ??? b -> <- ?? vy Hy <- ?? vx Hx <- <- <- <- [<-] <- /=.
-  rewrite /sets_low /=; case: ifP => ?; first by rewrite Hy. 
-  move=> {Hy}; rewrite /mem_write_mem.
+  rewrite /low_sem_aux /= /= /eval_CMOVcc /eval_MOV /=.
+  + t_xrbindP => ??? b -> <- ?? vy Hy <- <- <- /=. 
+    case:ifP => ? -[<-] [<-];rewrite ?Hy //.
+    by rewrite /mem_write_reg /=; f_equal;rewrite -RegMap_set_id;case:(m).
+  t_xrbindP => ??? b -> <- ?? vy Hy <- ?? vx Hx <- <- <- <- /=. 
+  case:ifP => ? -[<-].
+  + by rewrite /sets_low /= Hy.
+  rewrite /sets_low /= /mem_write_mem => {Hy}.
   case: m (decode_addr _ _) Hx => xmem xreg xrf /= a.
   by move=> /write_mem_id -> //.
 Qed.
@@ -963,11 +956,7 @@ Definition check_sopn_res (loargs : seq pexpr) (x : lval) (ad : arg_desc) :=
   match ad with
   | ADImplicit y => is_lvar y x
   | ADExplicit n o => 
-    (Some x == (onth loargs n >>= lval_of_pexpr)%O) &&
-    match o with
-    | None => true
-    | Some y => is_lvar y x
-    end
+    (Some x == (onth loargs n >>= lval_of_pexpr)%O) && (o == None)
   end.
 
 Definition check_sopn_args
@@ -980,9 +969,6 @@ Definition check_sopn_args
 Lemma is_varP x e : is_var x e ->  eq_expr e {| v_var := x; v_info := xH |}.
 Proof. by case e => //= v /eqP ->. Qed.
   
-  + move=>
-Admitted.
-
 Lemma check_sopn_argP (loargs hiargs : seq pexpr) (ads : seq arg_desc) :
      all2 (check_sopn_arg loargs) hiargs ads
   -> exists hiargs', omap (mixed_sem_ad_in loargs) ads = Some hiargs' /\ all2 eq_expr hiargs hiargs'.
@@ -998,39 +984,82 @@ Proof.
   by case: o Ho => // y ->.
 Qed.
 
+Lemma is_lvarP x e : is_lvar x e ->  eq_lval e {| v_var := x; v_info := xH |}.
+Proof. by case e => //= v /eqP ->. Qed.
+
 Lemma check_sopn_resP (loargs : seq pexpr) (lval : seq lval) (ads : seq arg_desc) :
      all2 (check_sopn_res loargs) lval ads
   -> exists lval', omap (mixed_sem_ad_out loargs) ads = Some lval' /\ all2 eq_lval lval lval'.
 Proof.
-rewrite all2P => /andP [/eqP eqsz h]; rewrite omap_map.
-apply/eqP; rewrite oseqP.
-apply/eqP/(eq_from_nth (x0 := None)); rewrite ?(size_map, eqsz) //.
-move=> i lt_i_ads; have ad0 : arg_desc := (ADExplicit 0).
-rewrite (nth_map ad0) // (nth_map vCF) ?eqsz // /sem_ad_out.
-set x1 := nth vCF _ _; set x2 := nth ad0 _ _.
-have -/(allP h) /=: (x1, x2) \in zip hiargs ads.
-+ by rewrite -nth_zip // mem_nth // size_zip eqsz minnn.
-rewrite /check_cmd_res; case: x2 => [? /eqP->//|].
-by move=> n /andP[len /eqP];rewrite (onth_nth_size (EVar x1) len) => <-.
+  elim: lval ads => [ | lv lval Hrec] [ | a ads] //=.
+  + by move=> _;exists nil.
+  move=> /andP [Hc /Hrec [lval' [-> Hall]]] /=.
+  rewrite /mixed_sem_ad_out; case: a Hc => //=.
+  + by move=> y /is_lvarP Hy;eexists;split;[by eauto | ];rewrite /= Hy.
+  move=> n o /andP [] /eqP <- /eqP ->;eexists;split;[by eauto | ].
+  by rewrite /= eq_lval_refl.
 Qed.
 
-Theorem L0 c outx inx loargs m1 m2 :
-     check_cmd_args c outx inx loargs
-  -> semc m1 (c, outx, inx) = Some m2
-  -> sem_id m1 (get_id c) loargs = Some m2.
+Lemma eq_exprsP gd m es1 es2:
+  all2 eq_expr es1 es2 → sem_pexprs gd m es1 = sem_pexprs gd m es2.
 Proof.
-by case/andP=> h1 h2; rewrite /sem_id /semc (Pin h2) (Pout h1) get_id_ok.
+ rewrite /sem_pexprs.
+ by elim: es1 es2 => [ | ?? Hrec] [ | ??] //= /andP [] /eq_exprP -> /Hrec ->.
 Qed.
+
+Lemma eq_lvalP gd m lv lv' v : 
+  eq_lval lv lv' ->
+  write_lval gd lv v m = write_lval gd lv' v m.
+Proof.
+  case: lv lv'=> [ ?? | [??] | [??] e | [??] e] [ ?? | [??] | [??] e' | [??] e'] //=.
+  + by move=> /eqP ->.
+  + by move=> /eqP ->.
+  + by move=> /andP [/eqP -> /eq_exprP ->].
+  by move=> /andP [/eqP -> /eq_exprP ->].
+Qed.
+
+Lemma eq_lvalsP gd m ls1 ls2 vs:
+  all2 eq_lval ls1 ls2 → write_lvals gd m ls1 vs =  write_lvals gd m ls2 vs.
+Proof.
+ rewrite /write_lvals.
+ elim: ls1 ls2 vs m => [ | l1 ls1 Hrec] [ | l2 ls2] //= [] // v vs m.
+ by move=> /andP [] /eq_lvalP -> /Hrec; case: write_lval => /=.
+Qed.
+
+
+Theorem check_sopnP gd o descr outx inx loargs m1 m2 :
+     sopn_desc o = Some descr  
+  -> check_sopn_args o outx inx loargs
+  -> sem_sopn gd o m1 outx inx = ok m2 
+  -> mixed_sem gd m1 descr loargs = ok m2.
+Proof.
+  rewrite /check_sopn_args => Hdesc; rewrite Hdesc => /andP [h1 h2].
+  rewrite /mixed_sem /sem_sopn.
+  have [inx' [-> /eq_exprsP ->]] := check_sopn_argP h2.
+  have [outx' [-> /eq_lvalsP H]]:= check_sopn_resP h1.
+  rewrite (sopn_desc_name Hdesc).
+  by t_xrbindP => vs ws -> /= ->;rewrite H. 
+Qed.
+
+(* ----------------------------------------------------------------------------- *)
 
 Inductive source_position := 
   | InArgs of nat
   | InRes  of nat.
 
-Definition get_loarg (outx: seq var) (inx:seq expr) (d:source_position) := 
+Definition pexpr_of_lval (lv:lval) := 
+  match lv with 
+  | Lnone _ _ => None 
+  | Lvar x    => Some (Pvar x)
+  | Lmem x e  => Some (Pload x e)
+  | Laset _ _ => None
+  end.
+
+Definition get_loarg (outx: seq lval) (inx:seq pexpr) (d:source_position) := 
   match d with
   | InArgs x => onth inx x
-  | InRes  x => ssrfun.omap EVar (onth outx x)
-  end.
+  | InRes  x => onth outx x >>= pexpr_of_lval 
+  end%O.
 
 (* FIXME: provide a more efficiant version of map on nat here *)
 Definition nmap (T:Type) := nat -> option T.
