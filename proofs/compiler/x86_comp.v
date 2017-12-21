@@ -1,10 +1,9 @@
 (* -------------------------------------------------------------------- *)
-Require Import Utf8.
+Require Import oseq.
 From mathcomp Require Import all_ssreflect.
 (* ------- *) Require Import xseq expr linear compiler_util.
 (* ------- *) Require Import low_memory x86_sem.
-              Require Import oseq.
-Import sem.
+Import Utf8 sem.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -330,8 +329,8 @@ Definition sets_low (m : x86_mem) (x : seq destination) (v : seq value) :=
 
 Definition low_sem_aux (gd: glob_defs) (m: x86_mem) (op: sopn)
            (outx inx: seq arg_desc) (xs: seq garg) : exec x86_mem :=
-  let inx := omap (low_sem_ad_in xs) inx in
-  let outx := omap (low_sem_ad_out xs) outx in
+  let inx := oseq.omap (low_sem_ad_in xs) inx in
+  let outx := oseq.omap (low_sem_ad_out xs) outx in
   if (inx, outx) is (Some inx, Some outx) then
     mapM (eval_low gd m) inx >>= exec_sopn op >>= sets_low m outx
   else type_error.
@@ -431,8 +430,8 @@ Definition mixed_sem_ad_out (xs : seq pexpr) (ad : arg_desc) : option lval :=
   end%O.
 
 Definition mixed_sem gd m (id : instr_desc) (xs : seq pexpr) :=
-  let: inx  := omap (mixed_sem_ad_in xs) id.(id_in ) in
-  let: outx := omap (mixed_sem_ad_out xs) id.(id_out) in
+  let: inx  := oseq.omap (mixed_sem_ad_in xs) id.(id_in ) in
+  let: outx := oseq.omap (mixed_sem_ad_out xs) id.(id_out) in
   if (inx, outx) is (Some inx, Some outx) then
     sem_sopn gd id.(id_name) m outx inx
   else type_error.
@@ -970,8 +969,10 @@ Lemma is_varP x e : is_var x e ->  eq_expr e {| v_var := x; v_info := xH |}.
 Proof. by case e => //= v /eqP ->. Qed.
   
 Lemma check_sopn_argP (loargs hiargs : seq pexpr) (ads : seq arg_desc) :
-     all2 (check_sopn_arg loargs) hiargs ads
-  -> exists hiargs', omap (mixed_sem_ad_in loargs) ads = Some hiargs' /\ all2 eq_expr hiargs hiargs'.
+     all2 (check_sopn_arg loargs) hiargs ads →
+     ∃ hiargs',
+       oseq.omap (mixed_sem_ad_in loargs) ads = Some hiargs'
+       ∧ all2 eq_expr hiargs hiargs'.
 Proof.
   elim: hiargs ads => [ | e hiargs Hrec] [ | a ads] //=.
   + by move=> _;exists nil.
@@ -988,8 +989,10 @@ Lemma is_lvarP x e : is_lvar x e ->  eq_lval e {| v_var := x; v_info := xH |}.
 Proof. by case e => //= v /eqP ->. Qed.
 
 Lemma check_sopn_resP (loargs : seq pexpr) (lval : seq lval) (ads : seq arg_desc) :
-     all2 (check_sopn_res loargs) lval ads
-  -> exists lval', omap (mixed_sem_ad_out loargs) ads = Some lval' /\ all2 eq_lval lval lval'.
+     all2 (check_sopn_res loargs) lval ads →
+     ∃ lval',
+       oseq.omap (mixed_sem_ad_out loargs) ads = Some lval'
+       ∧ all2 eq_lval lval lval'.
 Proof.
   elim: lval ads => [ | lv lval Hrec] [ | a ads] //=.
   + by move=> _;exists nil.
@@ -999,33 +1002,6 @@ Proof.
   move=> n o /andP [] /eqP <- /eqP ->;eexists;split;[by eauto | ].
   by rewrite /= eq_lval_refl.
 Qed.
-
-Lemma eq_exprsP gd m es1 es2:
-  all2 eq_expr es1 es2 → sem_pexprs gd m es1 = sem_pexprs gd m es2.
-Proof.
- rewrite /sem_pexprs.
- by elim: es1 es2 => [ | ?? Hrec] [ | ??] //= /andP [] /eq_exprP -> /Hrec ->.
-Qed.
-
-Lemma eq_lvalP gd m lv lv' v : 
-  eq_lval lv lv' ->
-  write_lval gd lv v m = write_lval gd lv' v m.
-Proof.
-  case: lv lv'=> [ ?? | [??] | [??] e | [??] e] [ ?? | [??] | [??] e' | [??] e'] //=.
-  + by move=> /eqP ->.
-  + by move=> /eqP ->.
-  + by move=> /andP [/eqP -> /eq_exprP ->].
-  by move=> /andP [/eqP -> /eq_exprP ->].
-Qed.
-
-Lemma eq_lvalsP gd m ls1 ls2 vs:
-  all2 eq_lval ls1 ls2 → write_lvals gd m ls1 vs =  write_lvals gd m ls2 vs.
-Proof.
- rewrite /write_lvals.
- elim: ls1 ls2 vs m => [ | l1 ls1 Hrec] [ | l2 ls2] //= [] // v vs m.
- by move=> /andP [] /eq_lvalP -> /Hrec; case: write_lval => /=.
-Qed.
-
 
 Theorem check_sopnP gd o descr outx inx loargs m1 m2 :
      sopn_desc o = Some descr  
@@ -1043,7 +1019,7 @@ Qed.
 
 (* ----------------------------------------------------------------------------- *)
 
-Inductive source_position := 
+Variant source_position :=
   | InArgs of nat
   | InRes  of nat.
 
@@ -1061,7 +1037,6 @@ Definition get_loarg (outx: seq lval) (inx:seq pexpr) (d:source_position) :=
   | InRes  x => onth outx x >>= pexpr_of_lval 
   end%O.
 
-(* FIXME: provide a more efficiant version of map on nat here *)
 Definition nmap (T:Type) := nat -> option T.
 Definition nget (T:Type) (m:nmap T) (n:nat) := m n.
 Definition nset (T:Type) (m:nmap T) (n:nat) (t:T) := 
@@ -1077,33 +1052,40 @@ Definition set_expr (m:nmap source_position) (n:nat) (x:source_position) :=
 Definition compile_hi_arg (p:nat -> source_position) (ad: arg_desc) (i:nat) (m: nmap source_position) := 
   match ad with
   | ADImplicit _ => m
-  | ADExplicit n => set_expr m n (p i)
+  | ADExplicit n _ => set_expr m n (p i)
   end.
 
-Definition mk_loargs (c : cmd_name)  :=
-  let: id := get_id c in
+Definition mk_loargs (op : sopn) : seq source_position :=
+  if sopn_desc op is Some id then
   let m := foldl (fun m p => compile_hi_arg InArgs p.1 p.2 m) (nempty _)
                  (zip id.(id_in) (iota 0 (size id.(id_in)))) in
   let m := foldl (fun m p => compile_hi_arg InRes p.1 p.2 m) m
                  (zip id.(id_out) (iota 0 (size id.(id_out)))) in 
-  odflt [::] (omap (nget m) (iota 0 (size id.(id_lo)))).
+  odflt [::] (oseq.omap (nget m) (iota 0 (size id.(id_tys))))
+  else [::].
 
-Definition compile_hi_cmd (c : cmd_name) (outx : seq var) (inx : seq expr) := 
-  let: id := get_id c in
-  omap (get_loarg outx inx) (mk_loargs c) >>= fun loargs =>
-    if check_cmd_args c outx inx loargs then Some loargs
-    else None.
+Definition compile_hi_sopn (op: sopn) (outx : lvals) (inx : pexprs) : option pexprs :=
+  (sopn_desc op >>= λ id,
+   oseq.omap (get_loarg outx inx) (mk_loargs op) >>= λ loargs,
+   if check_sopn_args op outx inx loargs
+   then Some loargs
+   else None)%O.
 
-Lemma compile_hiP (c : cmd_name) (outx : seq var) (inx : seq expr) loargs :
-  compile_hi_cmd c outx inx = Some loargs ->
-  check_cmd_args c outx inx loargs.
-Proof. by move=> /obindI [loargs'] [H1];case:ifP => // ? [<-]. Qed.
+Lemma compile_hiP (op: sopn) (outx : lvals) (inx : pexprs) loargs :
+  compile_hi_sopn op outx inx = Some loargs →
+  check_sopn_args op outx inx loargs.
+Proof.
+by case/obindI => id [] hid /obindI [loargs'] [_]; case: ifP => // ? [<-].
+Qed.
 
-Theorem L1 c outx inx m1 m2 loargs :
-     compile_hi_cmd c outx inx = Some loargs 
-  -> semc m1 (c, outx, inx) = Some m2
-  -> sem_id m1 (get_id c) loargs = Some m2.
-Proof. by move=> /compile_hiP;apply L0. Qed.
+Theorem compile_hi_sopnP gd op descr outx inx m1 m2 loargs :
+  sopn_desc op = Some descr →
+  compile_hi_sopn op outx inx = Some loargs →
+  sem_sopn gd op m1 outx inx = ok m2 →
+  mixed_sem gd m1 descr loargs = ok m2.
+Proof.
+by move => h /compile_hiP /(check_sopnP h); apply.
+Qed.
 
 (* -------------------------------------------------------------------- *)
 (* Mixed semantics to generated ASM semantics                           *)

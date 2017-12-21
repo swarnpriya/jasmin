@@ -2154,6 +2154,32 @@ Proof.
   by move=> /andP[]/andP[] /He -> /He1 -> /He2 ->.
 Qed.
 
+Lemma eq_exprsP gd m es1 es2:
+  all2 eq_expr es1 es2 → sem_pexprs gd m es1 = sem_pexprs gd m es2.
+Proof.
+ rewrite /sem_pexprs.
+ by elim: es1 es2 => [ | ?? Hrec] [ | ??] //= /andP [] /eq_exprP -> /Hrec ->.
+Qed.
+
+Lemma eq_lvalP gd m lv lv' v :
+  eq_lval lv lv' ->
+  write_lval gd lv v m = write_lval gd lv' v m.
+Proof.
+  case: lv lv'=> [ ?? | [??] | [??] e | [??] e] [ ?? | [??] | [??] e' | [??] e'] //=.
+  + by move=> /eqP ->.
+  + by move=> /eqP ->.
+  + by move=> /andP [/eqP -> /eq_exprP ->].
+  by move=> /andP [/eqP -> /eq_exprP ->].
+Qed.
+
+Lemma eq_lvalsP gd m ls1 ls2 vs:
+  all2 eq_lval ls1 ls2 → write_lvals gd m ls1 vs =  write_lvals gd m ls2 vs.
+Proof.
+ rewrite /write_lvals.
+ elim: ls1 ls2 vs m => [ | l1 ls1 Hrec] [ | l2 ls2] //= [] // v vs m.
+ by move=> /andP [] /eq_lvalP -> /Hrec; case: write_lval => /=.
+Qed.
+
 Lemma ok_inj E A (x y:A) : @Ok E A x = @Ok E A y -> x = y.
 Proof. by move=> []. Qed.
 
