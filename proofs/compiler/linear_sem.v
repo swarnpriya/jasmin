@@ -75,7 +75,7 @@ Variant lsem1 : lstate -> lstate -> Prop:=
     lsem1 s1 (of_estate s2 cs)
 | LSem_opn : forall s1 s2 ii xs o es cs,
     s1.(lc) = MkLI ii (Lopn xs o es) :: cs ->
-    sem_pexprs gd (to_estate s1) es >>= sem_sopn o >>= (write_lvals gd (to_estate s1) xs) = ok s2 ->
+    sem_sopn gd o (to_estate s1) xs es = ok s2 ->
     lsem1 s1 (of_estate s2 cs)
 | LSem_lbl : forall s1 ii lbl cs,
     s1.(lc) = MkLI ii (Llabel lbl) :: cs ->
