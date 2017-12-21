@@ -990,3 +990,18 @@ Proof.
   by elim: e => //= [ ?? -> | ?? -> | ?? -> | ?? -> ? -> | ? -> ? -> ? -> ] //=;
    rewrite eqxx.
 Qed.
+
+Definition eq_lval (x x': lval) : bool :=
+  match x, x' with
+  | Lnone _ ty,  Lnone _ ty' => ty == ty'
+  | Lvar v, Lvar v' => v_var v == v_var v'
+  | Lmem v e, Lmem v' e'
+  | Laset v e, Laset v' e'
+    => (v_var v == v_var v') && (eq_expr e e')
+  | _, _ => false
+  end.
+
+Lemma eq_lval_refl x : eq_lval x x.
+Proof.
+  by case: x => // [ i ty | x | x e | x e] /=; rewrite eqxx // eq_expr_refl.
+Qed.
