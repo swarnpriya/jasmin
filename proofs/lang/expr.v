@@ -984,3 +984,9 @@ Fixpoint eq_expr e e' :=
   | Pif    e e1 e2, Pif    e' e1' e2' => eq_expr e e' && eq_expr e1 e1' && eq_expr e2 e2'
   | _             , _                 => false
   end.
+
+Lemma eq_expr_refl e : eq_expr e e.
+Proof.
+  by elim: e => //= [ ?? -> | ?? -> | ?? -> | ?? -> ? -> | ? -> ? -> ? -> ] //=;
+   rewrite eqxx.
+Qed.

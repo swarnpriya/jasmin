@@ -91,7 +91,7 @@ Variant asm : Type :=
 | SETcc  of condt & oprd           (* Set byte on condition *)
 
   (* Pointer arithmetic *)
-| LEA    of oprd & oprd            (* Load Effective Address *)
+| LEA    of register & oprd        (* Load Effective Address *)
 
   (* Comparison *)
 | TEST   of oprd & oprd            (* Bit-wise logical and CMP *)
@@ -688,9 +688,14 @@ Definition eval_SETcc ct o s : x86_result :=
   write_oprd o (if b then I64.one else I64.zero) s.
 
 (* -------------------------------------------------------------------- *)
-Definition eval_LEA o1 o2 s : x86_result :=
-  Let addr := read_oprd o2 s in
-  write_oprd o1 addr s.
+Definition eval_LEA r o2 s : x86_result :=
+  Let addr :=
+    match o2 with
+    | Imm_op w => ok w
+    | Adr_op a => ok (decode_addr s a)
+    | _        => type_error
+    end in
+  ok (mem_write_reg r addr s).
 
 (* -------------------------------------------------------------------- *)
 Definition eval_TEST o1 o2 s : x86_result :=

@@ -401,9 +401,9 @@ Definition low_sem gd m (id: instr_desc) (gargs: seq garg) : x86_result :=
 (* -------------------------------------------------------------------- *)
 (* Generated mixed semantics                                            *)
 
-Definition is_var x e := 
+Definition is_var (x:var) e := 
   match e with
-  | Pvar (VarI x' _) => x == x'
+  | Pvar x' => x == x'
   | _ => false
   end.
 
@@ -705,14 +705,60 @@ Qed.
 Definition SETcc_desc := make_instr_desc SETcc_gsc.
 
 (* ----------------------------------------------------------------------------- *)
-(* FIXME oprd for the second argument ? *)
-(* ICI on a un probleme car la reconstruction des arguments est pas direct *)
-Lemma LEA_gsc :
-  gen_sem_correct [:: TYoprd; TYoprd] Ox86_LEA
-     [:: E 0]
-     [:: E 0; E 1] [::] LEA.
+
+Definition scale_of_z z :=
+  match z with
+  | 1 => Scale1
+  | 2 => Scale2
+  | 4 => Scale4
+  | 8 => Scale8
+  | _ => Scale1 
+  end%Z.
+
+Definition mk_LEA (dest:register) (disp:word) (base:ireg) (scale:word) (offset:ireg) := 
+  let addr := 
+    let (disp, base) := 
+      match base with
+      | Reg_ir r => (disp, Some r)
+      | Imm_ir w => (I64.add disp w, None)
+      end in
+    let (disp, offset) := 
+      match offset with
+      | Reg_ir r => (disp, Some r)
+      | Imm_ir w => (I64.add disp (I64.mul scale w), None) 
+      end in
+    let scale := scale_of_z scale in
+    {| ad_disp := disp; ad_base := base; ad_scale := scale; ad_offset := offset |} in
+  LEA dest (Adr_op addr).
+
+Lemma read_oprd_ireg gd y m : 
+  read_oprd gd match y with
+               | Imm_ir i => Imm_op i
+               | Reg_ir r => Reg_op r
+               end m = ok (read_ireg y m).
+Proof. by case: y => //. Qed.
+
+Definition I64_rw := (I64.mul_zero, I64.add_zero, I64.repr_unsigned, I64.add_assoc, I64.add_zero_l).
+
+Lemma check_scale_of (scale:word) : check_scale scale -> scale = scale_of_z scale.
 Proof.
-Admitted.
+  move=> H;apply /ueqP;apply /eqP.
+  by case /orP: H => [ /orP [ /orP [] /eqP -> | /eqP -> ] | /eqP ->].
+Qed.
+
+Lemma LEA_gsc :
+  gen_sem_correct [:: TYreg; TYimm; TYireg; TYimm; TYireg] Ox86_LEA
+     [:: E 0]
+     [:: E 1; E 2; E 3; E 4] [::] mk_LEA.
+Proof.
+  rewrite /gen_sem_correct /= /low_sem_aux /= => x disp base scale offset gd m m'.
+  rewrite !read_oprd_ireg.
+  t_xrbindP => ????? Hbase <- ???? Hoffset <- <- <- <- <- /=. 
+  rewrite /x86_lea; case: ifP => // Hscale [<-] [<-]; rewrite /mk_LEA /eval_LEA.
+  case: base offset Hbase Hoffset => [base | base] [offset | offset] /= <- <-;
+    rewrite /decode_addr //=;do 2 f_equal; rewrite !I64_rw -?(check_scale_of Hscale) //.
+  f_equal; apply I64.add_commut.
+Qed.
 
 Definition LEA_desc := make_instr_desc LEA_gsc.
 
@@ -793,12 +839,6 @@ Qed.
 Definition NOT_desc := make_instr_desc NOT_gsc.
 
 (* ----------------------------------------------------------------------------- *)
-Lemma read_oprd_ireg gd y m : 
-  read_oprd gd match y with
-               | Imm_ir i => Imm_op i
-               | Reg_ir r => Reg_op r
-               end m = ok (read_ireg y m).
-Proof. by case: y => //. Qed.
 
 Lemma SHL_gsc :
   gen_sem_correct [:: TYoprd; TYireg] Ox86_SHL
@@ -844,58 +884,123 @@ Admitted.
 
 Definition SHLD_desc := make_instr_desc SHLD_gsc.
 
-Definition get_id (c : cmd_name) :=
+(* ----------------------------------------------------------------------------- *)
+Lemma Set0_gsc : 
+  gen_sem_correct [:: TYoprd] Oset0
+     (implicit_flags ++ [:: E 0])
+     [::] [::] (fun x => XOR x x).
+Proof.
+  move=> []// => [x|x] gd m m'; rewrite /low_sem_aux /= /eval_XOR /=.
+  + move=> [<-]; rewrite I64.xor_idem; update_set.
+  rewrite /sets_low /= /decode_addr /=;set addr := I64.add _ _.
+  rewrite /mem_write_mem; t_xrbindP => m1 /= Hw <-.
+  have : Memory.valid_addr (xmem m) addr.
+  + apply /Memory.writeV;eauto.
+  move=> /Memory.readV [v ->] /=;rewrite I64.xor_idem Hw /=; update_set.
+Qed.
+
+Definition Set0_desc := make_instr_desc Set0_gsc.
+  
+(* ----------------------------------------------------------------------------- *)
+
+Definition sopn_desc (c : sopn) :=
   match c with
-  | ADDC => ADDC_desc
-  | SUBC => SUBC_desc
-  | MUL => MUL_desc
+  | Omulu | Oaddcarry | Osubcarry => None
+  | Oset0 => Some Set0_desc
+  | Ox86_MOV     => Some MOV_desc
+  | Ox86_CMOVcc  => Some CMOVcc_desc
+  | Ox86_ADD     => Some ADD_desc
+  | Ox86_SUB     => Some SUB_desc
+  | Ox86_MUL     => Some MUL_desc
+  | Ox86_IMUL    => Some IMUL_desc
+  | Ox86_IMUL64  => Some IMUL64_desc
+  | Ox86_IMUL64imm  => Some IMUL64imm_desc
+  | Ox86_DIV     => Some DIV_desc
+  | Ox86_IDIV    => Some IDIV_desc
+  | Ox86_ADC     => Some ADC_desc
+  | Ox86_SBB     => Some SBB_desc
+  | Ox86_NEG     => Some NEG_desc
+  | Ox86_INC     => Some INC_desc
+  | Ox86_DEC     => Some DEC_desc
+  | Ox86_SETcc   => Some SETcc_desc
+  | Ox86_LEA     => Some LEA_desc
+  | Ox86_TEST    => Some TEST_desc
+  | Ox86_CMP     => Some CMP_desc
+  | Ox86_AND     => Some AND_desc
+  | Ox86_OR      => Some OR_desc
+  | Ox86_XOR     => Some XOR_desc
+  | Ox86_NOT     => Some NOT_desc
+  | Ox86_SHL     => Some SHL_desc
+  | Ox86_SHR     => Some SHR_desc
+  | Ox86_SAR     => Some SAR_desc
+  | Ox86_SHLD    => Some SHLD_desc
   end.
 
-Lemma get_id_ok c : (get_id c).(id_name) = c.
-Proof. by case: c. Qed.
+Lemma sopn_desc_name o d : sopn_desc o = Some d -> d.(id_name) = o.
+Proof. by case: o => //= -[<-]. Qed.
 
 (* -------------------------------------------------------------------- *)
 (* High level to mixed semantics                                        *)
 
-Definition check_cmd_arg (loargs : seq expr) (x : expr) (ad : arg_desc) :=
+Definition check_sopn_arg (loargs : seq pexpr) (x : pexpr) (ad : arg_desc) :=
   match ad with
-  | ADImplicit y => x == EVar y
-  | ADExplicit n => (n < size loargs) && (x == nth x loargs n)
+  | ADImplicit y => is_var y x
+  | ADExplicit n o => 
+    (n < size loargs) && (x == nth x loargs n) &&
+    match o with
+    | None => true
+    | Some y => is_var y x
+    end
   end.
 
-Definition check_cmd_res (loargs : seq expr) (x : var) (ad : arg_desc) :=
-  match ad with
-  | ADImplicit y => x == y
-  | ADExplicit n => (n < size loargs) && (EVar x == nth (EVar x) loargs n)
+Definition is_lvar (x:var) lv := 
+  match lv with
+  | Lvar y => x == y
+  | _ => false
   end.
 
-Definition check_cmd_args
-  (c : cmd_name) (outx : seq var) (inx : seq expr) (loargs : seq expr)
-:=
-  let: id := get_id c in
+Definition check_sopn_res (loargs : seq pexpr) (x : lval) (ad : arg_desc) :=
+  match ad with
+  | ADImplicit y => is_lvar y x
+  | ADExplicit n o => 
+    (Some x == (onth loargs n >>= lval_of_pexpr)%O) &&
+    match o with
+    | None => true
+    | Some y => is_lvar y x
+    end
+  end.
 
-     all2 (check_cmd_res loargs) outx id.(id_out)
-  && all2 (check_cmd_arg loargs) inx  id.(id_in ).
+Definition check_sopn_args
+  (c : sopn) (outx : seq lval) (inx : seq pexpr) (loargs : seq pexpr) :=
+  if sopn_desc c is Some id then
+       all2 (check_sopn_res loargs) outx id.(id_out)
+    && all2 (check_sopn_arg loargs) inx  id.(id_in )
+  else false.
 
-Lemma Pin (loargs hiargs : seq expr) (ads : seq arg_desc) :
-     all2 (check_cmd_arg loargs) hiargs ads
-  -> omap (sem_ad_in loargs) ads = Some hiargs.
+Lemma is_varP x e : is_var x e ->  eq_expr e {| v_var := x; v_info := xH |}.
+Proof. by case e => //= v /eqP ->. Qed.
+  
+  + move=>
+Admitted.
+
+Lemma check_sopn_argP (loargs hiargs : seq pexpr) (ads : seq arg_desc) :
+     all2 (check_sopn_arg loargs) hiargs ads
+  -> exists hiargs', omap (mixed_sem_ad_in loargs) ads = Some hiargs' /\ all2 eq_expr hiargs hiargs'.
 Proof.
-rewrite all2P => /andP [/eqP eqsz h];rewrite omap_map.
-apply/eqP; rewrite oseqP.
-apply/eqP/(eq_from_nth (x0 := None)); rewrite ?(size_map, eqsz) //.
-move=> i lt_i_ads; have ad0 : arg_desc := (ADExplicit 0).
-rewrite (nth_map ad0) // (nth_map (EVar vCF)) ?eqsz // /sem_ad_in.
-set x1 := nth (EVar vCF) _ _; set x2 := nth ad0 _ _.
-have -/(allP h) /=: (x1, x2) \in zip hiargs ads.
-+ by rewrite -nth_zip // mem_nth // size_zip eqsz minnn.
-rewrite /check_cmd_arg; case: x2 => [? /eqP->//|].
-by move=> n /andP[len /eqP->];apply /eqP;rewrite (onth_sizeP x1).
+  elim: hiargs ads => [ | e hiargs Hrec] [ | a ads] //=.
+  + by move=> _;exists nil.
+  move=> /andP [Hc /Hrec [hiargs' [-> Hall]]] /=.
+  rewrite /mixed_sem_ad_in; case: a Hc => //=.
+  + by move=> y /is_varP Hy;eexists;split;[by eauto | ];rewrite /= Hy.
+  move=> n o /andP [] /andP [] Hlt /eqP -> Ho.
+  exists  (nth e loargs n :: hiargs').
+  rewrite (onth_nth_size e Hlt) /= Hall andbT;split;last by apply eq_expr_refl.
+  by case: o Ho => // y ->.
 Qed.
 
-Lemma Pout (loargs : seq expr) (hiargs : seq var) (ads : seq arg_desc) :
-     all2 (check_cmd_res loargs) hiargs ads
-  -> omap (sem_ad_out loargs) ads = Some hiargs.
+Lemma check_sopn_resP (loargs : seq pexpr) (lval : seq lval) (ads : seq arg_desc) :
+     all2 (check_sopn_res loargs) lval ads
+  -> exists lval', omap (mixed_sem_ad_out loargs) ads = Some lval' /\ all2 eq_lval lval lval'.
 Proof.
 rewrite all2P => /andP [/eqP eqsz h]; rewrite omap_map.
 apply/eqP; rewrite oseqP.
