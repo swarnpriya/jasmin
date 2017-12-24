@@ -185,6 +185,16 @@ Fixpoint mapM eT aT bT (f : aT -> result eT bT) (xs : seq aT) : result eT (seq b
       Ok eT [:: y & ys]
   end.
 
+Lemma mapM_size eT aT bT f xs ys :
+  @mapM eT aT bT f xs = ok ys ->
+  size xs = size ys.
+Proof.
+elim: xs ys.
+- by move => ys [<-].
+move => x xs ih ys /=; case: (f _) => //= y.
+by case: (mapM f xs) ih => //= ys' ih [] ?; subst; rewrite (ih _ erefl).
+Qed.
+
 Lemma mapMP {eT} {aT bT: eqType} (f: aT -> result eT bT) (s: seq aT) (s': seq bT) y:
   mapM f s = ok s' ->
   reflect (exists2 x, x \in s & f x = ok y) (y \in s').
