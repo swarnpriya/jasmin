@@ -520,10 +520,16 @@ Definition garg_of_pexpr ii (ty_arg: arg_ty * pexpr) : ciexec garg :=
     oprd_of_pexpr ii arg >>= λ o, ok (Goprd o)
 .
 
-Lemma garg_of_pexpr_eq_expr ii ty pe pe' :
+Lemma garg_of_pexpr_eq_expr ii ty pe pe' r :
   eq_expr pe pe' →
+  garg_of_pexpr ii (ty, pe) = ok r →
   garg_of_pexpr ii (ty, pe) = garg_of_pexpr ii (ty, pe').
-Admitted.
+Proof.
+  move => h; rewrite /garg_of_pexpr.
+  case: eqP => _; t_xrbindP => z hz ?; subst r.
+  + by rewrite (assemble_cond_eq_expr h hz).
+  by rewrite (oprd_of_pexpr_eq_expr h hz).
+Qed.
 
 Definition compile_low_args ii (tys: seq arg_ty) (args: pexprs) : ciexec (seq garg) :=
   if size tys == size args then
@@ -605,7 +611,8 @@ Proof.
   have : y = Some (arg_of_garg (nth any_garg gargs n)).
   + subst y. case: o ho => // v hv.
     have := compile_low_args_nth hpes hn.
-    rewrite (garg_of_pexpr_eq_expr ii _ hv) {hv}.
+    move => h; move: (h).
+    rewrite (garg_of_pexpr_eq_expr hv h) {hv}.
     rewrite /garg_of_pexpr. case: eqP => // _; t_xrbindP => op.
     by rewrite /= reg_of_stringK => -[ <-] <- /=; rewrite eqxx.
   move -> => {y}.

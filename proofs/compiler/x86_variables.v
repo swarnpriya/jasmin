@@ -284,9 +284,9 @@ Definition scale_of_z' ii z :=
 
 Variant ofs :=
   | Ofs_const of Z
-  | Ofs_var   of var_i
-  | Ofs_mul   of Z & var_i
-  | Ofs_add   of Z & var_i & Z
+  | Ofs_var   of var
+  | Ofs_mul   of Z & var
+  | Ofs_add   of Z & var & Z
   | Ofs_error.
 
 Fixpoint addr_ofs e :=
@@ -349,3 +349,130 @@ Definition oprd_of_pexpr ii (e: pexpr) :=
      ciok (Adr_op w)
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd"))
   end.
+
+Lemma assemble_cond_eq_expr ii pe pe' c :
+  eq_expr pe pe' →
+  assemble_cond ii pe = ok c →
+  assemble_cond ii pe = assemble_cond ii pe'.
+Proof.
+elim: pe pe' c => [ z | b | pe ih | x | g | x pe ih | x pe ih | op pe ih | op pe1 ih1 pe2 ih2 | pe1 ih1 pe2 ih2 pe3 ih3 ]
+  [ z' | b' | pe' | x' | g' | x' pe' | x' pe' | op' pe' | op' pe1' pe2' | pe1' pe2' pe3' ] // c;
+  try (move/eqP -> => //).
+- by case: x x' => /= x _ [x' _] /eqP <-.
+- case/andP => [/eqP] <- {op'} h; move: (h) => /ih {ih} ih.
+  case: op => //.
+  by case: pe h ih => //= x /=; case: pe' => // x' /eqP /= <- {x'}.
+- case/andP => [] /andP [/eqP] <- {op'} h1 h2; rewrite -/eq_expr in h1, h2.
+  move: (h1) => /ih1 {ih1} ih1; move: (h2) => /ih2 {ih2} ih2.
+  case: op => //.
+  + case: pe1 h1 ih1 => // - [] // - [] // [x xi]; case: pe1' => // - [] // - [] // [x' xi'] /eqP h.
+    rewrite /= in h; subst x'.
+    case: pe2 h2 ih2 => //.
+    * case => // - [] // [y yi]; case: pe2' => // - [] // -[] // [y' yi'] /eqP h'.
+      rewrite /= in h'; subst y'.
+      by rewrite /=; case: (rflag_of_var _ _).
+    case => // - [x1 xi1] - [] // - [x2  xi2] [] // [] // q.
+    case: pe2' => // - [] // - [x1' xi1'] x2' q' /andP [/andP] [/eqP] /= -> {x1}.
+    case: x2' => // x2' /eqP /= -> {x2}.
+    case: q' => // - [] // q' /andP [_] h; rewrite -/eq_expr in h.
+    case: q h => // y; case: q' => // y' h.
+    case: (rflag_of_var _ x) => //=.
+    case: (rflag_of_var _ x1') => //=.
+    case: (rflag_of_var _ x2') => //=.
+    case: (rflag_of_var _ y) => //=.
+    move => oF oF' sF zF.
+    case: (zF =P _) => //= -> {zF}.
+    case: (sF =P _) => //= _ {sF}.
+    case: (oF' =P _) => //= _ {oF'}.
+    case: (oF =P _) => //= _ {oF}.
+    move/(_ _ erefl).
+    case: (rflag_of_var _ y') => //= oF'.
+    by case: (oF' =P _).
+  case: pe1 h1 ih1 => // - [x1 xi1]; case: pe1' => // x1' /eqP h1.
+  rewrite /= in h1; subst x1.
+  case: pe2 h2 ih2 => //.
+  + case => x2 xi2; case: pe2' => // x2' /eqP h2.
+    rewrite /= in h2; subst x2.
+    rewrite /=.
+    by case: (rflag_of_var _ x2').
+  move => a1 a2 a3; case: pe2' => //.
+  case: a1 => // -[x2 xi2] [] // x2' a2' a3' /andP [] /andP [/eqP] h.
+  rewrite /= in h; subst x2.
+  rewrite -/eq_expr.
+  case: a2 => // - [] // - [] // -[z1 zi1].
+  case: a2' => // - [] // - [] // z' /eqP h.
+  rewrite /= in h; subst z1.
+  case: a3 => // -[z2 zi2]; case: a3' => // z2' /eqP h.
+  rewrite /= in h; subst z2.
+  done.
+case/andP => /andP []; rewrite -/eq_expr => h1 h2 h3.
+move: (h1) => /ih1 {ih1} ih1.
+move: (h2) => /ih2 {ih2} ih2.
+move: (h3) => /ih3 {ih3} ih3.
+case: pe1 h1 ih1 => // -[x1 xi1]; case: pe1' => // x1' /eqP h.
+rewrite /= in h; subst x1.
+case: pe2 h2 ih2 => //.
++ case => [x2 xi2]; case: pe2' => // x2' /eqP h.
+  rewrite /= in h; subst x2.
+  case: pe3 h3 ih3 => // - [] // - [] // - [x3 xi3].
+  case: pe3' => // - [] // -[] // x3' /eqP h.
+  rewrite /= in h; subst x3.
+  done.
+case => // - [] // - [x2 xi2].
+case: pe2' => // -[] // -[] // x2' /eqP h.
+rewrite /= in h; subst x2.
+case: pe3 h3 ih3 => // -[x3 xi3].
+case: pe3' => // x3' /eqP h.
+rewrite /= in h; subst x3.
+done.
+Qed.
+
+Lemma addr_ofs_eq_expr pe pe' :
+  eq_expr pe pe' →
+  addr_ofs pe = addr_ofs pe'.
+Proof.
+elim: pe pe' => [ z | b | pe ih | x | g | x pe ih | x pe ih | op pe ih | op pe1 ih1 pe2 ih2 | pe1 ih1 pe2 ih2 pe3 ih3 ]
+  [ z' | b' | pe' | x' | g' | x' pe' | x' pe' | op' pe' | op' pe1' pe2' | pe1' pe2' pe3' ] //;
+  try (move/eqP -> => //).
+- move => h; move: (h) => /ih {ih} ih.
+  by case: pe h ih => // z; case: pe' => // z' /eqP ->.
+- by case: x => x xi /eqP /= ->.
+case/andP => /andP [/eqP] <- {op'}; rewrite -/eq_expr => h1 h2.
+move: (h1) => /ih1 {ih1} ih1.
+move: (h2) => /ih2 {ih2} ih2.
+by case: op => // - [] //; rewrite /= ih1 ih2.
+Qed.
+
+Lemma addr_of_pexpr_eq_expr ii r pe pe' a :
+  eq_expr pe pe' →
+  addr_of_pexpr ii r pe = ok a →
+  addr_of_pexpr ii r pe = addr_of_pexpr ii r pe'.
+Proof.
+elim: pe pe' a => [ z | b | pe ih | x | g | x pe ih | x pe ih | op pe ih | op pe1 ih1 pe2 ih2 | pe1 ih1 pe2 ih2 pe3 ih3 ]
+  [ z' | b' | pe' | x' | g' | x' pe' | x' pe' | op' pe' | op' pe1' pe2' | pe1' pe2' pe3' ] // c;
+  try (move/eqP -> => //).
+- move => h; move: (h) => /ih {ih} ih.
+  by case: pe h ih => // z; case: pe' => // z' /eqP ->.
+- by case: x => x xi /eqP /= ->.
+case/andP => /andP [/eqP] <- {op'}; rewrite -/eq_expr => h1 h2.
+by case: op => // - [] //;
+rewrite /addr_of_pexpr /= (addr_ofs_eq_expr h1) (addr_ofs_eq_expr h2).
+Qed.
+
+Lemma oprd_of_pexpr_eq_expr ii pe pe' o :
+  eq_expr pe pe' →
+  oprd_of_pexpr ii pe = ok o →
+  oprd_of_pexpr ii pe = oprd_of_pexpr ii pe'.
+Proof.
+elim: pe pe' o => [ z | b | pe ih | x | g | x pe ih | x pe ih | op pe ih | op pe1 ih1 pe2 ih2 | pe1 ih1 pe2 ih2 pe3 ih3 ]
+  [ z' | b' | pe' | x' | g' | x' pe' | x' pe' | op' pe' | op' pe1' pe2' | pe1' pe2' pe3' ] // o;
+  try (move/eqP -> => //).
+- move => h; move: (h) => /ih {ih} ih.
+  by case: pe h ih => // z; case: pe' => // z' /eqP ->.
+- by case: x => x xi /eqP /= ->.
+case/andP => /eqP hx h; rewrite -/eq_expr in h.
+case: x hx => x xi /= -> {x}.
+move: (h) => /ih {ih}.
+case: (reg_of_var _ _) => //= r ih; t_xrbindP => a ha _.
+by rewrite (addr_of_pexpr_eq_expr h ha).
+Qed.
