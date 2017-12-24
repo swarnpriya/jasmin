@@ -18,6 +18,7 @@ sandbox/gensem.v
 3rdparty/ssrZ.v
 compiler/allocation.v
 compiler/array_expansion.v
+compiler/asmgen.v
 compiler/compiler_util.v
 compiler/compiler.v
 compiler/compiler_proof.v
@@ -40,8 +41,10 @@ compiler/stack_alloc_proof.v
 compiler/unrolling.v
 compiler/unrolling_proof.v
 compiler/x86.v
+compiler/x86_instr.v
 compiler/x86_sem.v
 compiler/x86_proofs.v
+compiler/x86_variables.v
 lang/expr.v
 lang/extraction.v
 lang/gen_map.v
