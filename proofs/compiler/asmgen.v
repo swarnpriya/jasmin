@@ -539,23 +539,19 @@ Definition compile_low_args ii (tys: seq arg_ty) (args: pexprs) : ciexec (seq ga
 Definition any_ty : arg_ty := TYimm.
 Definition any_garg : garg := Goprd (Imm_op I64.zero).
 Definition any_pexpr : pexpr := 0%Z.
+Definition any_ty_pexpr : arg_ty * pexpr := (any_ty, any_pexpr).
 
-Lemma compile_low_args_size ii tys pes gargs :
+Lemma compile_low_argsP ii tys pes gargs :
   compile_low_args ii tys pes = ok gargs →
-  size tys = size pes ∧ size pes = size gargs.
-Proof.
-  rewrite/compile_low_args.
-  case: eqP => // h.
-Admitted.
+  size tys = size pes ∧ mapM (garg_of_pexpr ii) (zip tys pes) = ok gargs.
+Proof. by rewrite/compile_low_args; case: eqP. Qed.
 
-Lemma compile_low_args_nth ii tys pes gargs n :
-  compile_low_args ii tys pes = ok gargs →
-  n < size pes →
-  garg_of_pexpr ii (nth any_ty tys n, nth any_pexpr pes n) = ok (nth any_garg gargs n).
+Lemma compile_low_eval ii gd ty m lom pe g v :
+  sem_pexpr gd m pe = ok v →
+  garg_of_pexpr ii (ty, pe) = ok g →
+  ∃ v', eval_low gd lom (arg_of_garg g) = ok v' ∧ value_uincl v v'.
 Proof.
 Admitted.
-
-
 
 Lemma compile_low_args_in ii gd m lom ads tys pes args gargs :
   lom_eqv m lom →
@@ -600,37 +596,30 @@ Proof.
     constructor => //.
     by rewrite /st_get_rflag_lax; case: (_ f).
   (* Explicit *)
-  have [hsz hsz'] := compile_low_args_size hpes.
+  case/compile_low_argsP: hpes => hsz hpes.
   move => /= n o ho _.
   have : onth pes n = Some arg ∧ match o with Some x => eq_expr arg {| v_var := var_of_register x ; v_info := xH |} | _ => true end.
   + by case: o ho => // x /obindI [] e [] ->; case: ifP => // /is_varP h [] ?; subst.
   case => /onthP - /(_ any_pexpr) /andP [] hn /eqP ? {ho} ho; subst arg.
-  have hna : n < size gargs by rewrite - hsz'.
+  have hna : n < size gargs by rewrite - (mapM_size hpes) size_zip hsz minnn.
   rewrite (onth_nth_size any_garg hna) /=.
+  have := mapM_nth any_ty_pexpr any_garg hpes.
+  rewrite size_zip hsz minnn => /(_ _ hn).
+  rewrite nth_zip => //.
+  set z := nth any_garg gargs n.
+  set pe := nth any_pexpr pes n.
+  move => hnth.
   set y := match o with Some _ => _ | _ => _ end.
-  have : y = Some (arg_of_garg (nth any_garg gargs n)).
+  have : y = Some (arg_of_garg z).
   + subst y. case: o ho => // v hv.
-    have := compile_low_args_nth hpes hn.
-    move => h; move: (h).
-    rewrite (garg_of_pexpr_eq_expr hv h) {hv}.
+    move: (hnth).
+    rewrite (garg_of_pexpr_eq_expr hv hnth) {hv}.
     rewrite /garg_of_pexpr. case: eqP => // _; t_xrbindP => op.
     by rewrite /= reg_of_stringK => -[ <-] <- /=; rewrite eqxx.
   move -> => {y}.
   rewrite hlo /=. eexists; split; first by eauto.
-  move => vs ; t_xrbindP => v hv ws /hlo' /= [vs'] [->] hvs <- /=.
-Admitted. (*
-    rewrite rflag_of_var
-    case: (nth any_ty _ _) => //=.
-    Focus 2.
-    move: hv => /=.
-  move => /= x /onthP - /(_ (EInt 0)) /andP [] hx /eqP hx' _; subst arg.
-  case: (onth_omap_size (EInt 0) hirs hx) => y [hy eqy].
-  rewrite hy /= hlo /=.
-  eexists; split; first by reflexivity.
-  rewrite /=; f_equal => //.
-  rewrite eval_lo_arg_of_ireg /=.
-  case eqx: nth eqy => [ vx | i ]; last by case => <-.
-  case: eqm => eqm _.
-  by case eq1: register_of_var => [ z | ] // [] <-; rewrite eqm (var_of_register_of_var eq1).
+  move => vs ; t_xrbindP => v hv ws /hlo' {hlo'} /= [vs'] [->] hvs <- /=.
+  have [v' [hv' hvv']] := compile_low_eval lom hv hnth.
+  exists (v' :: vs'); rewrite hv'; split => //.
+  by constructor.
 Qed.
-*)
