@@ -195,6 +195,22 @@ move => x xs ih ys /=; case: (f _) => //= y.
 by case: (mapM f xs) ih => //= ys' ih [] ?; subst; rewrite (ih _ erefl).
 Qed.
 
+Local Close Scope Z_scope.
+
+Lemma mapM_nth eT aT bT f xs ys d d' n :
+  @mapM eT aT bT f xs = ok ys ->
+  n < size xs ->
+  f (nth d xs n) = ok (nth d' ys n).
+Proof.
+elim: xs ys n.
+- by move => ys n [<-].
+move => x xs ih ys n /=; case h: (f _) => [ y | ] //=.
+case: (mapM f xs) ih => //= ys' /(_ _ _ erefl) ih [] <- {ys}.
+by case: n ih => // n /(_ n).
+Qed.
+
+Local Open Scope Z_scope.
+
 Lemma mapMP {eT} {aT bT: eqType} (f: aT -> result eT bT) (s: seq aT) (s': seq bT) y:
   mapM f s = ok s' ->
   reflect (exists2 x, x \in s & f x = ok y) (y \in s').
