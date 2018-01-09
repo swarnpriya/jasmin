@@ -629,15 +629,92 @@ Proof.
   by constructor.
 Qed.
 
-Lemma write_var_compile_var v y y0 m lom m1 rf :
-  write_var v y m = ok m1 ->
-  value_uincl y y0 ->
-  lom_eqv m lom ->
-  compile_var v = Some rf ->
-  exists lom1, set_low (dest_of_reg_or_flag rf) y0 lom = ok lom1 /\
-    lom_eqv m1 lom1.
+Lemma write_var_compile_var x y y0 m lom m1 rf :
+  write_var x y m = ok m1 →
+  value_uincl y y0 →
+  lom_eqv m lom →
+  compile_var x = Some rf →
+  exists2 lom1, set_low (dest_of_reg_or_flag rf) y0 lom = ok lom1 & lom_eqv m1 lom1.
 Proof.
-Admitted.
+rewrite /write_var /compile_var.
+case: x => -[ty x] /= _.
+t_xrbindP => vm hwv <- {m1} hvu eqm.
+case: register_of_var (@var_of_register_of_var (Var ty x)) => [ r | ].
+- (* Register *)
+  move => /(_ _ erefl) [? ?]; subst x ty .
+  case => <- /= {rf}.
+  move: hwv. apply: set_varP => //= w ok_w <- {vm}.
+  have [? ?] := value_uincl_word hvu ok_w.
+  subst y y0 => {hvu ok_w}.
+  eexists; first by reflexivity.
+  case: eqm => eqm eqr eqf.
+  split => //=.
+  + move => r' v; apply: on_vuP.
+    * move => /= w' hw' <- {v}; move: hw'.
+      rewrite ffunE; case: eqP.
+      - by move => ?; subst r'; rewrite Fv.setP_eq => -[<-].
+      move => ne ; rewrite Fv.setP_neq.
+      - by move => hw'; apply: eqr; rewrite /get_var hw'.
+      by apply/eqP => -[] k; have ?:= inj_string_of_register k; apply: ne.
+    by move => _ [<-].
+  move => f v /= h; apply: eqf; move: h.
+  rewrite /get_var; apply: on_vuP.
+  + by move => /= b h <- {v}; move: h; rewrite Fv.setP_neq => // ->.
+  by rewrite Fv.setP_neq => //= ->.
+(* Flag *)
+move => _.
+case: flag_of_var (@var_of_flag_of_var (Var ty x)) => [ f | // ].
+move => /(_ _ erefl) [? ?] [<-] /= {rf}; subst ty x.
+move: hwv. apply: set_varP => /=.
+- (* Set *)
+  move => b; case: y hvu => // [ | [] //] /= b'; case: y0 => // c <- {c} [->] {b'} <-.
+  eexists; first by reflexivity.
+  case: eqm => eqm eqr eqf.
+  split => //=.
+  + move => r' v; apply: on_vuP.
+    * move => /= w' hw' <- {v}; move: hw'.
+      rewrite Fv.setP_neq => // h.
+      by have := eqr r' w'; rewrite /get_var /= h => /(_ erefl).
+    by move => _ [<-].
+  move => f' v /=; rewrite /get_var /=; apply: on_vuP.
+  + move => b' hb' <- {v}; move: hb'.
+    rewrite ffunE; case: eqP.
+    - by move => ?; subst f'; rewrite Fv.setP_eq => -[<-].
+    move => ne ; rewrite Fv.setP_neq.
+    - by move => hw'; apply: eqf; rewrite /get_var hw'.
+    by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
+  by move => _ [<-] /=; case: ((RflagMap.set _ _ _) f').
+(* Unset *)
+move => _; case: y hvu => // -[] // hvu _ <- {vm}.
+case: eqm => eqm eqr eqf.
+case: y0 hvu => // [ b | [] //] _; (eexists; first by reflexivity); split => //=.
+  + move => r' v; apply: on_vuP.
+    * move => /= w' hw' <- {v}; move: hw'.
+      rewrite Fv.setP_neq => // h.
+      by have := eqr r' w'; rewrite /get_var /= h => /(_ erefl).
+    by move => _ [<-].
+  move => f' v /=; rewrite /get_var /=; apply: on_vuP.
+  + move => b' hb' <- {v}; move: hb'.
+    rewrite ffunE; case: eqP.
+    - by move => ?; subst f'; rewrite Fv.setP_eq.
+    move => ne ; rewrite Fv.setP_neq.
+    - by move => hw'; apply: eqf; rewrite /get_var hw'.
+    by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
+  by move => _ [<-] /=; case: ((RflagMap.set _ _ _) f').
+  + move => r' v; apply: on_vuP.
+    * move => /= w' hw' <- {v}; move: hw'.
+      rewrite Fv.setP_neq => // h.
+      by have := eqr r' w'; rewrite /get_var /= h => /(_ erefl).
+    by move => _ [<-].
+  move => f' v /=; rewrite /get_var /=; apply: on_vuP.
+  + move => b' hb' <- {v}; move: hb'.
+    rewrite ffunE; case: eqP.
+    - by move => ?; subst f'; rewrite Fv.setP_eq.
+    move => ne ; rewrite Fv.setP_neq.
+    - by move => hw'; apply: eqf; rewrite /get_var hw'.
+    by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
+  by move => _ [<-] /=; case: ((RflagMap.oset _ _ _) f').
+Qed.
 
 Lemma compile_low_args_out ii gd ads tys pes args gargs :
   compile_low_args ii tys pes = ok gargs →
