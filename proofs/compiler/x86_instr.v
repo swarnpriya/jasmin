@@ -1,7 +1,7 @@
 Require Import asmgen.
 Import Utf8.
 Import all_ssreflect.
-Import compiler_util sem x86_sem x86_variables.
+Import compiler_util sem x86_sem x86_variables x86_variables_proofs.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

@@ -507,12 +507,6 @@ Qed.
 (* -------------------------------------------------------------------- *)
 (* Mixed semantics to generated ASM semantics                           *)
 
-Variant lom_eqv (m : estate) (lom : x86_mem) :=
-  | MEqv of
-         emem m = xmem lom
-    & (∀ r v, get_var (evm m) (var_of_register r) = ok v → value_uincl v (xreg lom r))
-    & eqflags m (xrf lom).
-
 Definition compile_pexpr ii (ty_arg: arg_ty * pexpr) : ciexec garg :=
   let: (ty, arg) := ty_arg in
   if ty == TYcondt then
@@ -559,7 +553,9 @@ rewrite /compile_pexpr => eqm hv.
 case: eqP => hty; t_xrbindP => x hx ?; subst g => /=.
 - case: eqm => _ _ eqf.
   by have /(_ gd _ hv) := eval_assemble_cond eqf hx.
-Admitted.
+have [w -> hvw] := eval_oprd_of_pexpr eqm hx hv.
+by exists w.
+Qed.
 
 Lemma compile_low_args_in ii gd m lom ads tys pes args gargs :
   lom_eqv m lom →

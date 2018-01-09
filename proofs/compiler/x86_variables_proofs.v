@@ -45,6 +45,12 @@ Proof. by case: rfv. Qed.
 Definition eqflags (m: estate) (rf: rflagmap) : Prop :=
   ∀ f v, get_var (evm m) (var_of_flag f) = ok v → value_uincl v (of_rbool (rf f)).
 
+Variant lom_eqv (m : estate) (lom : x86_mem) :=
+  | MEqv of
+         emem m = xmem lom
+    & (∀ r v, get_var (evm m) (var_of_register r) = ok v → value_uincl v (xreg lom r))
+    & eqflags m (xrf lom).
+
 (* -------------------------------------------------------------------- *)
 Definition value_of_bool (b: exec bool) : exec value :=
   match b with
@@ -52,6 +58,30 @@ Definition value_of_bool (b: exec bool) : exec value :=
   | Error ErrAddrUndef => ok (Vundef sbool)
   | Error e => Error e
   end.
+
+(* -------------------------------------------------------------------- *)
+Lemma xgetreg_ex ii x r v s xs :
+  lom_eqv s xs →
+  reg_of_var ii x = ok r →
+  get_var s.(evm) x = ok v →
+  value_uincl v (xs.(xreg) r).
+Proof.
+move: (@var_of_register_of_var x).
+move => h [_ eqv _]; case: x h => -[] //= x.
+rewrite /register_of_var /=.
+case: reg_of_string => [vx|] // /(_ _ erefl) <- {x} [<-] ok_v.
+exact: eqv.
+Qed.
+
+Corollary xgetreg ii x r v s xs w :
+  lom_eqv s xs →
+  reg_of_var ii x = ok r →
+  get_var s.(evm) x = ok v →
+  to_word v = ok w →
+  xreg xs r = w.
+Proof.
+by move => eqm hx hv hw; move: (xgetreg_ex eqm hx hv) => /value_uincl_word -/(_ _ hw) [] _ [].
+Qed.
 
 (* -------------------------------------------------------------------- *)
 Lemma xgetflag_ex ii m rf x f v :
@@ -212,4 +242,119 @@ move=> eqv; case: e => //.
     move => b [<-] [->] {b}.
     case: vbx {ok_vbx} => //.
     by case: vby.
+Qed.
+
+(* -------------------------------------------------------------------- *)
+Definition sem_ofs m o : exec word :=
+  match o with
+  | Ofs_const z => ok (I64.repr z)
+  | Ofs_var x => get_var (evm m) x >>= to_word
+  | Ofs_mul sc x =>
+    Let w := get_var (evm m) x >>= to_word in
+    ok (I64.mul (I64.repr sc) w)
+  | Ofs_add sc x z =>
+    Let w := get_var (evm m) x >>= to_word in
+    ok (I64.add (I64.mul (I64.repr sc) w) (I64.repr z))
+  | Ofs_error => type_error
+  end.
+
+Lemma addr_ofsP gd m e v w :
+  sem_pexpr gd m e = ok v →
+  to_word v = ok w →
+  let ofs := addr_ofs e in
+  (if ofs is Ofs_error then false else true) →
+  sem_ofs m ofs = ok w.
+Proof.
+elim: e v w => //=.
+- (* Cast Const *)
+  by case => // z ih v w ; t_xrbindP => ? ? [<-] [<-] <- [<-].
+- (* Pvar *)
+  by move => x z w ->.
+- (* Papp2 *)
+  case => // -[] //.
+  (* Add *)
+  + move => p ihp q ihq v w ; t_xrbindP => vp hvp vq hvq hv hw.
+    case: (addr_ofs p) ihp => //; case: (addr_ofs q) ihq => //.
+    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
+      move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl) [<-] {wq} ?; subst v.
+      case: hw => <-; f_equal.
+      by rewrite -iword_addP /iword_add repr_mod.
+    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
+      move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
+      t_xrbindP => vz -> /= -> /= ?; subst v; f_equal.
+      rewrite I64.mul_commut I64.mul_one I64.add_commut.
+      by case: hw.
+    * move => /= x z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _.
+      move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
+      by t_xrbindP => ? ? -> /= -> <- /= <-; rewrite I64.add_commut.
+    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
+      move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
+      by t_xrbindP => vz' -> /= -> wq /hz /(_ erefl) [<-] {wq} <- [<-] /=; rewrite I64.mul_commut I64.mul_one.
+    * move => /= z /(_ _ _ hvq) hz x z' /(_ _ _ hvp) hz' _ /=.
+      move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
+      by t_xrbindP => y vz' -> /= -> /= <- ? /hz /(_ erefl) [<-] <-.
+  (* Mul *)
+  move => p ihp q ihq v w ; t_xrbindP => vp hvp vq hvq hv hw.
+  case: (addr_ofs p) ihp => //; case: (addr_ofs q) ihq => //.
+    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
+      move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl) [<-] {wq} ?; subst v.
+      case: hw => <-; f_equal.
+      by rewrite -iword_mulP /iword_mul repr_mod.
+    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
+      move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
+      t_xrbindP => vz -> /= -> /= ?; subst v; f_equal.
+      by case: hw.
+    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _.
+      move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
+      t_xrbindP => ? -> /= -> ? /hz /(_ erefl) [<-] <- /=.
+      by rewrite I64.mul_commut.
+Qed.
+
+(* -------------------------------------------------------------------- *)
+Lemma xscale_ok ii z sc :
+   scale_of_z' ii z = ok sc
+-> I64.repr z = word_of_scale sc.
+Proof. by case: sc z; do! case=> //. Qed.
+
+Lemma I64_mul_one_l x : I64.mul I64.one x = x.
+Proof. by rewrite I64.mul_commut I64.mul_one. Qed.
+
+Definition rw64 := (I64.mul_zero, I64.mul_one, I64_mul_one_l, I64.add_zero, I64.add_zero_l).
+
+(* -------------------------------------------------------------------- *)
+Lemma eval_oprd_of_pexpr ii gd s m e c v:
+  lom_eqv s m →
+  oprd_of_pexpr ii e = ok c →
+  sem_pexpr gd s e = ok v →
+  exists2 w,
+    read_oprd gd c m = ok w &
+    value_uincl v w.
+Proof.
+move=> eqv; case: e => //.
++ by case=> //= z [<-] [<-] /=; eexists.
++ move=> x; rewrite /oprd_of_pexpr /=; t_xrbindP.
+  move=> r ok_r -[<-] ok_v /=; eexists; first by reflexivity.
+  exact: xgetreg_ex eqv ok_r ok_v.
++ move=> g h; apply ok_inj in h; subst c; rewrite /= /get_global.
+  case: (get_global_word _ _) => // v' h; apply ok_inj in h.
+  by subst; eauto.
+move=> x e /=; t_xrbindP => r1 ok_r1 w ok_w [<-].
+move=> z o ok_o ok_z z' o' ok_o' ok_z' res ok_res <- {v} /=.
+exists res => //; rewrite -ok_res; f_equal; first by case: eqv.
+move: ok_w; rewrite /addr_of_pexpr.
+have := addr_ofsP ok_o' ok_z'.
+case: addr_ofs => //=.
++ move => ofs /(_ erefl) [<-] [<-] //=.
+  rewrite /decode_addr /= !rw64.
+  by rewrite (xgetreg eqv ok_r1 ok_o ok_z) I64.add_commut.
++ move => x' /(_ erefl); t_xrbindP => v hv ok_v r ok_r [<-].
+  rewrite /decode_addr /= !rw64.
+  by rewrite (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv ok_r hv ok_v).
++ move => ofs x1 /(_ erefl); t_xrbindP => ? ? hx1 hx3 <- ? hx2 sc /xscale_ok -> [<-].
+  rewrite /decode_addr /= !rw64.
+  by rewrite (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv hx2 hx1 hx3).
+move => sc x' ofs /(_ erefl); t_xrbindP => ? ? hx2 hx3 <- ? hx1 ? /xscale_ok -> [<-].
+rewrite /decode_addr /=.
+rewrite (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv hx1 hx2 hx3).
+by rewrite I64.add_commut I64.add_assoc.
 Qed.
