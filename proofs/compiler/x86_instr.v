@@ -56,10 +56,14 @@ Lemma CMOVcc_gsc :
 Proof.
   move=> ct [] // => [x | x] y gd m m';
   rewrite /low_sem_aux /= /= /eval_CMOVcc /eval_MOV /=.
-  + t_xrbindP => ??? b -> <- ?? vy Hy <- <- <- /=.
+  + t_xrbindP => ? ? ? h ? ? ? -> <- <- <-.
+    case: eval_cond h => [ | [] // ] /=; last by case => <-.
+    move => ? [] <-.
     case:ifP => ? -[<-] [<-];rewrite ?Hy //.
     by rewrite /mem_write_reg /=; f_equal;rewrite -RegMap_set_id;case:(m).
-  t_xrbindP => ??? b -> <- ?? vy Hy <- ?? vx Hx <- <- <- <- /=.
+  t_xrbindP => ??? h ? ? ? Hy <- ? ? ? Hx <- <- <- <-.
+  case: eval_cond h => [ | [] // ] /=; last by case => <-.
+  move => ? [] <- /=.
   case:ifP => ? -[<-].
   + by rewrite /sets_low /= Hy.
   rewrite /sets_low /= /mem_write_mem => {Hy}.
@@ -189,12 +193,12 @@ Lemma ADC_gsc :
        [:: E 0; E 1; F CF] [::] ADC.
 Proof.
   move=> [] // => [ x | x] y gd m m'; rewrite /low_sem_aux /= /eval_ADC /=.
-  + t_xrbindP => vs ??? vy -> <- <- <- /=.
-    rewrite /st_get_rflag_lax /st_get_rflag.
-    by case: ((xrf m) CF) => //= b [<-] /= [<-]; update_set.
-  t_xrbindP => vs ??? -> <- ?? vy -> <- <- <- /=.
-  rewrite /st_get_rflag_lax /st_get_rflag.
-  by case: ((xrf m) CF) => //= b [<-] /= <-; update_set.
+  + t_xrbindP => vs ??? vy -> <- ? ? h <- <- <- /=.
+    case: st_get_rflag h => [ ? | [] //] /=; last by case => <-.
+    by move => [<-] [<-] [<-]; update_set.
+  t_xrbindP => vs ??? -> <- ?? vy -> <- ? ? h <- <- <- /=.
+  case: st_get_rflag h => [ ? | [] //] /=; last by case => <-.
+  by move => [<-] [<-] <-; update_set.
 Qed.
 
 Definition ADC_desc := make_instr_desc ADC_gsc.
@@ -206,12 +210,12 @@ Lemma SBB_gsc :
        [:: E 0; E 1; F CF] [::] SBB.
 Proof.
   move=> [] // => [ x | x] y gd m m'; rewrite /low_sem_aux /= /eval_SBB /=.
-  + t_xrbindP => vs ??? vy -> <- <- <- /=.
-    rewrite /st_get_rflag_lax /st_get_rflag.
-    by case: ((xrf m) CF) => //= b [<-] /= [<-]; update_set.
-  t_xrbindP => vs ??? -> <- ?? vy -> <- <- <- /=.
-  rewrite /st_get_rflag_lax /st_get_rflag.
-  by case: ((xrf m) CF) => //= b [<-] /= <-; update_set.
+  + t_xrbindP => vs ??? vy -> <- ? ? h <- <- <- /=.
+    case: st_get_rflag h => [ ? | [] //] /=; last by case => <-.
+    by move => [<-] [<-] [<-]; update_set.
+  t_xrbindP => vs ??? -> <- ?? vy -> <- ? ? h <- <- <- /=.
+  case: st_get_rflag h => [ ? | [] //] /=; last by case => <-.
+  by move => [<-] [<-] <-; update_set.
 Qed.
 
 Definition SBB_desc := make_instr_desc SBB_gsc.
@@ -261,8 +265,10 @@ Lemma SETcc_gsc :
      [:: E 1]
      [:: E 0] [::] SETcc.
 Proof.
-  move=> ct [] // => [ x | x] gd m m';rewrite /low_sem_aux /= /eval_SETcc /=;
-   by t_xrbindP => ???? -> <- <- /= [<-] [<-].
+  by move=> ct [] // => [ x | x] gd m m';rewrite /low_sem_aux /= /eval_SETcc /=;
+  t_xrbindP => ??? h <-;
+  (case: eval_cond h => [ ? | [] // ]; last by case => <-);
+  case => <- [<-].
 Qed.
 
 Definition SETcc_desc := make_instr_desc SETcc_gsc.
@@ -501,3 +507,43 @@ Definition sopn_desc ii (c : sopn) : ciexec instr_desc :=
 
 Lemma sopn_desc_name ii o d : sopn_desc ii o = ok d -> d.(id_name) = o.
 Proof. by case: o => //= -[<-]. Qed.
+
+(* ----------------------------------------------------------------------------- *)
+Definition assemble_sopn (ii: instr_info) (out: lvals) (op: sopn) (args: pexprs) : ciexec asm :=
+  Let d := sopn_desc ii op in
+  Let hiargs := compile_hi_sopn ii d out args in
+  Let loargs := compile_low_args ii (id_tys d) hiargs in
+  typed_apply_gargs ii loargs (id_instr d).
+
+Theorem assemble_sopnP gd ii out op args i s1 m1 s2 :
+  lom_eqv s1 m1 →
+  assemble_sopn ii out op args = ok i →
+  sem_sopn gd op s1 out args = ok s2 →
+  ∃ m2,
+    eval_instr_mem gd i m1 = ok m2
+    ∧ lom_eqv s2 m2.
+Proof.
+  rewrite /assemble_sopn.
+  t_xrbindP => eqm id hid hiargs ok_hi loargs ok_lo ok_i h.
+  have hm := compile_hi_sopnP (sopn_desc_name hid) ok_hi h.
+  have [m2 [ok_m2 hm2]] := mixed_to_low eqm ok_lo hm.
+  exists m2. split => //.
+  have := id_gen_sem id.
+  move: ok_m2 => {h hid op ok_hi ok_lo eqm s1 s2 hm hm2}; rewrite /low_sem.
+  rewrite -(cat0s loargs); move: [::] loargs ok_i.
+  elim: (id_tys id) (id_in id) (id_out id) (id_name id) (id_instr id).
+  - move => ins outs op i'.
+    by move => acc [] // - [->] {i'} /=; rewrite cats0 => h /(_ gd m1 m2 h).
+  move => ty tys ih ins outs op i' acc [] // g loargs /=; t_xrbindP => x ok_x hi /= h.
+  have := ih ins outs op _ (acc ++ [:: g]) loargs hi.
+  rewrite -catA => /(_ h) rec x0; apply: rec.
+  suff : ∃ x' : interp_ty ty, g = mk_garg x' ∧ x = i' x' by case => x' [-> ->].
+  move: ok_x. clear.
+  case: ty i' => //=; case: g => //.
+  - move => c i' [<-]; eauto.
+  - move => o i' [<-]; eauto.
+  - case => // r i' [<-]; eauto.
+  - case => // a i' [<-].
+    + by exists (Imm_ir a).
+   by exists (Reg_ir a).
+Qed.

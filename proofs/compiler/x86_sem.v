@@ -281,7 +281,7 @@ Definition st_write_reg (r : register) (w : word) (s : x86_state) :=
 
 (* -------------------------------------------------------------------- *)
 Definition st_get_rflag (rf : rflag) (s : x86_mem) :=
-  if s.(xrf) rf is Def b then ok b else type_error.
+  if s.(xrf) rf is Def b then ok b else undef_error.
 
 (* -------------------------------------------------------------------- *)
 Definition mem_set_rflags (rf : rflag) (b : bool) (s : x86_mem) :=
