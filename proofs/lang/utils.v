@@ -27,6 +27,7 @@
 
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect.
+From Coq.Unicode Require Import Utf8.
 Require Import ZArith Setoid Morphisms CMorphisms CRelationClasses.
 Require Integers.
 
@@ -321,6 +322,22 @@ Definition req eT aT (f : aT -> aT -> Prop) (o1 o2 : result eT aT) :=
 
 Lemma List_Forall2_refl A (R:A->A->Prop) l : (forall a, R a a) -> List.Forall2 R l l.
 Proof. by move=> HR;elim: l => // a l Hrec;constructor. Qed.
+
+Lemma List_Forall2_inv_l A B (R: A → B → Prop) m n :
+  List.Forall2 R m n →
+  match m with
+  | [::] => n = [::]
+  | a :: m' => ∃ b n', n = b :: n' ∧ R a b ∧ List.Forall2 R m' n'
+  end.
+Proof. case; eauto. Qed.
+
+Lemma List_Forall2_inv_r A B (R: A → B → Prop) m n :
+  List.Forall2 R m n →
+  match n with
+  | [::] => m = [::]
+  | b :: n' => ∃ a m', m = a :: m' ∧ R a b ∧ List.Forall2 R m' n'
+  end.
+Proof. case; eauto. Qed.
 
 (* -------------------------------------------------------------------------- *)
 (* Operators to build comparison                                              *)

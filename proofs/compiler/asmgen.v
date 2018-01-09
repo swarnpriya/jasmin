@@ -732,18 +732,18 @@ Lemma compile_low_args_out ii gd ads tys pes args gargs :
 Proof.
   move => hpes.
   elim: ads args => [ | ds ads ih] args /=.
-  + move=> _ [<-];exists [::];split=>// -[ | //] ??? lom eqm [<-] H.
-    by inversion H=> {H};subst;exists lom.
+  + move=> _ [<-];exists [::];split=>// -[ | //] ??? lom eqm [<-] /List_Forall2_inv_l ->.
+    by exists lom.
   move=> /andP [wds wads]. case Heq: mixed_sem_ad_out => [lv | //].
   case Heq' : omap => [ lvs /=| //] [<-].
   have [loargs [-> H]]:= ih _ wads Heq'.
   case: {ih} ds Heq wds => /=.
   + move=> v [<-]; case Heq1: compile_var => [rf | //] _ /=.
     eexists;split;first by eauto.
-    move=> [ // | y ys] m m' ys' lom eqm.
-    t_xrbindP => m1 Hwr Hwv H1;inversion H1 => {H1};subst.
-    have [lom1 /= Hset eqm1]:= write_var_compile_var Hwr H3 eqm Heq1.
-    have [lom' []]:= H _ _ _ _ _ eqm1 Hwv H5.
+    move=> [ // | y ys] m m' ys'' lom eqm.
+    t_xrbindP => m1 Hwr Hwv /List_Forall2_inv_l [y'] [ys'] [->] {ys''} [hyy' hysys'].
+    have [lom1 /= Hset eqm1]:= write_var_compile_var Hwr hyy' eqm Heq1.
+    have [lom' []]:= H _ _ _ _ _ eqm1 Hwv hysys'.
     by rewrite /sets_low;case:ifP => //= /eqP ->;rewrite eqxx Hset => ->;eauto.
   case/compile_low_argsP: hpes => hsz hpes.
   move => n [ ? // | ] /obindI [pe] [hpe hlv] _.
