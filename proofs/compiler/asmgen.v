@@ -737,16 +737,28 @@ Proof.
   move=> /andP [wds wads]. case Heq: mixed_sem_ad_out => [lv | //].
   case Heq' : omap => [ lvs /=| //] [<-].
   have [loargs [-> H]]:= ih _ wads Heq'.
-  case: ds Heq wds => /=.
+  case: {ih} ds Heq wds => /=.
   + move=> v [<-]; case Heq1: compile_var => [rf | //] _ /=.
     eexists;split;first by eauto.
     move=> [ // | y ys] m m' ys' lom eqm.
     t_xrbindP => m1 Hwr Hwv H1;inversion H1 => {H1};subst.
-    have [lom1 [/= -Hset eqm1]]:= write_var_compile_var Hwr H3 eqm Heq1.
+    have [lom1 /= Hset eqm1]:= write_var_compile_var Hwr H3 eqm Heq1.
     have [lom' []]:= H _ _ _ _ _ eqm1 Hwv H5.
     by rewrite /sets_low;case:ifP => //= /eqP ->;rewrite eqxx Hset => ->;eauto.
+  case/compile_low_argsP: hpes => hsz hpes.
+  move => n [ ? // | ] /obindI [pe] [hpe hlv] _.
+  move: hpe => /onthP - /(_ any_pexpr) /andP [] hn /eqP ?; subst pe.
+  have hna : n < size gargs by rewrite - (mapM_size hpes) size_zip hsz minnn.
+  rewrite (onth_nth_size any_garg hna) /=.
+  have := mapM_nth any_ty_pexpr any_garg hpes.
+  rewrite size_zip hsz minnn => /(_ _ hn).
+  rewrite nth_zip => //.
+  set z := nth any_garg gargs n.
+  set pe := nth any_pexpr pes n.
+  move => hnth.
+  rewrite -/pe in hlv.
+  (* FIXME: missing hypothesis that ty ≠ TYcondt and that z is no immediate or global *)
 Admitted.
-
 
 Theorem mixed_to_low ii gd s s' id m pes gargs :
   lom_eqv s m →
