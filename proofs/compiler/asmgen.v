@@ -221,13 +221,6 @@ Definition low_sem_ad_out (xs : seq garg) (ad : arg_desc) : option destination :
   | _ => None
   end%O.
 
-Definition value_of_bool (b: exec bool) : exec value :=
-  match b with
-  | Ok b => ok (Vbool b)
-  | Error ErrAddrUndef => ok (Vundef sbool)
-  | Error e => Error e
-  end.
-
 (*
 Definition st_get_rflag_lax (f: rflag) (m: x86_mem) : value :=
   if m.(xrf) f is Def b then Vbool b else Vundef sbool.
@@ -518,8 +511,7 @@ Variant lom_eqv (m : estate) (lom : x86_mem) :=
   | MEqv of
          emem m = xmem lom
     & (∀ r v, get_var (evm m) (var_of_register r) = ok v → value_uincl v (xreg lom r))
-    & (∀ f v, get_var (evm m) (var_of_flag f) = ok v → value_uincl v (of_rbool (xrf lom f))).
-    (* & eqflags m (xrf lom). *)
+    & eqflags m (xrf lom).
 
 Definition compile_pexpr ii (ty_arg: arg_ty * pexpr) : ciexec garg :=
   let: (ty, arg) := ty_arg in
@@ -566,10 +558,7 @@ Proof.
 rewrite /compile_pexpr => eqm hv.
 case: eqP => hty; t_xrbindP => x hx ?; subst g => /=.
 - case: eqm => _ _ eqf.
-  (*
-  have /(_ gd) := eval_assemble_cond eqf hx.
-  by rewrite hv => /(_ _ erefl ok_v) [b'] [-> ->].
-*)
+  by have /(_ gd _ hv) := eval_assemble_cond eqf hx.
 Admitted.
 
 Lemma compile_low_args_in ii gd m lom ads tys pes args gargs :
