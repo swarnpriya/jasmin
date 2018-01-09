@@ -629,6 +629,120 @@ Proof.
   by constructor.
 Qed.
 
+Lemma compile_low_args_out ii gd m lom ads tys pes args gargs :
+  lom_eqv m lom →
+  compile_low_args ii tys pes = ok gargs →
+  all wf_implicit ads →
+  oseq.omap (mixed_sem_ad_out pes) ads = Some args →
+  ∃ loargs,
+    oseq.omap (low_sem_ad_out gargs) ads = Some loargs ∧
+    ∀ ys m' ys',
+    write_lvals gd m args ys = ok m' →
+    List.Forall2 value_uincl ys ys' →
+    ∃ lom',
+    sets_low lom loargs ys' = ok lom' ∧
+    lom_eqv m' lom'.
+Admitted. (*
+Proof.
+  move => eqm hpes.
+  elim: ads args.
+  - by  move => args _ [] <-; exists [::]; split => // ? [] <-; exists [::].
+  move => ad ads ih args' h; rewrite /= in h; case/andP: h => hwf hwf'.
+  case/omap_consI => arg [] args [] -> ha has.
+  case: (ih _ hwf' has) => {ih} loargs [hlo hlo'].
+  case: ad ha hwf.
+  (* Implicit *)
+  + move => x /= [] ?; subst arg.
+    case hd: compile_var => [ d | ] //= _.
+    exists (arg_of_reg_or_flag d :: loargs); split; first by rewrite /= hlo.
+    t_xrbindP => vs' v hv vs ok_vs <- {vs'}.
+    have [vs1 [hvs1 hvsvs1]] := hlo' _ ok_vs.
+    case: eqm => hm hr hf.
+    move: hd; rewrite/compile_var.
+    case eq1: register_of_var => [ r | ].
+    * have := var_of_register_of_var eq1 => {eq1} ?; subst x.
+      case => <- /=.
+      exists (Vword (xreg lom r) :: vs1); split.
+      + by rewrite hvs1.
+      constructor => //. exact: hr.
+    case eq2: flag_of_var => [ f | ] // [<-] {d}.
+    have := var_of_flag_of_var eq2 => {eq1 eq2} ?; subst x.
+    exists (of_rbool (xrf lom f) :: vs1); split.
+    + have := hf _ _ hv.
+      by rewrite /= /st_get_rflag hvs1; case: (xrf lom f).
+    constructor => //. exact: hf.
+  (* Explicit *)
+  case/compile_low_argsP: hpes => hsz hpes.
+  move => /= n o ho _.
+  have : onth pes n = Some arg ∧ match o with Some x => eq_expr arg {| v_var := var_of_register x ; v_info := xH |} | _ => true end.
+  + by case: o ho => // x /obindI [] e [] ->; case: ifP => // /is_varP h [] ?; subst.
+  case => /onthP - /(_ any_pexpr) /andP [] hn /eqP ? {ho} ho; subst arg.
+  have hna : n < size gargs by rewrite - (mapM_size hpes) size_zip hsz minnn.
+  rewrite (onth_nth_size any_garg hna) /=.
+  have := mapM_nth any_ty_pexpr any_garg hpes.
+  rewrite size_zip hsz minnn => /(_ _ hn).
+  rewrite nth_zip => //.
+  set z := nth any_garg gargs n.
+  set pe := nth any_pexpr pes n.
+  move => hnth.
+  set y := match o with Some _ => _ | _ => _ end.
+  have : y = Some (arg_of_garg z).
+  + subst y. case: o ho => // v hv.
+    move: (hnth).
+    rewrite (compile_pexpr_eq_expr hv hnth) {hv}.
+    rewrite /compile_pexpr. case: eqP => // _; t_xrbindP => op.
+    by rewrite /= reg_of_stringK => -[ <-] <- /=; rewrite eqxx.
+  move -> => {y}.
+  rewrite hlo /=. eexists; split; first by eauto.
+  t_xrbindP => vs' v ok_v vs ok_vs <- {vs'} /=.
+  have [vs' [ok_vs' hvsvs']] := hlo' _ ok_vs.
+  rewrite ok_vs' /=.
+  have [v' [ok_v' hvv']] := compile_low_eval eqm ok_v hnth.
+  exists (v' :: vs'); split.
+  + by rewrite ok_v'.
+  by constructor.
+Qed.
+
+Proof.
+  move => eqm hwf hirs.
+  elim: ads out outv m1 lom1 eqm hwf.
+  - move => out outv m1 lom1 eqm _ [] <- /setsI [hsz ->]; exists [::]; split => //.
+    by case: outv hsz => // _; exists lom1.
+  move => ad ads ih args' outv' m1 lom1 eqm h; rewrite /= in h; case/andP: h => hwf hwf'.
+  case/omap_consI => arg [] args [] -> ha has /sets_consI [v] [outv] [? hm2]; subst outv'.
+  case: ad ha hwf.
+  + move => x /= [] ?; subst arg.
+    case hd: compile_var => [ d | ] // _.
+    have : ∃ lom', set_lo d v lom1 = Some lom'.
+    admit.
+    case => lom' hlom'.
+    have eqm' := set_lom_eqv eqm hd hlom'.
+    case: (ih args outv (set m1 x v) lom' eqm' hwf' has hm2)
+      => dst [hdst] [lom2] [hlom2 eqm2].
+    exists (d :: dst); split; first by rewrite hdst.
+    exists lom2; split; first by rewrite sets_lo_cons hlom' /=. done.
+
+  move => n /=.
+  case eq1: onth => [ [] q | ] // [] ? _; subst q.
+  move: eq1 => /onthP - /(_ (EInt 0)) /andP [] hsz /eqP harg.
+  case: (onth_omap_size (EInt 0) hirs hsz) => y [hy]; rewrite harg.
+  case eqy: register_of_var => [ y' | ] // - [] ?; subst y.
+  have eqy' : compile_var arg = Some (DReg y') by rewrite /compile_var eqy.
+  have : ∃ i, v = VInt i.
+  admit.
+  case => i ?; subst v.
+  have : ∃ lom', set_lo (DReg y') i lom1 = Some lom' by eexists.
+  case => lom' hlom'.
+  have eqm' := set_lom_eqv eqm eqy' hlom'.
+  have := ih _ _ _ _ eqm' hwf' has hm2.
+  case => dst [hdst] [lom2] [hlom2 eqm2].
+  rewrite hy hdst /=.
+  eexists; split; first by reflexivity.
+  case: hlom' => ?; subst lom'.
+  by exists lom2.
+Admitted.
+*)
+
 Theorem mixed_to_low ii gd s s' id m pes gargs :
   lom_eqv s m →
   compile_low_args ii (id_tys id) pes = ok gargs →
@@ -643,5 +757,7 @@ Proof.
   case ok_out: (omap _) => [ outx | // ].
   t_xrbindP => ys xs ok_xs ok_ys hs'.
   rewrite /low_sem /low_sem_aux.
-  have [loin [-> /(_ _ ok_xs) [xs' [ok_xs' hxs]]]] := compile_low_args_in gd eqsm ok_args (id_in_wf id) ok_in.
-Admitted.
+  have [loin [-> /(_ _ ok_xs) [xs' [-> /= hxs]]]] := compile_low_args_in gd eqsm ok_args (id_in_wf id) ok_in.
+  have [ys' [-> /= hys]] := vuincl_exec_opn hxs ok_ys.
+  by have [loout [-> /(_ _ _ _ hs' hys)]] := compile_low_args_out gd eqsm ok_args (id_out_wf id) ok_out.
+ Qed.
