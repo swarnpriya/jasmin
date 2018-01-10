@@ -716,6 +716,32 @@ case: y0 hvu => // [ b | [] //] _; (eexists; first by reflexivity); split => //=
   by move => _ [<-] /=; case: ((RflagMap.oset _ _ _) f').
 Qed.
 
+Lemma compile_lval_of_pexpr ii ty pe g lv :
+  ty ≠ TYcondt →
+  compile_pexpr ii (ty, pe) = ok g →
+  lval_of_pexpr pe = Some lv →
+  ∃ ra : register + address,
+  g = Goprd match ra with inl r => Reg_op r | inr a => Adr_op a end
+  ∧ match ra with
+    | inl r =>
+      ∃ x, pe = Pvar x ∧ lv = Lvar x ∧ register_of_var x = Some r
+    | inr a => ∃ x ofs d,
+  pe = Pload x ofs ∧ lv = Lmem x ofs ∧ register_of_var x = Some d ∧ addr_of_pexpr ii d ofs = ok a
+end.
+Proof.
+rewrite /compile_pexpr => hty; rewrite xseq.neq => //; t_xrbindP => r hr <- {g}.
+case: pe hr => //=.
+- case => -[] [] //= x xi; t_xrbindP => f ok_f [<-] {r} [<-] {lv}; exists (inl f); split => //.
+  eexists; do 2 (split => //).
+  rewrite /register_of_var /=.
+  by case: reg_of_string ok_f => // ? [->].
+t_xrbindP => x pe d ok_d a ok_a [<-] {r} [<-] {lv}; exists (inr a); split => //.
+exists x, pe, d; repeat (split => //).
+case: x ok_d => -[] [] // x xi.
+rewrite /register_of_var /=.
+by case: reg_of_string => // ? [->].
+Qed.
+
 Lemma compile_low_args_out ii gd ads tys pes args gargs :
   compile_low_args ii tys pes = ok gargs →
   all wf_implicit ads →
@@ -755,10 +781,53 @@ Proof.
   rewrite nth_zip => //.
   set z := nth any_garg gargs n.
   set pe := nth any_pexpr pes n.
+  set ty := nth any_ty tys n.
   move => hnth.
   rewrite -/pe in hlv.
-  (* FIXME: missing hypothesis that ty ≠ TYcondt and that z is no immediate or global *)
-Admitted.
+  (* FIXME: missing hypothesis that ty ≠ TYcondt *)
+  Axiom fixme : ∀ P : Prop, P.
+  have hty : ty ≠ TYcondt.
+  - by exact: fixme.
+  have [ra [hz hra]] := compile_lval_of_pexpr hty hnth hlv => {hnth hlv}.
+  rewrite hz.
+  exists (match ra with inl r => DReg r | inr a => DAddr a end :: loargs); split.
+  - by case: ra hz hra.
+  move => [] // y ys m m'' ys'' lom eqm; t_xrbindP => m' ok_m' ok_m'' /List_Forall2_inv_l [y'] [ys'] [?] [hyy' hysys']; subst ys''.
+  case: ra hz hra.
+  - move => r hz [x] [hpe] [? hr]; subst lv.
+    have := @write_var_compile_var _ _ _ _ _ _ (inl r) ok_m' hyy' eqm.
+    rewrite /compile_var hr => /(_ erefl) /= [lom' ok_lom' eqm'].
+    have [lom'' [ok_lom'' eqm'']] := H _ _ _ _ _ eqm' ok_m'' hysys'.
+    exists lom''; split => //.
+    by move: ok_lom''; rewrite /sets_low /=; case: ifP => // /eqP ->; rewrite eqxx ok_lom'.
+  move => a hz [x] [ofs] [d] [hpe] [?] [hd ha]; subst lv.
+  move: ok_m' => /=; t_xrbindP => v v' ok_v' ok_v w w' ok_w' ok_w u ok_u em ok_em ?; subst m'.
+  set lom' := {| xmem := em ; xreg := xreg lom ; xrf := xrf lom |}.
+  have eqm' : lom_eqv {| emem := em ; evm := evm m |} lom'.
+  - by case: eqm => eqm eqr eqf; rewrite /lom'; split.
+  have [lom'' [ok_lom'' eqm'']] := H _ _ _ _ _ eqm' ok_m'' hysys'.
+  exists lom''; split => //.
+  move: ok_lom''; rewrite /sets_low /=; case: ifP => // /eqP ->; rewrite eqxx.
+  case: y ok_u hyy' => // [ y | [] // ] [?]; subst u; case: y' => // y' /= ?; subst y'.
+  case: (eqm) => eqmem eqr eqf; rewrite /mem_write_mem -eqmem.
+  suff : decode_addr lom a = (I64.add v w).
+  - by rewrite /lom' => ->; rewrite ok_em.
+  move: ha; rewrite /addr_of_pexpr /decode_addr.
+  have hx := var_of_register_of_var hd. rewrite -hx in ok_v'.
+  have := eqr _ _ ok_v'.
+  case: v' ok_v ok_v' => // [ v' | [] // ] [->] {v'} ok_v /= ?; subst v.
+  have := addr_ofsP ok_w' ok_w.
+  clear -eqm.
+  case: addr_ofs => //=.
+  - move => z /(_ erefl) [<-] [<-] /=; rewrite !rw64; exact: I64.add_commut.
+  - move => x /(_ erefl); t_xrbindP => v ok_v hvw r ok_r [<-] /=; rewrite !rw64.
+    by have <- := xgetreg eqm ok_r ok_v hvw.
+  - move => z x /(_ erefl); t_xrbindP => v v' ok_v' ok_v <- {w} r ok_r sc /xscale_ok ok_sc [<-] /=; rewrite !rw64 ok_sc.
+    by have <- := xgetreg eqm ok_r ok_v' ok_v.
+  move => z x z' /(_ erefl); t_xrbindP => v v' ok_v' ok_v <- {w} r ok_r sc /xscale_ok ok_sc [<-] /=; rewrite ok_sc.
+  have <- := xgetreg eqm ok_r ok_v' ok_v.
+  by rewrite I64.add_commut I64.add_assoc.
+Qed.
 
 Theorem mixed_to_low ii gd s s' id m pes gargs :
   lom_eqv s m →
