@@ -328,7 +328,8 @@ Definition mixed_sem_ad_in (xs : seq pexpr) (ad : arg_desc) : option pexpr :=
 
 Definition lval_of_pexpr e :=
   match e with
-  | Pvar v    => Some (Lvar v)
+  | Pvar v    =>
+    if vtype v == sbool then None else Some (Lvar v)
   | Pload x e => Some (Lmem x e)
   | _         => None
   end.
@@ -717,7 +718,6 @@ case: y0 hvu => // [ b | [] //] _; (eexists; first by reflexivity); split => //=
 Qed.
 
 Lemma compile_lval_of_pexpr ii ty pe g lv :
-  ty ≠ TYcondt →
   compile_pexpr ii (ty, pe) = ok g →
   lval_of_pexpr pe = Some lv →
   ∃ ra : register + address,
@@ -729,7 +729,8 @@ Lemma compile_lval_of_pexpr ii ty pe g lv :
   pe = Pload x ofs ∧ lv = Lmem x ofs ∧ register_of_var x = Some d ∧ addr_of_pexpr ii d ofs = ok a
 end.
 Proof.
-rewrite /compile_pexpr => hty; rewrite xseq.neq => //; t_xrbindP => r hr <- {g}.
+rewrite /compile_pexpr; case: eqP => hty; t_xrbindP => r hr <- {g}.
+- by case: pe hr => //=; case => -[] [].
 case: pe hr => //=.
 - case => -[] [] //= x xi; t_xrbindP => f ok_f [<-] {r} [<-] {lv}; exists (inl f); split => //.
   eexists; do 2 (split => //).
@@ -784,11 +785,7 @@ Proof.
   set ty := nth any_ty tys n.
   move => hnth.
   rewrite -/pe in hlv.
-  (* FIXME: missing hypothesis that ty ≠ TYcondt *)
-  Axiom fixme : ∀ P : Prop, P.
-  have hty : ty ≠ TYcondt.
-  - by exact: fixme.
-  have [ra [hz hra]] := compile_lval_of_pexpr hty hnth hlv => {hnth hlv}.
+  have [ra [hz hra]] := compile_lval_of_pexpr hnth hlv => {hnth hlv}.
   rewrite hz.
   exists (match ra with inl r => DReg r | inr a => DAddr a end :: loargs); split.
   - by case: ra hz hra.
