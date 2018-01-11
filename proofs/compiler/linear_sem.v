@@ -57,7 +57,7 @@ Record lstate := Lstate
 Definition to_estate (s:lstate) := Estate s.(lmem) s.(lvm).
 Definition of_estate (s:estate) c pc := Lstate s.(emem) s.(evm) c pc.
 Definition setpc (s:lstate) pc :=  Lstate s.(lmem) s.(lvm) s.(lc) pc.
-
+Definition setc (s:lstate) c := Lstate s.(lmem) s.(lvm) c s.(lpc).
 (* The [lsem] relation defines the semantics of a linear command
 as the reflexive transitive closure of the [lsem1] relation that
 describes the execution of the first instruction.
@@ -69,15 +69,6 @@ the reached state has no instruction left to execute.
 Section LSEM.
 
 Context (gd: glob_defs).
-
-(* -------------------------------------------------------------------- *)
-Definition aslabel (a : linstr) :=
-  if li_i a is Llabel lbl then Some lbl else None.
-
-(* -------------------------------------------------------------------- *)
-Definition find_label (lbl : label) (a : seq linstr) :=
-  let idx := seq.index (Some lbl) [seq aslabel i | i <- a] in
-  if idx < size a then ok idx else type_error.
 
 Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
   match li_i i with
@@ -100,8 +91,10 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     else ok (setpc s1 s1.(lpc).+1)
   end.
 
+Definition find_instr (s:lstate) := oseq.onth s.(lc) s.(lpc).
+
 Definition step (s: lstate) : exec lstate :=
-  if oseq.onth s.(lc) s.(lpc) is Some i then
+  if find_instr s is Some i then
     eval_instr i s
   else type_error.
 
