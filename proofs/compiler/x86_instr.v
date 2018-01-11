@@ -26,7 +26,7 @@ Notation make_instr_desc gen_sem := (mk_instr_desc gen_sem erefl erefl).
 Lemma MOV_gsc :
   gen_sem_correct [:: TYoprd; TYoprd] Ox86_MOV [:: E 0] [:: E 1] [::] MOV.
 Proof.
-  move=> [] // => [ x | x] y gd m m';rewrite /low_sem_aux /= /eval_MOV /=;
+  move=> [] // => [ x | x] y; split => // gd m m';rewrite /low_sem_aux /= /eval_MOV /=;
   by t_xrbindP => ???? -> <- <- [<-] <-.
 Qed.
 
@@ -54,7 +54,7 @@ Lemma CMOVcc_gsc :
   gen_sem_correct [:: TYcondt; TYoprd; TYoprd]
      Ox86_CMOVcc [:: E 1] [:: E 0; E 2; E 1] [::] CMOVcc.
 Proof.
-  move=> ct [] // => [x | x] y gd m m';
+  move=> ct [] // => [x | x] y; split => // gd m m';
   rewrite /low_sem_aux /= /= /eval_CMOVcc /eval_MOV /=.
   + t_xrbindP => ? ? ? h ? ? ? -> <- <- <-.
     case: eval_cond h => [ | [] // ] /=; last by case => <-.
@@ -76,7 +76,6 @@ Definition CMOVcc_desc := make_instr_desc CMOVcc_gsc.
 (* ----------------------------------------------------------------------------- *)
 
 Ltac update_set :=
-  try (refine (conj _ erefl));
   by rewrite /sets_low /= /mem_update_rflags /mem_unset_rflags /mem_set_rflags
              /mem_write_reg /=;
      repeat f_equal; apply /ffunP; case; rewrite !ffunE.
@@ -86,7 +85,7 @@ Lemma ADD_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] ADD.
 Proof.
-  move=> [] // => [ x | x] y gd m m'; rewrite /low_sem_aux /= /eval_ADD /=.
+  move=> [] // => [ x | x] y; split => // gd m m'; rewrite /low_sem_aux /= /eval_ADD /=.
   + t_xrbindP => vs ??? vy -> <- <- <- [<-] [<-]; update_set.
   by t_xrbindP => vs ??? -> <- ?? vy -> <- <- <-[<-] <- /=; update_set.
 Qed.
@@ -98,7 +97,7 @@ Lemma SUB_gsc :
    gen_sem_correct [:: TYoprd; TYoprd] Ox86_SUB
       (implicit_flags ++ [:: E 0]) [:: E 0; E 1] [::] SUB.
 Proof.
-  move=> [] // => [ x | x] y gd m m'; rewrite /low_sem_aux /= /eval_SUB /=.
+  move=> [] // => [ x | x] y; split => // gd m m'; rewrite /low_sem_aux /= /eval_SUB /=.
   + by t_xrbindP => vs ??? vy -> <- <- <- [<-] [<-]; update_set.
   by t_xrbindP => vs ??? -> <- ?? vy -> <- <- <- [<-] <- /=; update_set.
 Qed.
@@ -111,7 +110,7 @@ Lemma MUL_gsc :
       (implicit_flags ++ [:: R RDX; R RAX])
       [:: R RAX; E 0] [::] MUL.
 Proof.
-  rewrite /gen_sem_correct /low_sem_aux /= /eval_MUL => x gd m m'.
+  rewrite /gen_sem_correct /low_sem_aux /= /eval_MUL => x; split => // gd m m'.
   by t_xrbindP => vs ? ? ? vy -> <- <- <- /= [<-] [<-] /=; update_set.
 Qed.
 
@@ -122,7 +121,7 @@ Lemma IMUL_gsc :
   gen_sem_correct [:: TYoprd ] Ox86_IMUL (implicit_flags ++ [:: R RDX; R RAX])
                    [:: R RAX; E 0] [::] (λ x, IMUL x None).
 Proof.
-  rewrite /gen_sem_correct /low_sem_aux /= => x gd m m'.
+  rewrite /gen_sem_correct /low_sem_aux /= => x; split => // gd m m'.
   by t_xrbindP => vs ? ? ? vy -> <- <- <- /= [<-] [<-] /=; update_set.
 Qed.
 
@@ -135,7 +134,7 @@ Lemma IMUL64_gsc :
                    (λ x y, IMUL x (Some (y, None))).
 Proof.
   rewrite /gen_sem_correct /low_sem_aux /=.
-  case => // x y gd m m' /=.
+  case => // x y; split => // gd m m' /=.
   + t_xrbindP => vs ? ? ? vy -> <- <- <-.
     t_xrbindP => vx [<-] ? [<-] [<-] [<-] /=; update_set.
   t_xrbindP => vs ? ? ? -> <- ? ? ? -> <- <- <-.
@@ -151,7 +150,7 @@ Lemma IMUL64imm_gsc :
     (λ (x y : interp_ty TYoprd) (z : interp_ty TYimm), IMUL x (Some (y, Some z))).
 Proof.
   rewrite /gen_sem_correct /low_sem_aux /=.
-  case => // d x y gd m m' /=.
+  case => // d x y; split => // gd m m' /=.
   + t_xrbindP => vs ? ? ? -> <- <-.
     t_xrbindP => ? [<-] ? [<-] [<-] [<-] /=; update_set.
   t_xrbindP => vs ? ? ? -> <- <-.
@@ -167,7 +166,7 @@ Lemma DIV_gsc :
       (implicit_flags ++ [:: R RAX; R RDX])
       [:: R RDX; R RAX; E 0] [::] DIV.
 Proof.
-  rewrite /gen_sem_correct /low_sem_aux /= /eval_DIV /x86_div => x gd m m'.
+  rewrite /gen_sem_correct /low_sem_aux /= /eval_DIV /x86_div => x; split => // gd m m'.
   t_xrbindP => vs ? ? ? ? vy -> <- <- <- <- /=.
   by case: ifPn => //= ? [<-] /= [<-]; update_set.
 Qed.
@@ -180,7 +179,7 @@ Lemma IDIV_gsc :
       (implicit_flags ++ [:: R RAX; R RDX])
       [:: R RDX; R RAX; E 0] [::] IDIV.
 Proof.
-  rewrite /gen_sem_correct /low_sem_aux /= /eval_IDIV /x86_idiv => x gd m m'.
+  rewrite /gen_sem_correct /low_sem_aux /= /eval_IDIV /x86_idiv => x; split => // gd m m'.
   t_xrbindP => vs ? ? ? ? vy -> <- <- <- <- /=.
   by case: ifPn => //= ? [<-] /= [<-]; update_set.
 Qed.
@@ -193,7 +192,7 @@ Lemma ADC_gsc :
        (implicit_flags ++ [:: E 0])
        [:: E 0; E 1; F CF] [::] ADC.
 Proof.
-  move=> [] // => [ x | x] y gd m m'; rewrite /low_sem_aux /= /eval_ADC /=.
+  move=> [] // => [ x | x] y; split => // gd m m'; rewrite /low_sem_aux /= /eval_ADC /=.
   + t_xrbindP => vs ??? vy -> <- ? ? h <- <- <- /=.
     case: st_get_rflag h => [ ? | [] //] /=; last by case => <-.
     by move => [<-] [<-] [<-]; update_set.
@@ -210,7 +209,7 @@ Lemma SBB_gsc :
        (implicit_flags ++ [:: E 0])
        [:: E 0; E 1; F CF] [::] SBB.
 Proof.
-  move=> [] // => [ x | x] y gd m m'; rewrite /low_sem_aux /= /eval_SBB /=.
+  move=> [] // => [ x | x] y; split => // gd m m'; rewrite /low_sem_aux /= /eval_SBB /=.
   + t_xrbindP => vs ??? vy -> <- ? ? h <- <- <- /=.
     case: st_get_rflag h => [ ? | [] //] /=; last by case => <-.
     by move => [<-] [<-] [<-]; update_set.
@@ -227,7 +226,7 @@ Lemma NEG_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0] [::] NEG.
 Proof.
-  move=> [] // => [ x | x ] gd m m';rewrite /low_sem_aux /= /eval_NEG /=.
+  move=> [] // => [ x | x ] ; split => // gd m m';rewrite /low_sem_aux /= /eval_NEG /=.
   + by move=> [<-];update_set.
   t_xrbindP => ???? -> <- <- /= [<-] <-;update_set.
 Qed.
@@ -240,7 +239,7 @@ Lemma INC_gsc :
      (implicit_flags_noCF ++ [:: E 0])
      [:: E 0] [::] INC.
 Proof.
-  move=> [] // => [ x | x ] gd m m'; rewrite /low_sem_aux /= /eval_INC /=.
+  move=> [] // => [ x | x ] ; split => // gd m m'; rewrite /low_sem_aux /= /eval_INC /=.
   + by move=> [<-]; update_set.
   by t_xrbindP => ???? -> <- <- /= [<-] <-; update_set.
 Qed.
@@ -253,7 +252,7 @@ Lemma DEC_gsc :
      (implicit_flags_noCF ++ [:: E 0])
      [:: E 0] [::] DEC.
 Proof.
-  move=> [] // => [ x | x ] gd m m';rewrite /low_sem_aux /= /eval_DEC /=.
+  move=> [] // => [ x | x ] ; split => // gd m m';rewrite /low_sem_aux /= /eval_DEC /=.
   + by move=> [<-]; update_set.
   by t_xrbindP => ???? -> <- <- /= [<-] <-; update_set.
 Qed.
@@ -266,7 +265,7 @@ Lemma SETcc_gsc :
      [:: E 1]
      [:: E 0] [::] SETcc.
 Proof.
-  by move=> ct [] // => [ x | x] gd m m';rewrite /low_sem_aux /= /eval_SETcc /=;
+  by move=> ct [] // => [ x | x]; split => // gd m m';rewrite /low_sem_aux /= /eval_SETcc /=;
   t_xrbindP => ??? h <-;
   (case: eval_cond h => [ ? | [] // ]; last by case => <-);
   case => <- [<-].
@@ -321,11 +320,10 @@ Lemma LEA_gsc :
      [:: E 0]
      [:: E 1; E 2; E 3; E 4] [::] mk_LEA.
 Proof.
-  rewrite /gen_sem_correct /= /low_sem_aux /= => x disp base scale offset gd m m'.
+  rewrite /gen_sem_correct /= /low_sem_aux /= => x disp base scale offset; split => // gd m m'.
   rewrite !read_oprd_ireg.
   t_xrbindP => ????? Hbase <- ???? Hoffset <- <- <- <- <- /=.
   rewrite /x86_lea; case: ifP => // Hscale [<-] [<-]; rewrite /mk_LEA /eval_LEA.
-  split => //.
   case: base offset Hbase Hoffset => [base | base] [offset | offset] /= <- <-;
     rewrite /decode_addr //=;do 2 f_equal; rewrite !I64_rw -?(check_scale_of Hscale) //.
   f_equal; apply I64.add_commut.
@@ -339,7 +337,7 @@ Lemma TEST_gsc :
      implicit_flags
      [:: E 0; E 1] [::] TEST.
 Proof.
-  move=> x y gd m m'; rewrite /low_sem_aux /= /eval_TEST.
+  move=> x y; split => // gd m m'; rewrite /low_sem_aux /= /eval_TEST.
   by t_xrbindP => ???? -> <- ??? -> <- <- <- [<-] [<-] /=; update_set.
 Qed.
 
@@ -351,7 +349,7 @@ Lemma CMP_gsc :
      implicit_flags
      [:: E 0; E 1] [::] CMP.
 Proof.
-  move=> x y gd m m'; rewrite /low_sem_aux /= /eval_CMP.
+  move=> x y ; split => // gd m m'; rewrite /low_sem_aux /= /eval_CMP.
   by t_xrbindP => ???? -> <- ??? -> <- <- <- [<-] [<-] /=; update_set.
 Qed.
 
@@ -363,7 +361,7 @@ Lemma AND_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] AND.
 Proof.
-  move=> [] // => [x | x] y gd m m'; rewrite /low_sem_aux /= /eval_AND /=.
+  move=> [] // => [x | x] y; split => // gd m m'; rewrite /low_sem_aux /= /eval_AND /=.
   + by t_xrbindP => ????? -> <- <- <- [<-] [<-] /=; update_set.
   by t_xrbindP => ???? -> <- ??? -> <- <- <- [<-] <- /=; update_set.
 Qed.
@@ -376,7 +374,7 @@ Lemma OR_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] OR.
 Proof.
-  move=> [] // => [x | x] y gd m m'; rewrite /low_sem_aux /= /eval_OR /=.
+  move=> [] // => [x | x] y; split => // gd m m'; rewrite /low_sem_aux /= /eval_OR /=.
   + by t_xrbindP => ????? -> <- <- <- [<-] [<-] /=; update_set.
   by t_xrbindP => ???? -> <- ??? -> <- <- <- [<-] <- /=; update_set.
 Qed.
@@ -389,7 +387,7 @@ Lemma XOR_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] XOR.
 Proof.
-  move=> [] // => [x | x] y gd m m'; rewrite /low_sem_aux /= /eval_XOR /=.
+  move=> [] // => [x | x] y; split => // gd m m'; rewrite /low_sem_aux /= /eval_XOR /=.
   + by t_xrbindP => ????? -> <- <- <- [<-] [<-] /=; update_set.
   by t_xrbindP => ???? -> <- ??? -> <- <- <- [<-] <- /=; update_set.
 Qed.
@@ -402,7 +400,7 @@ Lemma NOT_gsc :
      [:: E 0]
      [:: E 0] [::] NOT.
 Proof.
-  move=> [] // => x gd m m'; rewrite /low_sem_aux /= /eval_NOT /=.
+  move=> [] // => x ; split => // gd m m'; rewrite /low_sem_aux /= /eval_NOT /=.
   by t_xrbindP => ???? -> <- <- [<-] <- /=; update_set.
 Qed.
 
@@ -415,7 +413,7 @@ Lemma SHL_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] SHL.
 Proof.
-  move=> [] // => [x | x] y gd m m'; rewrite /low_sem_aux /= /eval_SHL /= /x86_shl /=.
+  move=> [] // => [x | x] y ; split => // gd m m'; rewrite /low_sem_aux /= /eval_SHL /= /x86_shl /=.
   + t_xrbindP => ???? vy;rewrite read_oprd_ireg => -[->] <- <- <- /=.
     case: ifP => Heq [<-] <-.
     + rewrite /sets_low /= /mem_write_reg;case:m => ??? /=.
@@ -460,7 +458,7 @@ Lemma Set0_gsc :
      (implicit_flags ++ [:: E 0])
      [::] [::] (fun x => XOR x x).
 Proof.
-  move=> []// => [x|x] gd m m'; rewrite /low_sem_aux /= /eval_XOR /=.
+  move=> []// => [x|x]; split => // gd m m'; rewrite /low_sem_aux /= /eval_XOR /=.
   + move=> [<-]; rewrite I64.xor_idem; update_set.
   rewrite /sets_low /= /decode_addr /=;set addr := I64.add _ _.
   rewrite /mem_write_mem; t_xrbindP => m1 /= Hw <-.
@@ -516,27 +514,31 @@ Definition assemble_sopn (ii: instr_info) (out: lvals) (op: sopn) (args: pexprs)
   Let loargs := compile_low_args ii (id_tys d) hiargs in
   typed_apply_gargs ii loargs (id_instr d).
 
+Lemma assemble_sopn_is_sopn ii out op args i :
+  assemble_sopn ii out op args = ok i →
+  is_sopn i.
+Proof.
+Admitted.
+
 Theorem assemble_sopnP gd ii out op args i s1 m1 s2 :
   lom_eqv s1 m1 →
   assemble_sopn ii out op args = ok i →
   sem_sopn gd op s1 out args = ok s2 →
   ∃ m2,
     eval_instr_mem gd i m1 = ok m2
-    ∧ lom_eqv s2 m2
-    ∧ is_sopn i.
+    ∧ lom_eqv s2 m2.
 Proof.
   rewrite /assemble_sopn.
   t_xrbindP => eqm id hid hiargs ok_hi loargs ok_lo ok_i h.
   have hm := compile_hi_sopnP (sopn_desc_name hid) ok_hi h.
   have [m2 [ok_m2 hm2]] := mixed_to_low eqm ok_lo hm.
-  exists m2.
-  refine ((λ x, let 'conj a b := x in conj a (conj hm2 b)) _).
+  exists m2; split => //.
   have := id_gen_sem id.
   move: ok_m2 => {h hid op ok_hi ok_lo eqm s1 s2 hm hm2}; rewrite /low_sem.
   rewrite -(cat0s loargs); move: [::] loargs ok_i.
   elim: (id_tys id) (id_in id) (id_out id) (id_name id) (id_instr id).
   - move => ins outs op i'.
-    by move => acc [] // - [->] {i'} /=; rewrite cats0 => h /(_ gd m1 m2 h).
+    by move => acc [] // - [->] {i'} /=; rewrite cats0 => h [] _ /(_ gd m1 m2 h).
   move => ty tys ih ins outs op i' acc [] // g loargs /=; t_xrbindP => x ok_x hi /= h.
   have := ih ins outs op _ (acc ++ [:: g]) loargs hi.
   rewrite -catA => /(_ h) rec x0; apply: rec.

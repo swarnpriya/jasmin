@@ -305,9 +305,10 @@ Definition is_sopn (i: asm) : bool :=
 Fixpoint gen_sem_correct tys id_name id_out id_in args  : interp_tys tys -> Prop :=
   match tys with
   | [::] => fun asm =>
+    is_sopn asm ∧
     ∀ gd m m',
-       low_sem_aux gd m id_name id_out id_in args = ok m' ->
-       eval_instr_mem gd asm m = ok m' ∧ is_sopn asm
+       low_sem_aux gd m id_name id_out id_in args = ok m' →
+       eval_instr_mem gd asm m = ok m'
   | ty::tys => fun asm =>
     forall (x:interp_ty ty), @gen_sem_correct tys id_name id_out id_in (args ++ [::@mk_garg ty x]) (asm x)
   end.

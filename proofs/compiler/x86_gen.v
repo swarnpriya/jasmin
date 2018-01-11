@@ -114,7 +114,8 @@ case: i => ii [] /=.
   eexists; split; first by reflexivity.
   by constructor => //=; rewrite ?to_estate_of_estate ?eqpc.
 - move => lvs op pes ok_j; t_xrbindP => es ok_es <- {ls'} /=.
-  have [m2 [-> [eqm2] /=]] := assemble_sopnP eqm ok_j ok_es.
+  have [m2 [-> eqm2 /=]] := assemble_sopnP eqm ok_j ok_es.
+  have := assemble_sopn_is_sopn ok_j.
   by case: j {ok_j} => //; (eexists; split; first by reflexivity); constructor => //=;
     rewrite ?to_estate_of_estate ?eqpc.
 - move => lbl [<-] [<-]; eexists; split; first by reflexivity.
