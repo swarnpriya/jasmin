@@ -48,6 +48,15 @@ Scheme Equality for arg_ty.
 Definition arg_ty_eqMixin := comparableClass arg_ty_eq_dec.
 Canonical arg_ty_eqType := EqType arg_ty arg_ty_eqMixin.
 
+Definition string_of_arg_ty (ty: arg_ty) : string :=
+  match ty with
+  | TYcondt => "TYcondt"
+  | TYoprd => "TYoprd"
+  | TYreg => "TYreg"
+  | TYireg => "TYireg"
+  | TYimm => "TYimm"
+  end.
+
 Definition interp_ty (ty : arg_ty) : Type :=
   match ty with
   | TYcondt => condt
@@ -100,6 +109,12 @@ Defined.
 Definition garg_eqMixin := comparableClass garg_eq_dec.
 Canonical garg_eqType := EqType _ garg_eqMixin.
 
+Definition string_of_garg (g: garg) : string :=
+  match g with
+  | Gcondt c => "Gcondt " ++ string_of_condt c
+  | Goprd o => "Goprd " ++ string_of_oprd o
+  end.
+
 Definition typed_apply_garg ii {T} (ty: arg_ty) (arg: garg) :
   (interp_ty ty → T) → ciexec T :=
     match ty, arg return (interp_ty ty → T) → ciexec T with
@@ -108,7 +123,8 @@ Definition typed_apply_garg ii {T} (ty: arg_ty) (arg: garg) :
     | TYreg, Goprd (Reg_op r) => λ op, ok (op r)
     | TYireg, Goprd (Reg_op r)=> λ op, ok (op (Reg_ir r))
     | TYireg, Goprd (Imm_op w)=> λ op, ok (op (Imm_ir w))
-    | _, _ => λ _, cierror ii (Cerr_assembler (AsmErr_string "TAG"))
+    | TYimm, Goprd (Imm_op w)=> λ op, ok (op w)
+    | _, _ => λ _, cierror ii (Cerr_assembler (AsmErr_string ("TAG " ++ string_of_garg arg ++ ": "++ string_of_arg_ty ty)))
     end.
 
 Fixpoint typed_apply_gargs ii (tys: seq arg_ty) (iregs: seq garg)

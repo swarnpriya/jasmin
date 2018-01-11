@@ -38,6 +38,14 @@ Variant oprd : Type :=
 | Reg_op     of register
 | Adr_op     of address.
 
+Definition string_of_oprd (o: oprd) : string :=
+  match o with
+  | Imm_op x => "Imm"
+  | Glo_op x => "Glo"
+  | Reg_op x => "Reg"
+  | Adr_op x => "Adr"
+  end.
+
 (* -------------------------------------------------------------------- *)
 Variant ireg : Type :=
 | Imm_ir of word
@@ -61,6 +69,26 @@ Variant condt : Type :=
 | NL_ct                 (* not less than, greater than or equal to *)
 | LE_ct                 (* less than or equal to, not greater than *)
 | NLE_ct                (* not less than or equal to, greater than *).
+
+Definition string_of_condt (c: condt) : string :=
+  match c with
+  | O_ct => "O"
+  | NO_ct => "NO"
+  | B_ct => "B"
+  | NB_ct => "NB"
+  | E_ct => "E"
+  | NE_ct => "NE"
+  | BE_ct => "BE"
+  | NBE_ct => "NBE"
+  | S_ct => "S"
+  | NS_ct => "NS"
+  | P_ct => "P"
+  | NP_ct => "NP"
+  | L_ct => "L"
+  | NL_ct => "NL"
+  | LE_ct => "LE"
+  | NLE_ct => "NLE"
+  end.
 
 (* -------------------------------------------------------------------- *)
 Variant asm : Type :=

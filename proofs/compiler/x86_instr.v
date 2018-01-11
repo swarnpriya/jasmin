@@ -546,4 +546,5 @@ Proof.
   - case => // a i' [<-].
     + by exists (Imm_ir a).
    by exists (Reg_ir a).
+case => // w i' [<-]; eauto.
 Qed.
