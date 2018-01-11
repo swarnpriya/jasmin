@@ -41,6 +41,7 @@ compiler/stack_alloc_proof.v
 compiler/unrolling.v
 compiler/unrolling_proof.v
 compiler/x86.v
+compiler/x86_gen.v
 compiler/x86_instr.v
 compiler/x86_sem.v
 compiler/x86_proofs.v

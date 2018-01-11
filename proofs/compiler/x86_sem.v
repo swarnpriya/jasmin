@@ -856,3 +856,14 @@ Definition fetch_and_eval (s: x86_state) :=
   else type_error.
 
 End GLOB_DEFS.
+
+(* -------------------------------------------------------------------- *)
+Record xfundef := XFundef {
+ xfd_stk_size : Z;
+ xfd_nstk : register;
+ xfd_arg  : seq register;
+ xfd_body : seq asm;
+ xfd_res  : seq register;
+}.
+
+Definition xprog := seq (funname * xfundef).

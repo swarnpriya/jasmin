@@ -266,6 +266,10 @@ Definition reg_of_var ii (v: var) :=
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid register type"))
   end.
 
+Definition reg_of_vars ii (vs: seq var_i) :=
+  mapM (reg_of_var ii \o v_var) vs.
+
+(* -------------------------------------------------------------------- *)
 Definition scale_of_z' ii z :=
   match z with
   | 1 => ok Scale1
