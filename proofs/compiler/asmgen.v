@@ -372,8 +372,11 @@ Definition is_lvar (x:var) lv :=
 Definition check_sopn_res (loargs : seq pexpr) (x : lval) (ad : arg_desc) :=
   match ad with
   | ADImplicit y => is_lvar y x
-  | ADExplicit n o =>
-    (Some x == (onth loargs n >>= lval_of_pexpr)%O) && (o == None)
+  | ADExplicit n (Some _) => false
+  | ADExplicit n None =>
+    if (onth loargs n >>= lval_of_pexpr)%O is Some y
+    then eq_lval x y
+    else false
   end.
 
 Lemma is_varP x e : is_var x e ->  eq_expr e {| v_var := x; v_info := xH |}.
@@ -406,20 +409,22 @@ Lemma check_sopn_resP (loargs : seq pexpr) (lval : seq lval) (ads : seq arg_desc
        ∧ all2 eq_lval lval lval'.
 Proof.
   elim: lval ads => [ | lv lval Hrec] [ | a ads] //=.
-  + by move=> _;exists nil.
+  + by move=> _; exists nil.
   move=> /andP [Hc /Hrec [lval' [-> Hall]]] /=.
   rewrite /mixed_sem_ad_out; case: a Hc => //=.
   + by move=> y /is_lvarP Hy;eexists;split;[by eauto | ];rewrite /= Hy.
-  move=> n o /andP [] /eqP <- /eqP ->;eexists;split;[by eauto | ].
-  by rewrite /= eq_lval_refl.
+  move => n [] //; case: (_ >>= _)%O => // lv' h; eexists; split; first by eauto.
+  by rewrite /= h.
 Qed.
 
 Definition check_sopn_args ii
   (id: instr_desc) (outx : seq lval) (inx : seq pexpr) (loargs : seq pexpr) : ciexec unit :=
   if all2 (check_sopn_res loargs) outx id.(id_out)
-  && all2 (check_sopn_arg loargs) inx  id.(id_in )
+  then
+  if all2 (check_sopn_arg loargs) inx  id.(id_in )
   then ok tt
-  else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_args")).
+  else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_arg"))
+  else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_res")).
 
 Theorem check_sopnP ii gd o descr outx inx loargs m1 m2 :
   id_name descr = o →
@@ -427,7 +432,8 @@ Theorem check_sopnP ii gd o descr outx inx loargs m1 m2 :
   -> sem_sopn gd o m1 outx inx = ok m2
   -> mixed_sem gd m1 descr loargs = ok m2.
 Proof.
-  rewrite /check_sopn_args => Hdesc. case: ifP => // /andP [] h1 h2 _.
+  rewrite /check_sopn_args => Hdesc.
+  case: ifP => // h1; case: ifP => // h2 _.
   rewrite /mixed_sem /sem_sopn.
   have [inx' [-> /eq_exprsP ->]] := check_sopn_argP h2.
   have [outx' [-> /eq_lvalsP H]]:= check_sopn_resP h1.
