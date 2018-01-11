@@ -296,12 +296,18 @@ Definition seq_of_tys_tuple tys : tys_tuple tys -> list garg :=
   | ty::tys => @seq_of_tys_t_rec (interp_ty ty) tys (fun a => [::@mk_garg ty a])
   end.
 
+Definition is_sopn (i: asm) : bool :=
+  match i with
+  | LABEL _ | JMP _ | Jcc _ _ => false
+  | _ => true
+  end.
+
 Fixpoint gen_sem_correct tys id_name id_out id_in args  : interp_tys tys -> Prop :=
   match tys with
   | [::] => fun asm =>
     ∀ gd m m',
        low_sem_aux gd m id_name id_out id_in args = ok m' ->
-       eval_instr_mem gd asm m = ok m'
+       eval_instr_mem gd asm m = ok m' ∧ is_sopn asm
   | ty::tys => fun asm =>
     forall (x:interp_ty ty), @gen_sem_correct tys id_name id_out id_in (args ++ [::@mk_garg ty x]) (asm x)
   end.

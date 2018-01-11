@@ -451,12 +451,15 @@ Definition eval_cond (c : condt) (rm : rflagmap) :=
   end.
 
 (* -------------------------------------------------------------------- *)
-Definition aslabel (a : asm) :=
-  if a is LABEL lbl then Some lbl else None.
+Definition is_label (lbl: label) (i: asm) : bool :=
+  match i with
+  | LABEL lbl' => lbl == lbl'
+  | _ => false
+  end.
 
 (* -------------------------------------------------------------------- *)
 Definition find_label (lbl : label) (a : seq asm) :=
-  let idx := seq.index (Some lbl) [seq aslabel i | i <- a] in
+  let idx := seq.find (is_label lbl) a in
   if idx < size a then ok idx else type_error.
 
 (* -------------------------------------------------------------------- *)
@@ -827,7 +830,7 @@ Definition eval_JMP lbl (s: x86_state) : x86_result_state :=
 (* -------------------------------------------------------------------- *)
 Definition eval_Jcc lbl ct (s: x86_state) : x86_result_state :=
   Let b := eval_cond ct s.(xrf) in
-  if b then eval_JMP lbl s else ok s.
+  if b then eval_JMP lbl s else ok (st_write_ip (xip s).+1 s).
 
 (* -------------------------------------------------------------------- *)
 Definition eval_instr_mem (i : asm) s : x86_result :=
@@ -865,7 +868,7 @@ Definition eval_instr_mem (i : asm) s : x86_result :=
 
 Definition eval_instr (i : asm) (s: x86_state) : x86_result_state :=
   match i with
-  | LABEL  _        => ok s
+  | LABEL  _        => ok (st_write_ip (xip s).+1 s)
   | JMP    lbl      => eval_JMP lbl s
   | Jcc    lbl ct   => eval_Jcc lbl ct s
   | _ =>
@@ -873,7 +876,7 @@ Definition eval_instr (i : asm) (s: x86_state) : x86_result_state :=
     ok {|
         xm := m;
         xc := s.(xc);
-        xip := s.(xip) + 1
+        xip := s.(xip).+1
       |}
   end.
 

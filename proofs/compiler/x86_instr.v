@@ -76,6 +76,7 @@ Definition CMOVcc_desc := make_instr_desc CMOVcc_gsc.
 (* ----------------------------------------------------------------------------- *)
 
 Ltac update_set :=
+  try (refine (conj _ erefl));
   by rewrite /sets_low /= /mem_update_rflags /mem_unset_rflags /mem_set_rflags
              /mem_write_reg /=;
      repeat f_equal; apply /ffunP; case; rewrite !ffunE.
@@ -86,7 +87,7 @@ Lemma ADD_gsc :
      [:: E 0; E 1] [::] ADD.
 Proof.
   move=> [] // => [ x | x] y gd m m'; rewrite /low_sem_aux /= /eval_ADD /=.
-  + by t_xrbindP => vs ??? vy -> <- <- <- [<-] [<-]; update_set.
+  + t_xrbindP => vs ??? vy -> <- <- <- [<-] [<-]; update_set.
   by t_xrbindP => vs ??? -> <- ?? vy -> <- <- <-[<-] <- /=; update_set.
 Qed.
 
@@ -324,6 +325,7 @@ Proof.
   rewrite !read_oprd_ireg.
   t_xrbindP => ????? Hbase <- ???? Hoffset <- <- <- <- <- /=.
   rewrite /x86_lea; case: ifP => // Hscale [<-] [<-]; rewrite /mk_LEA /eval_LEA.
+  split => //.
   case: base offset Hbase Hoffset => [base | base] [offset | offset] /= <- <-;
     rewrite /decode_addr //=;do 2 f_equal; rewrite !I64_rw -?(check_scale_of Hscale) //.
   f_equal; apply I64.add_commut.
@@ -400,8 +402,7 @@ Lemma NOT_gsc :
      [:: E 0]
      [:: E 0] [::] NOT.
 Proof.
-  move=> [] // => [x | x] gd m m'; rewrite /low_sem_aux /= /eval_NOT /=.
-  + by move=> [<-].
+  move=> [] // => x gd m m'; rewrite /low_sem_aux /= /eval_NOT /=.
   by t_xrbindP => ???? -> <- <- [<-] <- /=; update_set.
 Qed.
 
@@ -521,13 +522,15 @@ Theorem assemble_sopnP gd ii out op args i s1 m1 s2 :
   sem_sopn gd op s1 out args = ok s2 →
   ∃ m2,
     eval_instr_mem gd i m1 = ok m2
-    ∧ lom_eqv s2 m2.
+    ∧ lom_eqv s2 m2
+    ∧ is_sopn i.
 Proof.
   rewrite /assemble_sopn.
   t_xrbindP => eqm id hid hiargs ok_hi loargs ok_lo ok_i h.
   have hm := compile_hi_sopnP (sopn_desc_name hid) ok_hi h.
   have [m2 [ok_m2 hm2]] := mixed_to_low eqm ok_lo hm.
-  exists m2. split => //.
+  exists m2.
+  refine ((λ x, let 'conj a b := x in conj a (conj hm2 b)) _).
   have := id_gen_sem id.
   move: ok_m2 => {h hid op ok_hi ok_lo eqm s1 s2 hm hm2}; rewrite /low_sem.
   rewrite -(cat0s loargs); move: [::] loargs ok_i.

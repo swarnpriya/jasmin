@@ -58,6 +58,11 @@ Definition to_estate (s:lstate) := Estate s.(lmem) s.(lvm).
 Definition of_estate (s:estate) c pc := Lstate s.(emem) s.(evm) c pc.
 Definition setpc (s:lstate) pc :=  Lstate s.(lmem) s.(lvm) s.(lc) pc.
 Definition setc (s:lstate) c := Lstate s.(lmem) s.(lvm) c s.(lpc).
+
+Lemma to_estate_of_estate es c pc:
+  to_estate (of_estate es c pc) = es.
+Proof. by case: es. Qed.
+
 (* The [lsem] relation defines the semantics of a linear command
 as the reflexive transitive closure of the [lsem1] relation that
 describes the execution of the first instruction.
