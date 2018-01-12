@@ -269,6 +269,13 @@ Definition reg_of_var ii (v: var) :=
 Definition reg_of_vars ii (vs: seq var_i) :=
   mapM (reg_of_var ii \o v_var) vs.
 
+Lemma reg_of_var_register_of_var ii x r :
+  reg_of_var ii x = ok r →
+  register_of_var x = Some r.
+Proof.
+by rewrite /register_of_var; case: x => -[] //= x; case: reg_of_string => // r' [->].
+Qed.
+
 (* -------------------------------------------------------------------- *)
 Definition scale_of_z' ii z :=
   match z with

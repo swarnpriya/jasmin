@@ -909,13 +909,19 @@ Definition xprog : Type :=
 Definition mem_write_regs m rs vs :=
     foldl (λ m rv, let '(r,v) := rv in mem_write_reg r v m) m (zip rs vs).
 
+Lemma mem_write_regs_cons m r rs v vs :
+  mem_write_regs m (r :: rs) (v :: vs) =
+  mem_write_regs (mem_write_reg r v m) rs vs.
+Proof. by []. Qed.
+
+(* FIXME: initial register map *)
 Variant x86sem_fd (P: xprog) (gd: glob_defs) m1 fn va m2 vr : Prop :=
-| X86Sem_fd fd p xr0 m2'
+| X86Sem_fd fd p m2'
     `(get_fundef P fn = Some fd)
     `(alloc_stack m1 fd.(xfd_stk_size) = ok p)
     (c := fd.(xfd_body))
-    (m1' := mem_write_reg fd.(xfd_nstk) p.1 {| xmem := p.2 ; xreg := xr0 ; xrf := rflagmap0 |})
-    `(size va == size fd.(xfd_arg))
+    (m1' := mem_write_reg fd.(xfd_nstk) p.1 {| xmem := p.2 ; xreg := regmap0 ; xrf := rflagmap0 |})
+    `(size va = size fd.(xfd_arg))
     (m1'' := mem_write_regs m1' fd.(xfd_arg) va)
     `(x86sem gd {| xm := m1'' ; xc := c ; xip := 0 |} {| xm := m2'; xc := c; xip := size c |})
     `(vr = map (λ r, m2'.(xreg) r) fd.(xfd_res))

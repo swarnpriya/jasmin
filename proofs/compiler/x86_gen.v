@@ -1,5 +1,5 @@
 Require Import x86_instr linear_sem.
-Import Utf8.
+Import Utf8 Relation_Operators.
 Import all_ssreflect.
 Import compiler_util expr sem x86_sem linear x86_variables x86_variables_proofs asmgen.
 
@@ -193,7 +193,7 @@ move => x xs ih ys' /=; t_xrbindP => z ok_z ys ok_ys <- [| n ] hsz /= ok_y.
 exact: (ih _ ok_ys n hsz ok_y).
 Qed.
 
-Lemma assemble_cP gd ls ls' xs :
+Lemma match_state_step gd ls ls' xs :
   match_state ls xs →
   step gd ls = ok ls' →
   ∃ xs',
@@ -205,3 +205,106 @@ case ok_i : (oseq.onth) => [ i | // ].
 have [j [-> ok_j]] := mapM_onth eqc ok_i.
 exact: assemble_iP.
 Qed.
+
+Lemma match_state_sem gd ls ls' xs :
+  lsem gd ls ls' →
+  match_state ls xs →
+  ∃ xs',
+    x86sem gd xs xs' ∧
+    match_state ls' xs'.
+Proof.
+move => h; elim/lsem_ind: h xs; clear.
+- move => ls xs h; exists xs; split => //; exact: rt_refl.
+move => ls1 ls2 ls3 h1 h ih xs1 m1.
+have [xs2 [x m2]] := match_state_step m1 h1.
+have [xs3 [y m3]] := ih _ m2.
+exists xs3; split => //.
+apply: x86sem_trans; last by eauto.
+exact: rt_step.
+Qed.
+
+Section PROG.
+
+Context (p: lprog) (p': xprog) (ok_p': assemble_prog p = ok p') (gd: glob_defs).
+
+Lemma write_vars_mem_write_regs ii xs vs s1 s2 rs m1 :
+  write_vars xs vs s1 = ok s2 →
+  reg_of_vars ii xs = ok rs →
+  lom_eqv s1 m1 →
+  ∃ ws, mapM to_word vs = ok ws ∧
+        size ws = size rs ∧
+        lom_eqv s2 (mem_write_regs m1 rs ws).
+Proof.
+elim: xs vs rs s1 m1.
++ case => // rs s1 m1 [<-] {s2} [<-] {rs} eqm.
+  by exists [::].
+rewrite /reg_of_vars.
+move => x xs ih [] // v vs rs' /=; t_xrbindP => s0 m0 s1 ok_s1 ok_s2 r ok_r rs ok_rs <- {rs'} eqm.
+have := write_var_compile_var ok_s1 _ eqm.
+rewrite /compile_var (reg_of_var_register_of_var ok_r).
+case/(_ v _ (value_uincl_refl _) erefl) => m1 ok_m1 eqm1.
+case: v ok_s1 ok_m1 => //= v ok_s1 [ok_m1].
+have [ws [ok_ws [hsz eqm2]]] := ih vs rs s1 m1 ok_s2 ok_rs eqm1.
+exists (v :: ws); split; first by rewrite ok_ws.
+split; first by rewrite /= hsz.
+by rewrite mem_write_regs_cons ok_m1.
+Qed.
+
+Lemma get_reg_of_vars ii es m xs vs rs :
+  lom_eqv es m →
+  mapM (λ x : var_i, get_var es.(evm) x) xs = ok vs →
+  List.Forall is_full_array vs →
+  reg_of_vars ii xs = ok rs →
+  mapM to_word vs = ok (map (λ r, m.(xreg) r) rs).
+Proof.
+move => eqm.
+elim: xs vs rs.
+- by case => //= -[].
+rewrite /reg_of_vars.
+move => x xs ih vs' rs' /=; t_xrbindP => v ok_v vs ok_vs <- {vs'} /List_Forall_inv [wf wfr] r ok_r rs ok_rs <- {rs'}.
+have := xgetreg_ex eqm ok_r ok_v.
+case: v {ok_v} wf => // v _ /= <-.
+by rewrite (ih vs rs ok_vs wfr ok_rs).
+Qed.
+
+Lemma assemble_fdP m1 fn va m2 vr :
+  lsem_fd p gd m1 fn va m2 vr →
+  ∃ va' vr',
+    mapM to_word va = ok va' ∧
+    mapM to_word vr = ok vr' ∧
+    x86sem_fd p' gd m1 fn va' m2 vr'.
+Proof.
+case => -[] stk m1' fd vm2 m2' s1 s2 ok_fd ok_stk /= [<-] {s1}.
+set vm1 := (vm in {| evm := vm |}).
+move => ok_s2 hexec ok_vr -> {m2} ok_arr.
+have [fd' [h ok_fd']] := get_map_cfprog ok_p' ok_fd.
+move: h; rewrite /assemble_fd; t_xrbindP => body ok_body.
+case ok_sp: (reg_of_string _) => [ sp | // ]; t_xrbindP => args ok_args dsts ok_dsts [?]; subst fd'.
+set xr1 := λ xr0, mem_write_reg sp stk {| xmem := m1' ; xreg := xr0 ; xrf := rflagmap0 |}.
+have eqm1 : ∀ xr0, lom_eqv {| emem := m1' ; evm := vm1 |} (xr1 xr0).
++ move => xr0; constructor => //.
+  - rewrite /vm1 /= => r v.
+    rewrite (inj_reg_of_string ok_sp (reg_of_stringK sp)).
+    rewrite /get_var /var_of_register /RegMap.set ffunE; case: eqP.
+    * move => -> {r} /=; rewrite Fv.setP_eq => -[<-]; exact: value_uincl_refl.
+    move => ne; rewrite /= Fv.setP_neq; first by case => <-.
+    by apply/eqP => -[] /inj_string_of_register ?; apply: ne.
+  - move => f v /=; rewrite /vm1 /rflagmap0 ffunE /=.
+    by rewrite /var_of_flag /get_var /= Fv.setP_neq => // -[<-].
+have [wa [ok_wa [hsz]]] := write_vars_mem_write_regs ok_s2 ok_args (eqm1 regmap0).
+set m2 := (x in lom_eqv _ x) => eqm2.
+have ms : match_state (of_estate s2 fd.(lfd_body) 0) {| xm := m2 ; xc := body ; xip := 0 |}.
+- by constructor => //=; rewrite to_estate_of_estate.
+have [[[om or orf] oc opc] [xexec]] := match_state_sem hexec ms.
+rewrite (mapM_size ok_body).
+case => eqm' /=.
+rewrite ok_body => -[?] ?; subst oc opc.
+have /= ok_wr := get_reg_of_vars eqm' ok_vr ok_arr ok_dsts.
+eexists wa, _.
+split; first exact: ok_wa.
+split; first exact: ok_wr.
+econstructor; eauto => /=.
+by case: eqm' => /= ->.
+Qed.
+
+End PROG.
