@@ -407,18 +407,39 @@ Qed.
 Definition NOT_desc := make_instr_desc NOT_gsc.
 
 (* ----------------------------------------------------------------------------- *)
+Lemma decode_addr_unset_rflags m f addr:
+  decode_addr (mem_unset_rflags f m) addr = decode_addr m addr.
+Proof. done. Qed.
+
+Lemma decode_addr_set_rflags m f b addr:
+  decode_addr (mem_set_rflags f b m) addr = decode_addr m addr.
+Proof. done. Qed.
+
+Lemma decode_addr_update_rflags m f addr:
+  decode_addr (mem_update_rflags f m) addr = decode_addr m addr.
+Proof. done. Qed.
 
 Lemma SHL_gsc :
   gen_sem_correct [:: TYoprd; TYireg] Ox86_SHL
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] SHL.
 Proof.
-  move=> [] // => [x | x] y ; split => // gd m m'; rewrite /low_sem_aux /= /eval_SHL /= /x86_shl /=.
+  move=> [] // => [x | x] y;split => // gd m m'; rewrite /low_sem_aux /= /eval_SHL /x86_shl /=.
   + t_xrbindP => ???? vy;rewrite read_oprd_ireg => -[->] <- <- <- /=.
-    case: ifP => Heq [<-] <-.
-    + rewrite /sets_low /= /mem_write_reg;case:m => ??? /=.
-      rewrite -RegMap_set_id; update_set.
-Admitted.
+    rewrite /rflags_of_sh /sets_low.
+    case: ifP => Heq [<-] <- /=.
+    + rewrite /mem_write_reg;case:m => ??? /=.
+      by rewrite -RegMap_set_id; update_set. 
+    by case:ifPn => [/eqP | ] Hvy /=; update_set.
+  t_xrbindP => ???? Hread <- ???;rewrite Hread.
+  rewrite read_oprd_ireg => -[<-] <- <- <- /= H <-.
+  rewrite decode_addr_update_rflags.
+  rewrite /sets_low /=; case:ifP H => Heq [<-] /=;rewrite /mem_write_mem /=.
+  + by rewrite !decode_addr_unset_rflags write_mem_id //=;update_set.
+  by rewrite /rflags_of_sh; case: ifP => ? /=;
+    rewrite /mem_write_mem /= !decode_addr_set_rflags;
+    case: Memory.write_mem => //= mem; update_set. 
+Qed.
 
 Definition SHL_desc := make_instr_desc SHL_gsc.
 
@@ -428,7 +449,22 @@ Lemma SHR_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] SHR.
 Proof.
-Admitted.
+  move=> [] // => [x | x] y;split => // gd m m'; rewrite /low_sem_aux /= /eval_SHR /x86_shr /=.
+  + t_xrbindP => ???? vy;rewrite read_oprd_ireg => -[->] <- <- <- /=.
+    rewrite /rflags_of_sh /sets_low.
+    case: ifP => Heq [<-] <- /=.
+    + rewrite /mem_write_reg;case:m => ??? /=.
+      by rewrite -RegMap_set_id; update_set. 
+    by case:ifPn => [/eqP | ] Hvy /=; update_set.
+  t_xrbindP => ???? Hread <- ???;rewrite Hread.
+  rewrite read_oprd_ireg => -[<-] <- <- <- /= H <-.
+  rewrite decode_addr_update_rflags.
+  rewrite /sets_low /=; case:ifP H => Heq [<-] /=;rewrite /mem_write_mem /=.
+  + by rewrite !decode_addr_unset_rflags write_mem_id //=;update_set.
+  by rewrite /rflags_of_sh; case: ifP => ? /=;
+    rewrite /mem_write_mem /= !decode_addr_set_rflags;
+    case: Memory.write_mem => //= mem; update_set. 
+Qed.
 
 Definition SHR_desc := make_instr_desc SHR_gsc.
 
@@ -438,7 +474,22 @@ Lemma SAR_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1] [::] SAR.
 Proof.
-Admitted.
+  move=> [] // => [x | x] y;split => // gd m m'; rewrite /low_sem_aux /= /eval_SAR /x86_sar /=.
+  + t_xrbindP => ???? vy;rewrite read_oprd_ireg => -[->] <- <- <- /=.
+    rewrite /rflags_of_sh /sets_low.
+    case: ifP => Heq [<-] <- /=.
+    + rewrite /mem_write_reg;case:m => ??? /=.
+      by rewrite -RegMap_set_id; update_set. 
+    by case:ifPn => [/eqP | ] Hvy /=; update_set.
+  t_xrbindP => ???? Hread <- ???;rewrite Hread.
+  rewrite read_oprd_ireg => -[<-] <- <- <- /= H <-.
+  rewrite decode_addr_update_rflags.
+  rewrite /sets_low /=; case:ifP H => Heq [<-] /=;rewrite /mem_write_mem /=.
+  + by rewrite !decode_addr_unset_rflags write_mem_id //=;update_set.
+  by rewrite /rflags_of_sh; case: ifP => ? /=;
+    rewrite /mem_write_mem /= !decode_addr_set_rflags;
+    case: Memory.write_mem => //= mem; update_set. 
+Qed.
 
 Definition SAR_desc := make_instr_desc SAR_gsc.
 
@@ -448,7 +499,22 @@ Lemma SHLD_gsc :
      (implicit_flags ++ [:: E 0])
      [:: E 0; E 1; E 2] [::] SHLD.
 Proof.
-Admitted.
+  move=> [] // => [x | x] y;split => // gd m m'; rewrite /low_sem_aux /= /eval_SHLD /x86_shld /=.
+  + t_xrbindP => ????? vy;rewrite read_oprd_ireg => -[->] <- <- <- <- /=.
+    rewrite /rflags_of_sh /sets_low.
+    case: ifP => Heq [<-] <- /=.
+    + rewrite /mem_write_reg;case:m => ??? /=.
+      by rewrite -RegMap_set_id; update_set. 
+    by case:ifPn => [/eqP | ] Hvy /=; update_set.
+  t_xrbindP => ???? Hread <- ????;rewrite Hread.
+  rewrite read_oprd_ireg => -[<-] <- <- <- <- /= H <-.
+  rewrite decode_addr_update_rflags.
+  rewrite /sets_low /=; case:ifP H => Heq [<-] /=;rewrite /mem_write_mem /=.
+  + by rewrite !decode_addr_unset_rflags write_mem_id //=;update_set.
+  by rewrite /rflags_of_sh; case: ifP => ? /=;
+    rewrite /mem_write_mem /= !decode_addr_set_rflags;
+    case: Memory.write_mem => //= mem; update_set. 
+Qed.
 
 Definition SHLD_desc := make_instr_desc SHLD_gsc.
 
