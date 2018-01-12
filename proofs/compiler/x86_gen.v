@@ -54,13 +54,40 @@ Variant match_state (ls: lstate) (xs: x86_state) : Prop :=
   `(lpc ls = xip xs)
 .
 
+Lemma assemble_i_is_label a b lbl :
+  assemble_i a = ok b →
+  linear.is_label lbl a = x86_sem.is_label lbl b.
+Proof.
+rewrite /assemble_i /linear.is_label ; case a =>  ii [] /=.
+- move => lv _ e h.
+  have := assemble_sopn_is_sopn h => {h}.
+  by case b.
+- move => lvs op es h.
+  have := assemble_sopn_is_sopn h => {h}.
+  by case b.
+- by move => lbl' [<-].
+- by move => lbl' [<-].
+by t_xrbindP => ? ? ? _ [<-].
+Qed.
+
+Lemma assemble_c_find_is_label c i lbl:
+  assemble_c c = ok i →
+  find (linear.is_label lbl) c = find (x86_sem.is_label lbl) i.
+Proof.
+rewrite /assemble_c.
+elim: c i.
+- by move => i [<-].
+move => a c ih i' /=; t_xrbindP => b ok_b i ok_i <- {i'} /=.
+by rewrite (ih i ok_i) (assemble_i_is_label lbl ok_b).
+Qed.
+
 Lemma assemble_c_find_label c i lbl:
   assemble_c c = ok i →
   linear.find_label lbl c = x86_sem.find_label lbl i.
 Proof.
 rewrite /assemble_c /linear.find_label /x86_sem.find_label => ok_i.
-have hsz := mapM_size ok_i.
-Admitted.
+by rewrite (mapM_size ok_i) (assemble_c_find_is_label lbl ok_i).
+Qed.
 
 Lemma write_oprd_of_lval ii gd lv x y es xs es' v (w: word) :
   lom_eqv es xs →
