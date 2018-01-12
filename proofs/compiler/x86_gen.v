@@ -307,4 +307,11 @@ econstructor; eauto => /=.
 by case: eqm' => /= ->.
 Qed.
 
+Lemma assemble_fd_stk_size fd xfd :
+  assemble_fd fd = ok xfd →
+  lfd_stk_size fd = xfd_stk_size xfd.
+Proof.
+by rewrite /assemble_fd; t_xrbindP => c _; case: reg_of_string => //; t_xrbindP => ? ? ? ? ? [<-].
+Qed.
+
 End PROG.
