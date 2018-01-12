@@ -1,8 +1,9 @@
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect.
 Require oseq.
-(* ------- *) Require Import memory word expr sem.
-(* ------- *) (* - *) Import Memory.
+Require Import memory word expr sem.
+Import Utf8 Relation_Operators.
+Import Memory.
 
 Set   Implicit Arguments.
 Unset Strict Implicit.
@@ -886,6 +887,11 @@ Definition fetch_and_eval (s: x86_state) :=
     eval_instr i s
   else type_error.
 
+Definition x86sem1 (s1 s2: x86_state) : Prop :=
+  fetch_and_eval s1 = ok s2.
+
+Definition x86sem : relation x86_state := clos_refl_trans x86_state x86sem1.
+
 End GLOB_DEFS.
 
 (* -------------------------------------------------------------------- *)
@@ -897,4 +903,25 @@ Record xfundef := XFundef {
  xfd_res  : seq register;
 }.
 
-Definition xprog := seq (funname * xfundef).
+Definition xprog : Type :=
+  seq (funname * xfundef).
+
+Definition mem_write_regs m rs vs :=
+    foldl (λ m rv, let '(r,v) := rv in mem_write_reg r v m) m (zip rs vs).
+
+Variant x86sem_fd (P: xprog) (gd: glob_defs) m1 fn va m2 vr : Prop :=
+| X86Sem_fd fd p xr0 m2'
+    `(get_fundef P fn = Some fd)
+    `(alloc_stack m1 fd.(xfd_stk_size) = ok p)
+    (c := fd.(xfd_body))
+    (m1' := mem_write_reg fd.(xfd_nstk) p.1 {| xmem := p.2 ; xreg := xr0 ; xrf := rflagmap0 |})
+    `(size va == size fd.(xfd_arg))
+    (m1'' := mem_write_regs m1' fd.(xfd_arg) va)
+    `(x86sem gd {| xm := m1'' ; xc := c ; xip := 0 |} {| xm := m2'; xc := c; xip := size c |})
+    `(vr = map (λ r, m2'.(xreg) r) fd.(xfd_res))
+    `(m2 = free_stack m2'.(xmem) p.1 fd.(xfd_stk_size))
+    : x86sem_fd P gd m1 fn va m2 vr.
+
+Definition x86sem_trans gd s2 s1 s3 :
+  x86sem gd s1 s2 -> x86sem gd s2 s3 -> x86sem gd s1 s3 :=
+  rt_trans _ _ s1 s2 s3.

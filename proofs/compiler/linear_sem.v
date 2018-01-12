@@ -128,7 +128,7 @@ Qed.
 
 End LSEM.
 
-Inductive lsem_fd gd m1 fn va m2 vr : Prop :=
+Variant lsem_fd gd m1 fn va m2 vr : Prop :=
 | LSem_fd : forall p fd vm2 m2' s1 s2,
     get_fundef P fn = Some fd ->
     alloc_stack m1 fd.(lfd_stk_size) = ok p ->
