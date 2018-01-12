@@ -514,11 +514,34 @@ Definition assemble_sopn (ii: instr_info) (out: lvals) (op: sopn) (args: pexprs)
   Let loargs := compile_low_args ii (id_tys d) hiargs in
   typed_apply_gargs ii loargs (id_instr d).
 
+Lemma type_apply_gargP ty T ii ga (iasm:interp_ty ty → T) ins: 
+   typed_apply_garg ii ga iasm = ok ins ->
+   ∃ x' : interp_ty ty, ga = mk_garg x' ∧ ins = iasm x'. 
+Proof.
+  case: ty iasm => //=; case: ga => //.
+  + by move => c i' [<-]; eauto.
+  + by move => o i' [<-]; eauto.
+  + by case => // r i' [<-]; eauto.
+  + case => // a i' [<-].
+    + by exists (Imm_ir a).
+    by exists (Reg_ir a).
+  by case => // w i' [<-]; eauto.
+Qed.
+
 Lemma assemble_sopn_is_sopn ii out op args i :
   assemble_sopn ii out op args = ok i →
   is_sopn i.
 Proof.
-Admitted.
+  rewrite /assemble_sopn.
+  t_xrbindP => id _ iargs _ gargs _. 
+  have := id_gen_sem id; move: [::].
+  elim: (id_tys id) (id_in id) (id_out id) (id_instr id) gargs =>
+     [ | ty tys ih] /= iin iout iasm [ | ga gargs] //= gargs'. 
+  + by move=> [? ?] [<-].
+  move=> hgen;t_xrbindP => ins Ha.
+  apply (ih iin iout ins gargs (gargs' ++ [::ga])).
+  by have [x' [-> ->]]:= type_apply_gargP Ha.
+Qed.
 
 Theorem assemble_sopnP gd ii out op args i s1 m1 s2 :
   lom_eqv s1 m1 →
@@ -542,14 +565,5 @@ Proof.
   move => ty tys ih ins outs op i' acc [] // g loargs /=; t_xrbindP => x ok_x hi /= h.
   have := ih ins outs op _ (acc ++ [:: g]) loargs hi.
   rewrite -catA => /(_ h) rec x0; apply: rec.
-  suff : ∃ x' : interp_ty ty, g = mk_garg x' ∧ x = i' x' by case => x' [-> ->].
-  move: ok_x. clear.
-  case: ty i' => //=; case: g => //.
-  - move => c i' [<-]; eauto.
-  - move => o i' [<-]; eauto.
-  - case => // r i' [<-]; eauto.
-  - case => // a i' [<-].
-    + by exists (Imm_ir a).
-   by exists (Reg_ir a).
-case => // w i' [<-]; eauto.
+  by have [x' [-> ->]]:= type_apply_gargP ok_x.
 Qed.
