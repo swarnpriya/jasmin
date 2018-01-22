@@ -28,7 +28,7 @@
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
 Require Import Psatz xseq.
-Require Export expr memory.
+Require Export expr low_memory.
 Import Utf8.
 
 Set Implicit Arguments.
@@ -105,10 +105,10 @@ End Array.
 
 Definition sem_t (t : stype) : Type :=
   match t with
-  | sbool  => bool
-  | sint   => Z
-  | sarr n => Array.array n word
-  | sword  => word
+  | sbool    => bool
+  | sint     => Z
+  | sarr s n => Array.array n (word s)
+  | sword s  => word s
   end.
 
 (* ** Default values
@@ -116,10 +116,10 @@ Definition sem_t (t : stype) : Type :=
 
 Definition dflt_val (t : stype) : sem_t t :=
   match t with
-  | sbool         => false
-  | sint          => Z0
-  | sarr n        => @Array.empty word n
-  | sword         => I64.repr Z0
+  | sbool    => false
+  | sint     => Z0
+  | sarr s n => @Array.empty (word s) n
+  | sword s  => 0%R
   end.
 
 Definition rdflt_ (t : stype) e (r : result e (sem_t t)) : sem_t t :=
@@ -131,8 +131,8 @@ Definition rdflt_ (t : stype) e (r : result e (sem_t t)) : sem_t t :=
 Variant value : Type :=
   | Vbool  :> bool -> value
   | Vint   :> Z    -> value
-  | Varr   : forall n, Array.array n word -> value
-  | Vword  :> word -> value
+  | Varr   : forall s n, Array.array n (word s) -> value
+  | Vword  :> forall s, word s -> value
   | Vundef : stype -> value.
 
 Definition undef_b := Vundef sbool.
@@ -155,56 +155,65 @@ Definition to_int v :=
   | _           => type_error
   end.
 
-Definition to_arr n v : exec (Array.array n word) :=
+Definition to_arr w n v : exec (Array.array n (word w)) :=
   match v with
-  | Varr n' t =>
-    match CEDecStype.pos_dec n' n with
-    | left H =>
-      ok (eq_rect n' (fun p => Array.array p word) t n H)
-    | _      => type_error
+  | Varr w' n' t =>
+    match wsize_eq_dec w' w with
+    | left eqw =>
+      match CEDecStype.pos_dec n' n with
+      | left eqn => 
+        let t := eq_rect n' (fun p => Array.array p (word w')) t n eqn in
+        let t := eq_rect w' (fun p => Array.array n (word p)) t w eqw in
+        ok t
+      | _      => type_error
+      end
+    | _ => type_error
     end
-  | Vundef (sarr n') => if n == n' then undef_error else type_error
+  | Vundef (sarr w' n') => if (w == w') && (n == n') then undef_error else type_error
   | _                => type_error
   end.
 
-Definition to_word v :=
+Definition to_word (s: wsize) (v: value) : exec (word s) :=
   match v with
-  | Vword w      => ok w
-  | Vundef sword => undef_error
-  | _            => type_error
+  | Vword s' w       => ok (wrepr s (wunsigned w))
+  | Vundef (sword _) => undef_error
+  | _                => type_error
   end.
 
-Definition type_of_val (v:value) :=
+Definition type_of_val (v:value) : stype :=
   match v with
-  | Vbool _    => sbool
-  | Vint  _    => sint
-  | Varr  n _  => sarr n
-  | Vword _    => sword
-  | Vundef t   => t
+  | Vbool _     => sbool
+  | Vint  _     => sint
+  | Varr s n _  => sarr s n
+  | Vword s _   => sword s
+  | Vundef t    => t
   end.
 
 Definition of_val t : value -> exec (sem_t t) :=
   match t return value -> exec (sem_t t) with
-  | sbool  => to_bool
-  | sint   => to_int
-  | sarr n => to_arr n
-  | sword  => to_word
+  | sbool    => to_bool
+  | sint     => to_int
+  | sarr s n => to_arr s n
+  | sword s  => to_word s
   end.
 
 Definition to_val t : sem_t t -> value :=
   match t return sem_t t -> value with
-  | sbool  => Vbool
-  | sint   => Vint
-  | sarr n => @Varr n
-  | sword  => Vword
+  | sbool    => Vbool
+  | sint     => Vint
+  | sarr s n => @Varr s n
+  | sword s  => @Vword s
   end.
 
 Lemma of_val_to_val vt (v: sem_t vt): of_val vt (to_val v) = ok v.
 Proof.
-  elim: vt v=> // n v /=.
-  have ->: CEDecStype.pos_dec n n = left (erefl n).
-    by elim: n {v}=> // p0 /= ->.
-  by [].
+  elim: vt v=> // [s p | s] v /=.
+  + have ->: wsize_eq_dec s s = left (erefl s).
+    + by case: s {v}.
+    have ->: CEDecStype.pos_dec p p = left (erefl p).
+    + by elim: p {v} => // p0 /= ->.
+    by [].
+  by rewrite wrepr_unsigned.
 Qed.
 
 Lemma to_bool_inv x b :
@@ -219,8 +228,8 @@ Notation vmap     := (Fv.t (fun t => exec (sem_t t))).
 
 Definition undef_addr t :=
   match t return exec (sem_t t) with
-  | sbool | sint | sword => undef_error
-  | sarr n => ok (Array.empty n)
+  | sbool | sint | sword _ => undef_error
+  | sarr s n => ok (@Array.empty (word s) n)
   end.
 
 Definition vmap0  :=
@@ -245,13 +254,13 @@ Definition get_var (m:vmap) x :=
 (* We do not allows to assign to a variable of type word an undef value *)
 Definition set_var (m:vmap) x v : exec vmap :=
   on_vu (fun v => m.[x<-ok v]%vmap)
-        (if x.(vtype) == sword then type_error
+        (if is_sword x.(vtype) then type_error
          else ok m.[x<-undef_addr x.(vtype)]%vmap)
         (of_val (vtype x) v).
 
 Lemma set_varP (m m':vmap) x v P :
    (forall t, of_val (vtype x) v = ok t -> m.[x <- ok t]%vmap = m' -> P) ->
-   ( x.(vtype) != sword ->
+   ( ~~is_sword x.(vtype)  ->
      of_val (vtype x) v = Error ErrAddrUndef ->
      m.[x<-undef_addr x.(vtype)]%vmap = m' -> P) ->
    set_var m x v = ok m' -> P.
@@ -270,7 +279,7 @@ Definition apply_undef t (v : exec (sem_t t)) :=
 Definition is_full_array v :=
   match v with
   | Vundef _ => False
-  | Varr n t =>
+  | Varr s n t =>
     forall p, (0 <= p < Zpos n)%Z -> exists w, Array.get t p = ok w
   | _ => True
   end.
@@ -293,79 +302,77 @@ Definition mk_sem_sop2 t1 t2 tr (o:sem_t t1 -> sem_t t2 -> sem_t tr) v1 v2 :=
   ok (@to_val tr (o v1 v2)).
 
 Definition sem_op1_b  := @mk_sem_sop1 sbool sbool.
-Definition sem_op1_w  := @mk_sem_sop1 sword sword.
+Definition sem_op1_i  := @mk_sem_sop1 sint sint.
+Definition sem_op1_w s := @mk_sem_sop1 (sword s) (sword s).
 
 Definition sem_op2_b  := @mk_sem_sop2 sbool sbool sbool.
 Definition sem_op2_i  := @mk_sem_sop2 sint  sint  sint.
-Definition sem_op2_w  := @mk_sem_sop2 sword sword sword.
+Definition sem_op2_w  s := @mk_sem_sop2 (sword s) (sword s) (sword s).
 Definition sem_op2_ib := @mk_sem_sop2 sint  sint  sbool.
-Definition sem_op2_wb := @mk_sem_sop2 sword sword sbool.
+Definition sem_op2_wb s := @mk_sem_sop2 (sword s) (sword s) sbool.
 
-Definition sem_lsr (v i:word) :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then v else I64.shru v i.
+Definition sem_op2_w8  s := @mk_sem_sop2 (sword s) (sword U8) (sword s).
 
-Definition sem_lsl (v i:word) :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then v else I64.shl v i.
+Definition sem_shift (shift:forall {s}, word s -> Z -> word s) s (v:word s) (i:u8) := 
+  let i :=  wunsigned (wand i (x86_shift_mask s)) in
+  shift v i.
 
-Definition sem_asr (v i:word) :=
-  let i := I64.and i x86_shift_mask in
-  if i == I64.zero then v else I64.shr v i.
+Definition sem_shr {s} := @sem_shift (@wshr) s.
+Definition sem_sar {s} := @sem_shift (@wsar) s.
+Definition sem_shl {s} := @sem_shift (@wshl) s.
 
-Definition sem_arr_init (v:value) := 
+Definition sem_arr_init s (v:value) := 
   Let n := to_int v in 
   match n with
-  | Zpos p => ok (Varr (Array.empty p))
+  | Zpos p => ok (@Varr s p (Array.empty p))
   | _      => type_error
   end.
 
+Locate "-%R".
+
 Definition sem_sop1 (o:sop1) :=
   match o with
-  | Onot   => sem_op1_b negb
-  | Olnot  => sem_op1_w I64.not
-  | Oneg   => sem_op1_w I64.neg
-  | Oarr_init => sem_arr_init
-  end.
+  | Onot    => sem_op1_b negb
+  | Olnot s => @sem_op1_w s wnot 
+  | Oneg  Op_int => sem_op1_i Z.opp 
+  | Oneg (Op_w s) => @sem_op1_w s -%R
+  | Oarr_init s => sem_arr_init s
+  end%R.
 
 Definition sem_sop2 (o:sop2) :=
   match o with
-  | Oand => sem_op2_b andb
-  | Oor  => sem_op2_b orb
+  | Oand => sem_op2_b andb 
+  | Oor  => sem_op2_b orb 
 
-  | Oadd Op_int  => sem_op2_i Z.add
-  | Oadd Op_w    => sem_op2_w I64.add
-  | Omul Op_int  => sem_op2_i Z.mul
-  | Omul Op_w    => sem_op2_w I64.mul
-  | Osub Op_int  => sem_op2_i Z.sub
-  | Osub Op_w    => sem_op2_w I64.sub
+  | Oadd Op_int   => sem_op2_i Z.add
+  | Oadd (Op_w s) => @sem_op2_w s +%R
+  | Omul Op_int   => sem_op2_i Z.mul
+  | Omul (Op_w s) => @sem_op2_w s *%R
+  | Osub Op_int   => sem_op2_i Z.sub
+  | Osub (Op_w s) => @sem_op2_w s (fun x y =>  x - y)%R
 
-  | Oland Op_int => sem_op2_i Z.land
-  | Oland Op_w => sem_op2_w I64.and
-  | Olor Op_int => sem_op2_i Z.lor
-  | Olor Op_w => sem_op2_w I64.or
-  | Olxor Op_int => sem_op2_i Z.lxor
-  | Olxor Op_w => sem_op2_w I64.xor
-  | Olsr         => sem_op2_w sem_lsr
-  | Olsl         => sem_op2_w sem_lsl
-  | Oasr         => sem_op2_w sem_asr
 
-  | Oeq Cmp_int  => sem_op2_ib Z.eqb
-  | Oeq _        => sem_op2_wb weq
-  | Oneq Cmp_int => sem_op2_ib (fun x y => negb (Z.eqb x y))
-  | Oneq _       => sem_op2_wb (fun x y => negb (weq x y))
-  | Olt Cmp_int  => sem_op2_ib Z.ltb
-  | Ole Cmp_int  => sem_op2_ib Z.leb
-  | Ogt Cmp_int  => sem_op2_ib Z.gtb
-  | Oge Cmp_int  => sem_op2_ib Z.geb
-  | Olt Cmp_sw   => sem_op2_wb wslt
-  | Ole Cmp_sw   => sem_op2_wb wsle
-  | Ogt Cmp_sw   => sem_op2_wb (fun x y => wslt y x)
-  | Oge Cmp_sw   => sem_op2_wb (fun x y => wsle y x)
-  | Olt Cmp_uw   => sem_op2_wb wult
-  | Ole Cmp_uw   => sem_op2_wb wule
-  | Ogt Cmp_uw   => sem_op2_wb (fun x y => wult y x)
-  | Oge Cmp_uw   => sem_op2_wb (fun x y => wule y x)
+  | Oland s => @sem_op2_w s wand
+  | Olor  s => @sem_op2_w s wor
+  | Olxor s => @sem_op2_w s wxor
+  | Olsr  s => @sem_op2_w8 s sem_shr
+  | Olsl  s => @sem_op2_w8 s sem_shl
+  | Oasr  s => @sem_op2_w8 s sem_sar
+
+  | Oeq Op_int    => sem_op2_ib Z.eqb
+  | Oeq (Op_w s)  => @sem_op2_wb s eq_op 
+  | Oneq Op_int   => sem_op2_ib (fun x y => negb (Z.eqb x y))
+  | Oneq (Op_w s) => @sem_op2_wb s (fun x y => (x != y))
+  (* Fixme use the "new" Z *)
+  | Olt Cmp_int   => sem_op2_ib Z.ltb
+  | Ole Cmp_int   => sem_op2_ib Z.leb
+  | Ogt Cmp_int   => sem_op2_ib Z.gtb
+  | Oge Cmp_int   => sem_op2_ib Z.geb
+
+  | Olt (Cmp_w u s) => @sem_op2_wb s (wlt u)
+  | Ole (Cmp_w u s) => @sem_op2_wb s (wle u)
+  | Ogt (Cmp_w u s) => @sem_op2_wb s (fun x y => wlt u y x)
+  | Oge (Cmp_w u s) => @sem_op2_wb s (fun x y => wle u y x)
   end.
 
 Import Memory.
@@ -375,24 +382,24 @@ Record estate := Estate {
   evm  : vmap
 }.
 
-Definition on_arr_var A (s:estate) (x:var) (f:forall n, Array.array n word -> exec A) :=
+Definition on_arr_var A (s:estate) (x:var) (f:forall sz n, Array.array n (word sz)-> exec A) :=
   Let v := get_var s.(evm) x in
   match v with
-  | Varr n t => f n t
+  | Varr sz n t => f sz n t
   | _ => type_error
   end.
 
-Notation "'Let' ( n , t ) ':=' s '.[' x ']' 'in' body" :=
-  (@on_arr_var _ s x (fun n (t:Array.array n word) => body)) (at level 25, s at level 0).
+Notation "'Let' ( sz, n , t ) ':=' s '.[' x ']' 'in' body" :=
+  (@on_arr_var _ s x (fun sz n (t:Array.array n (word sz)) => body)) (at level 25, s at level 0).
 
-Lemma on_arr_varP A (f : forall n : positive, Array.array n word -> exec A) v s x P:
-  (forall n t, vtype x = sarr n ->
-               get_var (evm s) x = ok (@Varr n t) ->
-               f n t = ok v -> P) ->
+Lemma on_arr_varP A (f : forall sz n, Array.array n (word sz) -> exec A) v s x P:
+  (forall sz n t, vtype x = sarr sz n ->
+               get_var (evm s) x = ok (@Varr sz n t) ->
+               f sz n t = ok v -> P) ->
   on_arr_var s x f = ok v -> P.
 Proof.
   rewrite /on_arr_var=> H;apply: rbindP => vx.
-  case: x H => -[ | | n | ] nx;rewrite /get_var => H;
+  case: x H => -[ | | sz n | sz ] nx;rewrite /get_var => H;
     case Heq : ((evm s).[_])%vmap => [v' | e] //=.
   + by move=> [<-]. + by case: (e) => // -[<-].
   + by move=> [<-]. + by case: (e) => // -[<-].

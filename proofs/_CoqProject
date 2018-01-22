@@ -10,8 +10,6 @@
 
 ssrmisc/oseq.v
 sandbox/gensem.v
-3rdparty/Coqlib.v
-3rdparty/Integers.v
 3rdparty/ssrring.v
 3rdparty/ssrify.v
 3rdparty/xseq.v
@@ -49,7 +47,6 @@ lang/expr.v
 lang/extraction.v
 lang/gen_map.v
 lang/low_memory.v
-lang/memory.v
 lang/sem.v
 lang/strings.v
 lang/type.v

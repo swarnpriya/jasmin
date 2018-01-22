@@ -29,7 +29,7 @@
 From mathcomp Require Import all_ssreflect.
 From Coq.Unicode Require Import Utf8.
 Require Import ZArith Setoid Morphisms CMorphisms CRelationClasses.
-Require Integers.
+(* Require Integers. *)
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -548,6 +548,7 @@ Proof.
   apply Z.compare_eq.
 Qed.
 
+(*
 (* 64 bits word *)
 Module I64 := Integers.Int64.
 
@@ -580,6 +581,7 @@ Proof.
   by move=> x y /Z.compare_eq Heq; rewrite -(I64.repr_unsigned x) -(I64.repr_unsigned y) Heq.
 Qed.
 
+*)
 
 (* ** Some Extra tactics
  * -------------------------------------------------------------------- *)

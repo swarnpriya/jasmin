@@ -28,7 +28,7 @@
 (* ** Imports and settings *)
 
 From mathcomp Require Import all_ssreflect all_algebra.
-Require Import ZArith utils.
+Require Import ZArith utils type.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -39,11 +39,12 @@ Local Open Scope Z_scope.
 (* ** Machine word representation for proof 
  * -------------------------------------------------------------------- *)
 
+(*
 Notation word := I64.int (only parsing).
 
 Coercion I64.unsigned : I64.int >-> Z.
 
-Notation wadd := I64.add (only parsing).
+(* Notation wadd := I64.add (only parsing). *)
 
 Definition Zofb (b:bool) := if b then 1 else 0.
 
@@ -188,9 +189,10 @@ Proof.
   by rewrite !I64.Z_mod_modulus_eq Zmod_mod Zmult_mod.
 Qed.
 
-
+*)
 (* --------------------------------------------------------------------------- *)
 
+(*
 Module Wordsize_16.
   Definition wordsize : nat := 16.
   Lemma wordsize_not_zero : wordsize <> 0%nat.
@@ -215,15 +217,7 @@ Module I32 := Integers.Int.
 Module I128 := Integers.Make Wordsize_128.
 Module I256 := Integers.Make Wordsize_256.
 
-Variant wsize :=
-  | U8 
-  | U16
-  | U32 
-  | U64
-  | U128
-  | U256.
-
-Definition i_wsize (s:wsize) := 
+Definition word (s:wsize) := 
   match s with
   | U8     => I8.int
   | U16    => I16.int
@@ -244,8 +238,97 @@ Definition wsize_size (s:wsize) :=
   end.
 
 
+Definition wzero  (s:wsize) : word s := 
+  match s with
+  | U8     => I8.zero
+  | U16    => I16.zero
+  | U32    => I32.zero
+  | U64    => I64.zero
+  | U128   => I128.zero
+  | U256   => I256.zero
+  end.
+
+Definition wunsigned (s:wsize) : word s -> Z := 
+   match s with
+  | U8     => I8.unsigned
+  | U16    => I16.unsigned
+  | U32    => I32.unsigned
+  | U64    => I64.unsigned
+  | U128   => I128.unsigned
+  | U256   => I256.unsigned
+  end.
+
+Definition wrepr (s:wsize) : Z -> word s := 
+   match s return Z -> word s with
+  | U8     => I8.repr
+  | U16    => I16.repr
+  | U32    => I32.repr
+  | U64    => I64.repr
+  | U128   => I128.repr
+  | U256   => I256.repr
+  end.
+  
+Lemma wrepr_unsigned s (w: word s) :  wrepr s (wunsigned w) = w.
+Proof.
+  refine (match s return forall w, wrepr s (wunsigned w) = w with
+  | U8     => I8.repr_unsigned
+  | U16    => I16.repr_unsigned
+  | U32    => I32.repr_unsigned
+  | U64    => I64.repr_unsigned
+  | U128   => I128.repr_unsigned
+  | U256   => I256.repr_unsigned
+  end w).
+Qed.
+
+*)
+
+Definition wsize_size (s:wsize) := 
+  match s with
+  | U8     => 1%Z
+  | U16    => 2%Z
+  | U32    => 4%Z
+  | U64    => 8%Z
+  | U128   => 16%Z
+  | U256   => 32%Z
+  end.
+
+Parameter word : wsize -> comRingType.
+
+Parameters wand wor wxor : forall {s}, word s -> word s -> word s.
+
+Parameter wshr wshl wsar : forall {s}, word s -> Z -> word s.
+
+Parameters wlt wle : forall {s}, signedness -> word s -> word s -> bool.
+
+Parameter wnot : forall {s}, word s -> word s.
+
+Parameter wbase : wsize -> Z.
+
+Parameter wunsigned : forall {s}, word s -> Z.
+
+Parameter wrepr : forall s, Z -> word s.
+
+Axiom wrepr_unsigned : forall s (w: word s), wrepr s (wunsigned w) = w.
+
+Definition u8   := word U8.
+Definition u16  := word U16.
+Definition u32  := word U32.
+Definition u64  := word U64.
+Definition u128 := word U128.
+Definition u256 := word U256.
+
+Definition x86_shift_mask (s:wsize) : u8 :=
+  match s with 
+  | U8 | U16 | U32 => wrepr U8 31
+  | U64  => wrepr U8 63
+  | U128 => wrepr U8 127
+  | U256 => wrepr U8 255
+  end%Z.
+
+
 (* -------------------------------------------------------------------*)
 
+(*
 Definition x86_shift_mask : word :=
   (* FIXME *)
   I64.mone.
@@ -270,3 +353,5 @@ Definition lsb (w : word) := (I64.and w I64.one) != I64.zero.
 (* -------------------------------------------------------------------*)
 Definition check_scale (s:Z) :=
   (s == 1%Z) || (s == 2%Z) || (s == 4%Z) || (s == 8%Z).
+
+*)

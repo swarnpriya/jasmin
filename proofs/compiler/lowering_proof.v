@@ -929,7 +929,7 @@ Ltac elim_div :=
   Qed.
 
   (* TODO Move *)
-  Lemma to_wordP v w : to_word v = ok w -> v = w.
+  Lemma to_wordP v w : to_word s v = ok w -> v = w.
   Proof. by case: v => //= [? [] <-| []]. Qed.
 
   Lemma mk_leaP s e l w : 

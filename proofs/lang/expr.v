@@ -48,19 +48,17 @@ Unset Printing Implicit Defensive.
 
 Variant cmp_kind :=
   | Cmp_int
-  | Cmp_sw
-  | Cmp_uw.
+  | Cmp_w of signedness & wsize.
 
 Variant op_kind :=
   | Op_int
-  | Op_w.
+  | Op_w of wsize.
 
 Variant sop1 :=
 | Onot
-| Olnot
-| Oneg
-| Oarr_init 
-.
+| Olnot of wsize
+| Oneg  of op_kind
+| Oarr_init of wsize.
 
 Variant sop2 :=
 | Oand                        (* const : sbool -> sbool -> sbool *)
@@ -70,15 +68,15 @@ Variant sop2 :=
 | Omul  of op_kind
 | Osub  of op_kind
 
-| Oland of op_kind
-| Olor of op_kind
-| Olxor of op_kind
-| Olsr
-| Olsl
-| Oasr
+| Oland of wsize
+| Olor  of wsize
+| Olxor of wsize
+| Olsr  of wsize
+| Olsl  of wsize
+| Oasr  of wsize
 
-| Oeq   of cmp_kind
-| Oneq  of cmp_kind
+| Oeq   of op_kind
+| Oneq  of op_kind
 | Olt   of cmp_kind
 | Ole   of cmp_kind
 | Ogt   of cmp_kind
@@ -86,41 +84,42 @@ Variant sop2 :=
 
 Variant sopn : Set :=
 (* Generic operation *)
-| Omulu        (* cpu   : [sword; sword]        -> [sword;sword] *)
-| Oaddcarry    (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
-| Osubcarry    (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
+| Omulu     of wsize   (* cpu   : [sword; sword]        -> [sword;sword] *)
+| Oaddcarry of wsize   (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
+| Osubcarry of wsize   (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
 
 (* Low level x86 operations *)
-| Oset0        (* set register + flags to 0 (implemented using XOR x x) *)
-| Ox86_MOV     (* copy *)
-| Ox86_CMOVcc  (* conditional copy *)
-| Ox86_ADD     (* add unsigned / signed *)
-| Ox86_SUB     (* sub unsigned / signed *)
-| Ox86_MUL     (* mul unsigned *)
-| Ox86_IMUL    (* excat multiplication *)
-| Ox86_IMUL64    (* truncated multiplication *)
-| Ox86_IMUL64imm   (* truncated multiplication by an immediate value *)
-| Ox86_DIV     (* div unsigned *)
-| Ox86_IDIV    (* div   signed *)
-| Ox86_ADC     (* add with carry *)
-| Ox86_SBB     (* sub with borrow *)
-| Ox86_NEG	(* negation *)
-| Ox86_INC     (* increment *)
-| Ox86_DEC     (* decrement *)
-| Ox86_SETcc   (* Set byte on condition *)
-| Ox86_BT   (* Bit test, sets CF *)
-| Ox86_LEA     (* Load Effective Address *)
-| Ox86_TEST    (* Bit-wise logical and CMP *)
-| Ox86_CMP     (* Signed sub CMP *)
-| Ox86_AND     (* bit-wise and *)
-| Ox86_OR      (* bit-wise or  *)
-| Ox86_XOR     (* bit-wise xor *)
-| Ox86_NOT     (* bit-wise not *)
-| Ox86_ROR | Ox86_ROL
-| Ox86_SHL     (* unsigned / left  *)
-| Ox86_SHR     (* unsigned / right *)
-| Ox86_SAR     (*   signed / right *)
-| Ox86_SHLD    (* unsigned double-word / left  *)
+| Oset0        of wsize  (* set register + flags to 0 (implemented using XOR x x) *)
+| Ox86_MOV     of wsize  (* copy *)
+| Ox86_CMOVcc  of wsize  (* conditional copy *)
+| Ox86_ADD     of wsize  (* add unsigned / signed *)
+| Ox86_SUB     of wsize  (* sub unsigned / signed *)
+| Ox86_MUL     of wsize  (* mul unsigned *)
+| Ox86_IMUL    of wsize  (* excat multiplication *)
+| Ox86_IMULt   of wsize  (* truncated multiplication *)
+| Ox86_IMULtimm of wsize (* truncated multiplication by an immediate value *)
+| Ox86_DIV     of wsize  (* div unsigned *)
+| Ox86_IDIV    of wsize  (* div   signed *)
+| Ox86_ADC     of wsize  (* add with carry *)
+| Ox86_SBB     of wsize  (* sub with borrow *)
+| Ox86_NEG     of wsize  (* negation *)
+| Ox86_INC     of wsize  (* increment *)
+| Ox86_DEC     of wsize  (* decrement *)
+| Ox86_SETcc             (* Set byte on condition *)
+| Ox86_BT      of wsize  (* Bit test, sets CF *)
+| Ox86_LEA     of wsize  (* Load Effective Address *)
+| Ox86_TEST    of wsize  (* Bit-wise logical and CMP *)
+| Ox86_CMP     of wsize  (* Signed sub CMP *)
+| Ox86_AND     of wsize  (* bit-wise and *)
+| Ox86_OR      of wsize  (* bit-wise or  *)
+| Ox86_XOR     of wsize  (* bit-wise xor *)
+| Ox86_NOT     of wsize  (* bit-wise not *)
+| Ox86_ROR     of wsize  (* right rotation *)
+| Ox86_ROL     of wsize  (* left rotation *)
+| Ox86_SHL     of wsize  (* unsigned / left  *)
+| Ox86_SHR     of wsize  (* unsigned / right *)
+| Ox86_SAR     of wsize  (*   signed / right *)
+| Ox86_SHLD    of wsize  (* unsigned double-word / left  *)
 .
 
 Scheme Equality for sop1.
@@ -161,9 +160,11 @@ Qed.
 Definition sopn_eqMixin     := Equality.Mixin sopn_eq_axiom.
 Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 
+Parameter string_of_sopn : sop2 -> string.
+(*
 Definition string_of_sopn o : string :=
   match o with
-  | Omulu => "Omulu"
+  | Omulu  => "Omulu"
   | Oaddcarry => "Oaddcarry"
   | Osubcarry => "Osubcarry"
   | Oset0 => "Oset0"
@@ -198,6 +199,7 @@ Definition string_of_sopn o : string :=
   | Ox86_SAR => "Ox86_SAR"
   | Ox86_SHLD => "Ox86_SHLD"
   end.
+*)
 
 (* ** Expressions
  * -------------------------------------------------------------------- *)

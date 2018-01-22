@@ -36,14 +36,14 @@ Unset Printing Implicit Defensive.
 (* ** Memory
  * -------------------------------------------------------------------- *)
 
-Definition pointer := I64.int.
+Definition pointer := word U64.
 
 Module Memory.
 
 Parameter mem : Type.
 
-Parameter read_mem  : mem -> pointer -> forall (s:wsize), exec (i_wsize s).
-Parameter write_mem : mem -> pointer -> forall (s:wsize), i_wsize s -> exec mem.
+Parameter read_mem  : mem -> pointer -> forall (s:wsize), exec (word s).
+Parameter write_mem : mem -> pointer -> forall (s:wsize), word s -> exec mem.
 Arguments write_mem : clear implicits.
 
 Parameter valid_pointer : mem -> pointer -> wsize -> bool.
@@ -58,20 +58,24 @@ Axiom read_mem_error : forall m p s e, read_mem m p s = Error e -> e = ErrAddrIn
 
 (* Definition padd (p:pointer) (s:nat) := I64.add p (I64.repr (Z.of_nat s)). *)
 
-Parameter writeP_eq : forall m m' p s (v :i_wsize s),
+Parameter writeP_eq : forall m m' p s (v :word s),
   write_mem m p s v = ok m' ->
   read_mem m' p s = ok v.
 
+Parameter disjoint_zrange : pointer -> Z -> pointer -> Z -> Prop.
+ 
+
+(*
 Definition disjoint_zrange p s p' s' :=
   [/\ I64.unsigned p + s < I64.modulus,
       I64.unsigned p' + s' < I64.modulus &
       I64.unsigned p + s <= I64.unsigned p' \/
-        I64.unsigned p' + s' <= I64.unsigned p]%Z.
+        I64.unsigned p' + s' <= I64.unsigned p]%Z. *)
 
 Definition disjoint_range p s p' s' := 
   disjoint_zrange p (wsize_size s) p' (wsize_size s').
 
-Parameter writeP_neq : forall m m' p s (v :i_wsize s) p' s',
+Parameter writeP_neq : forall m m' p s (v :word s) p' s',
   write_mem m p s v = ok m' ->
   disjoint_range p s p' s' ->
   read_mem m' p' s' = read_mem m p' s'. 
@@ -89,15 +93,19 @@ Parameter alloc_stack : mem -> Z -> exec mem.
 
 Parameter free_stack : mem -> Z -> mem.
 
+Parameter between : pointer -> Z -> pointer -> wsize -> Prop.
+(*
 Definition between (pstk : pointer)  (sz : Z) (p : pointer) (s : wsize):= 
   ((pstk <=? p) && (p + wsize_size s <=? pstk + sz))%Z.
+*)
 
+(*
 Section SPEC.
   Variables (m:mem) (sz:Z) (m':mem).
   Let pstk := top_stack m'.
  
   Record alloc_stack_spec : Prop := mkASS {
-    ass_mod      : (pstk + sz < I64.modulus)%Z;
+    ass_mod      : (pstk + sz < wbase U64)%Z;
     ass_read_old : forall p s, valid_pointer m p s -> read_mem m p s = read_mem m' p s;
     ass_valid    : forall p s, 
       valid_pointer m' p s = 
@@ -127,7 +135,7 @@ Section SPEC.
     fss_caller   : forall p, caller m' p = if p == top_stack m then None else caller m p;
     fss_size     : forall p, 
       frame_size m' p = if p == top_stack m then None else frame_size m p;
-   }.
+   }. 
 
 End SPEC.
 
@@ -141,4 +149,5 @@ Parameter free_stackP : forall m sz,
   frame_size m (top_stack m) = Some sz -> 
   free_stack_spec m sz (free_stack m sz).
 
+*)
 End Memory.
