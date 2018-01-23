@@ -1,7 +1,7 @@
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect.
 Require oseq.
-Require Import memory word expr sem.
+Require Import low_memory word expr sem.
 Import Utf8 Relation_Operators.
 Import Memory.
 

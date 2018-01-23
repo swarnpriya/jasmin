@@ -29,7 +29,7 @@ From mathcomp Require Import choice fintype eqtype div seq zmodp.
 
 Require Import strings word utils.
 Require Import type var expr.
-Require Import memory sem Ssem Ssem_props.
+Require Import low_memory sem Ssem Ssem_props.
 Import ZArith.
 Import Utf8.
 

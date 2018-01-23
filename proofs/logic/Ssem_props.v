@@ -26,7 +26,7 @@
 (* --------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect.
 Require Import Setoid Morphisms ZArith.
-Require Import gen_map word utils type var expr memory sem Ssem.
+Require Import gen_map word utils type var expr low_memory sem Ssem.
 
 Import UnsafeMemory.
 
