@@ -279,7 +279,7 @@ Section WF.
     forall x,
       match vm.[x], vtype x with
       | Ok _   , _      => True
-      | Error ErrAddrUndef, sarr _ => False
+      | Error ErrAddrUndef, sarr _ _ => False
       | Error ErrAddrUndef, _ => True
       | _, _ => false
       end.
@@ -312,9 +312,9 @@ Section WF.
   Lemma wf_write_lval gd x ve s1 s2 :
     wf_vm (evm s1) -> write_lval gd x ve s1 = ok s2 -> wf_vm (evm s2).
   Proof.
-    case: x => [vi t|v|v e|v e] /= Hwf.
+    case: x => [vi t|v|sz v e|v e] /= Hwf.
     + by move=> /write_noneP [->]. + by apply wf_write_var. + by t_rbindP => -[<-].
-    apply: on_arr_varP => n t ? ?.   
+    apply: on_arr_varP => sz n t ? ?.
     apply:rbindP => ??;apply:rbindP => ??;apply:rbindP => ??.
     by apply:rbindP=>? Hset [<-] /=;apply: wf_set_var Hset.
   Qed.
@@ -577,7 +577,7 @@ Section PROOF.
         vmi.[x] = 
           if Sv.mem x X then
             match xt return exec (sem_t xt)with
-            | sarr n => ok (Array.empty n)
+            | sarr sz n => ok (Array.empty n)
             | t      => (evm s).[{|vtype := t; vname := xn|}]
             end
           else (evm s).[x].
@@ -589,7 +589,7 @@ Section PROOF.
         vmi.[x] = 
           if  List.existsb (SvD.F.eqb {| vtype := xt; vname := xn |}) (Sv.elements X) then
             match xt return exec (sem_t xt)with
-            | sarr n => ok (Array.empty n)
+            | sarr sz n => ok (Array.empty n)
             | t      => (evm s).[{|vtype := t; vname := xn|}]
             end
           else (evm s).[x];last first.
@@ -603,7 +603,7 @@ Section PROOF.
     + by move=> vm;exists vm;split;[constructor |].
     move=> x0 l Hrec vm.
     have [vm' [H1 H2]]:= Hrec vm.
-    case: x0 => [[||n|] xn0];rewrite /F /=.
+    case: x0 => [[||sz n|] xn0];rewrite /F /=.
     + exists vm';split=> //.
       move=> xt xn';rewrite H2; case: ifP => Hin;first by rewrite orbT.
       rewrite orbF;case:ifPn=> //;rewrite /SvD.F.eqb.
@@ -612,10 +612,11 @@ Section PROOF.
       move=> xt xn';rewrite H2; case: ifP => Hin;first by rewrite orbT.
       rewrite orbF;case:ifPn=> //;rewrite /SvD.F.eqb.
       by case: SvD.F.eq_dec => // -[->].
-    + exists vm'.[{| vtype := sarr n; vname := xn0 |} <- ok (Array.empty n)];split.
+    + exists vm'.[{| vtype := sarr sz n; vname := xn0 |} <- ok (Array.empty n)];split.
       + rewrite Hcat;apply: (sem_app H1);apply:sem_seq1;constructor;constructor => /=.
-        rewrite /write_var /set_var /=;case: CEDecStype.pos_dec (@CEDecStype.pos_dec_r n n) => //=.
-        + by move=> a;case a.
+        rewrite /write_var /set_var /= eq_dec_refl /=.
+        case: CEDecStype.pos_dec (@CEDecStype.pos_dec_r n n) => //=.
+        + by move => a _; case a.
         by move=> b /(_ b (refl_equal _)) /eqP.
       rewrite /SvD.F.eqb=> xt xn.
       case:  SvD.F.eq_dec => /= [ [-> ->]| ];first by rewrite Fv.setP_eq.
@@ -660,7 +661,7 @@ Section PROOF.
     have Uvmi : vm_uincl (evm s1') vmi.
     + move=> [zt zn];rewrite Evmi;case:ifPn => // /Sv_memP.
       rewrite /locals /locals_p !vrvs_recE;have := Uvm1' {| vtype := zt; vname := zn |}.
-      by case: zt => //= n _ Hin; rewrite -(vrvsP Hwv) //; SvD.fsetdec.
+      by case: zt => //= sz n _ Hin; rewrite -(vrvsP Hwv) //; SvD.fsetdec.
     have [/=vm3 [Hsem' Uvm3]]:= sem_uincl Uvmi Hbody.
     have [/=vs' [Hvs' /(is_full_array_uincls H3) Uvs]]:= get_vars_uincl Uvm3 Hvs;subst vs'.
     move=> {Hvs Hbody Hwv}.
@@ -788,29 +789,29 @@ Section REMOVE_INIT.
   Local Lemma RmkI ii i s1 s2 : sem_i p gd s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
   Proof. by move=> _ Hi vm1 Hvm1 /(Hi ii _ Hvm1) [vm2 []] Hsi ??;exists vm2. Qed.
   
-  Lemma is_array_initP e : is_array_init e -> exists e1, e = Papp1 Oarr_init e1.
-  Proof. by case e => // -[] //= e1 _;exists e1. Qed.
+  Lemma is_array_initP e : is_array_init e -> exists sz e1, e = Papp1 (Oarr_init sz) e1.
+  Proof. by case e => // -[] //= sz e1 _;exists sz, e1. Qed.
 
   Local Lemma Rasgn s1 s2 x tag e :
     Let v := sem_pexpr gd s1 e in write_lval gd x v s1 = ok s2 ->
     Pi_r s1 (Cassgn x tag e) s2.
   Proof.
-    move=> Hs2 ii vm1 Hvm1;apply:rbindP Hs2 => z /=. 
+    move=> Hs2 ii vm1 Hvm1;apply:rbindP Hs2 => z /=.
     case: ifP.
-    + move=> /is_array_initP => -[e1 ?];subst e => /=.
+    + case/is_array_initP => sz [e1 ->] {e} /=.
       apply: rbindP => v1 He1; apply: rbindP => -[ | n | ] //=.
       move=> Hn [?];subst z; case: x => [vi t | [[xt xn] xi] | x e | x e] /=.
       + by move=> /write_noneP [->];exists vm1;split=> //;constructor.
       + apply: rbindP => vm1';apply: on_vuP => //=.
-        + case: xt => //= p0 t;case: CEDecStype.pos_dec => // heq;case heq => /= -[] ?? [] ? Wf1;subst t vm1' s2 p0.
+        + case: xt => //= sz0 p0 t; case: wsize_eq_dec => ? //;case: CEDecStype.pos_dec => // ?; subst => [<-] /= <- [<-] Wf1.
           exists vm1;split => //=;first by constructor.
           move=> z;have := Hvm1 z.
-          case: ({| vtype := sarr n; vname := xn |} =P z) => [<- _ | /eqP neq].
-          + rewrite Fv.setP_eq;have := Wf1 {| vtype := sarr n; vname := xn |}.
+          case: ({| vtype := sarr sz0 p0; vname := xn |} =P z) => [<- _ | /eqP neq].
+          + rewrite Fv.setP_eq;have := Wf1 {| vtype := sarr sz0 p0; vname := xn |}.
             case: (vm1.[_]) => //= [a _ i v | []//].
             by move=> H; have := Array.getP_empty H.
           by rewrite Fv.setP_neq.
-        by rewrite /of_val;case:xt => //= ?; case: CEDecStype.pos_dec.
+        by rewrite /of_val;case:xt => //= ? ?; case: wsize_eq_dec => // ?; case: CEDecStype.pos_dec.
       + by t_xrbindP.
       by apply: on_arr_varP => ????; t_xrbindP.
     move=> _ /(sem_pexpr_uincl Hvm1) [] z' [] Hz' Hz /= /(write_uincl Hvm1 Hz) [vm2 []] Hw ?;exists vm2;split=> //.
