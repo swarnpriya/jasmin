@@ -44,11 +44,11 @@ Variant wsize :=
   | U128
   | U256.
 
-Inductive stype : Set :=
-| sbool : stype
-| sint  : stype
-| sarr  : wsize -> positive -> stype
-| sword : wsize -> stype.
+Variant stype : Set :=
+| sbool
+| sint
+| sarr of wsize & positive
+| sword of wsize.
 
 Variant signedness := 
   | Signed
@@ -130,14 +130,14 @@ Qed.
 Instance stypeO : Cmp stype_cmp.
 Proof.
   constructor.
-  + elim=> [||w n|w] [||w' n'|w'] //=.
+  + case => [||w n|w] [||w' n'|w'] //=.
     + by apply lex_sym => /=;apply cmp_sym.
     by apply cmp_sym.
-  + move=> y x;elim: x y=> [||w n|w] [||w' n'|w'] [||w'' n''|w''] c//=;
+  + move=> y x; case: x y=> [||w n|w] [||w' n'|w'] [||w'' n''|w''] c//=;
     try (by apply ctrans_Eq);eauto using ctrans_Lt, ctrans_Gt.
     + by apply lex_trans;apply cmp_ctrans.
     by apply cmp_ctrans.
-  elim=> [||w n|w] [||w' n'|w'] //=.
+  case=> [||w n|w] [||w' n'|w'] //=.
   + by move=> /lex_eq /= [H H'];rewrite (@cmp_eq _ _ wsizeO _ _ H) (@cmp_eq _ _ positiveO _ _ H'). 
   by move=> H; rewrite (@cmp_eq _ _ wsizeO _ _ H). 
 Qed.
@@ -232,7 +232,7 @@ Module CEDecStype.
  
   Lemma eq_dec_r t1 t2 tt: eq_dec t1 t2 = right tt -> t1 != t2.
   Proof.
-    case: tt;elim:t1 t2=> [||w n|w] [||w' n'|w'] //=.
+    case: tt;case:t1 t2=> [||w n|w] [||w' n'|w'] //=.
     + case: wsize_eq_dec => // eqw.
       + case: pos_dec (@pos_dec_r n n' I) => [Heq _ | [] neq ] //=.
         move: (neq (erefl _))=> /eqP H _;rewrite !eqE /= (internal_wsize_dec_lb eqw) /=.

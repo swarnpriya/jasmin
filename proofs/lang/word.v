@@ -29,6 +29,7 @@
 
 From mathcomp Require Import all_ssreflect all_algebra.
 Require Import ZArith utils type.
+Import Utf8.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -292,9 +293,12 @@ Definition wsize_size (s:wsize) :=
   | U256   => 32%Z
   end.
 
+Definition wsize_bits (sz: wsize) : Z :=
+  wsize_size sz * 8.
+
 Parameter word : wsize -> comRingType.
 
-Parameters wand wor wxor : forall {s}, word s -> word s -> word s.
+Parameters wand wor wxor wmulhu wmulhs : forall {s}, word s -> word s -> word s.
 
 Parameter wshr wshl wsar : forall {s}, word s -> Z -> word s.
 
@@ -304,7 +308,7 @@ Parameter wnot : forall {s}, word s -> word s.
 
 Parameter wbase : wsize -> Z.
 
-Parameter wunsigned : forall {s}, word s -> Z.
+Parameters wsigned wunsigned : forall {s}, word s -> Z.
 
 Parameter wrepr : forall s, Z -> word s.
 
@@ -325,6 +329,24 @@ Definition x86_shift_mask (s:wsize) : u8 :=
   | U256 => wrepr U8 255
   end%Z.
 
+Parameters msb lsb : ∀ s, word s → bool.
+
+Parameters wdwordu wdwords : ∀ s, word s → word s → Z.
+
+Definition Z_of_bool (b: bool) : Z :=
+  if b then 1 else 0.
+
+Definition waddcarry sz (x y: word sz) (c: bool) :=
+  let n := wunsigned x + wunsigned y + Z_of_bool c in
+  (wbase sz <=? n, wrepr sz n).
+
+Definition wsubcarry sz (x y: word sz) (c: bool) :=
+  let n := wunsigned x - wunsigned y - Z_of_bool c in
+  (n <? 0, wrepr sz n).
+
+Definition wumul sz (x y: word sz) :=
+  let n := wunsigned x * wunsigned y in
+  (wrepr sz (Z.quot n (wbase sz)), wrepr sz n).
 
 (* -------------------------------------------------------------------*)
 
@@ -349,9 +371,8 @@ Definition word2bits (w : word) : seq bool :=
 
 Definition msb (w : word) := (I64.signed w <? 0)%Z.
 Definition lsb (w : word) := (I64.and w I64.one) != I64.zero.
+*)
 
 (* -------------------------------------------------------------------*)
 Definition check_scale (s:Z) :=
   (s == 1%Z) || (s == 2%Z) || (s == 4%Z) || (s == 8%Z).
-
-*)

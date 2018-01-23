@@ -618,3 +618,11 @@ case: n m => [|n] [|m] //=; rewrite ?ltnS; first last.
   rewrite size_drop in h; have := leq_trans h (leq_subr _ _).
   by rewrite ltnn.
 Qed.
+
+Lemma eq_dec_refl
+           (T: Type) (dec: ∀ x y : T, { x = y } + { x ≠ y })
+           (x: T) : dec x x = left erefl.
+Proof.
+case: (dec _ _) => // e; apply: f_equal.
+exact: Eqdep_dec.UIP_dec.
+Qed.
