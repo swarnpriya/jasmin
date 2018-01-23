@@ -72,7 +72,7 @@ Section LOOP.
 End LOOP.
 
 Definition write_mem (r:lval) : bool := 
-  if r is Lmem _ _ then true else false.
+  if r is Lmem _ _ _ then true else false.
 
 Definition check_nop (rv:lval) (e:pexpr) :=
   match rv, e with
@@ -82,7 +82,7 @@ Definition check_nop (rv:lval) (e:pexpr) :=
 
 Definition check_nop_opn (xs:lvals) (o: sopn) (es:pexprs) :=
   match xs, o, es with
-  | [:: x], Ox86_MOV, [:: e] => check_nop x e
+  | [:: x], Ox86_MOV _, [:: e] => check_nop x e
   | _, _, _ => false
   end.
  
