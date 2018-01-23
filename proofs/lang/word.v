@@ -314,6 +314,9 @@ Parameter wrepr : forall s, Z -> word s.
 
 Axiom wrepr_unsigned : forall s (w: word s), wrepr s (wunsigned w) = w.
 
+Axiom wlt_irrefl : ∀ sz sg (w: word sz), wlt sg w w = false.
+Axiom wle_refl : ∀ sz sg (w: word sz), wle sg w w = true.
+
 Definition u8   := word U8.
 Definition u16  := word U16.
 Definition u32  := word U32.
@@ -347,6 +350,9 @@ Definition wsubcarry sz (x y: word sz) (c: bool) :=
 Definition wumul sz (x y: word sz) :=
   let n := wunsigned x * wunsigned y in
   (wrepr sz (Z.quot n (wbase sz)), wrepr sz n).
+
+Definition zero_extend sz sz' (w: word sz') : word sz :=
+  wrepr sz (wunsigned w).
 
 (* -------------------------------------------------------------------*)
 

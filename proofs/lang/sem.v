@@ -175,9 +175,9 @@ Definition to_arr w n v : exec (Array.array n (word w)) :=
 
 Definition to_word (s: wsize) (v: value) : exec (word s) :=
   match v with
-  | Vword s' w       => ok (wrepr s (wunsigned w))
+  | Vword s' w       => ok (zero_extend s w)
   | Vundef (sword s') =>
-    if s == s' then undef_error else type_error
+    Error (if s == s' then ErrAddrUndef else ErrType)
   | _                => type_error
   end.
 
@@ -217,13 +217,28 @@ Proof.
     have ->: CEDecStype.pos_dec p p = left (erefl p).
     + by elim: p {v} => // p0 /= ->.
     by [].
-  by rewrite wrepr_unsigned.
+  by rewrite /zero_extend wrepr_unsigned.
 Qed.
 
 Lemma to_bool_inv x b :
   to_bool x = ok b →
   x = b.
 Proof. case: x => // i' H. apply ok_inj in H. congruence. by case: i' H. Qed.
+
+Lemma of_val_bool v b: of_val sbool v = ok b -> v = Vbool b.
+Proof. by case v=> //= [? [->] | []]. Qed.
+
+Lemma of_val_int v z: of_val sint v = ok z -> v = Vint z.
+Proof. by case v=> //= [? [->] | []]. Qed.
+
+Lemma of_val_word sz v w:
+  of_val (sword sz) v = ok w ->
+  ∃ sz' (w': word sz'), v = Vword w' ∧ w = zero_extend sz w'.
+Proof.
+case: v => //.
+- by move => sz' w' [<-]; eauto.
+by case => // sz' /=; case: ifP.
+Qed.
 
 (* ** Variable map
  * -------------------------------------------------------------------- *)
@@ -325,6 +340,13 @@ Definition sem_shr {s} := @sem_shift (@wshr) s.
 Definition sem_sar {s} := @sem_shift (@wsar) s.
 Definition sem_shl {s} := @sem_shift (@wshl) s.
 
+Definition sem_zeroext (sz: wsize) (v: value) : exec value :=
+  match v with
+  | Vword sz' w' => ok (Vword (@zero_extend sz sz' w'))
+  | Vundef (sword _) => undef_error
+  | _ => type_error
+  end.
+
 Definition sem_arr_init s (v:value) := 
   Let n := to_int v in 
   match n with
@@ -334,6 +356,7 @@ Definition sem_arr_init s (v:value) :=
 
 Definition sem_sop1 (o:sop1) :=
   match o with
+  | Ozeroext sz => sem_zeroext sz
   | Onot    => sem_op1_b negb
   | Olnot s => @sem_op1_w s wnot 
   | Oneg  Op_int => sem_op1_i Z.opp 
@@ -507,6 +530,14 @@ Definition write_lvals (s:estate) xs vs :=
    fold2 ErrType write_lval xs vs s.
 
 End SEM_PEXPR.
+
+Lemma is_wconstP gd s sz e w:
+  is_wconst sz e = Some w →
+  sem_pexpr gd s e >>= to_word sz = ok w.
+Proof.
+  case: e => // sz' e /oseq.obindI [z] [h] [<-].
+  by have := is_constP e; rewrite h => {h} h; inversion h => {h}; subst.
+Qed.
 
 Fixpoint app_sopn ts : sem_prod ts (exec values) -> values -> exec values :=
   match ts return sem_prod ts (exec values) -> values -> exec values with
@@ -1545,7 +1576,7 @@ Qed.
 
 Lemma of_val_undef t t':
   of_val t (Vundef t') =
-    if t == t' then undef_error else type_error.
+  Error (if t == t' then ErrAddrUndef else ErrType).
 Proof.
 case: t t' => //= [[]|[]||?[]] //.
 move => sz p [] // sz' p'; case: andP => [ [] /eqP -> /eqP -> | ]; first by rewrite eq_refl.
@@ -1555,7 +1586,7 @@ Qed.
 
 Lemma of_val_undef_ok t t' v:
   of_val t (Vundef t') <> ok v.
-Proof. by rewrite of_val_undef;case:ifP. Qed.
+Proof. by rewrite of_val_undef. Qed.
 
 Lemma of_val_uincl v v' t z:
   value_uincl v v' ->
@@ -1708,7 +1739,8 @@ Lemma vuincl_sem_sop1 o ve1 ve1' v1 :
   sem_sop1 o ve1 = ok v1 ->
   sem_sop1 o ve1' = ok v1.
 Proof.
-case: o => [ | sz | [| sz] | sz ]; rewrite /= /sem_op1_b /sem_op1_w /sem_op1_i /mk_sem_sop1 => Hu;
+case: o => [ sz | | sz | [| sz] | sz ]; rewrite /= /sem_op1_b /sem_op1_w /sem_op1_i /mk_sem_sop1 => Hu;
+first (by case: ve1 Hu => // [ sz' w | [] // ]; case: ve1' => // sz'' w'' [?]; subst => /= <-);
   apply: rbindP => z Hz; last case: z Hz => // p Hz; case => <-;
   last (by have [_ ->] := value_uincl_int Hu Hz);
   by have [z' [/= -> ->]] := of_val_uincl Hu Hz.

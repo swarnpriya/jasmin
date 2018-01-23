@@ -23,14 +23,13 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ----------------------------------------------------------------------- *)
 
-(* * Syntax and semantics of the dmasm source language *)
-
 (* ** Imports and settings *)
+Require Import oseq.
 Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import all_ssreflect all_algebra.
 Require Export strings word utils type var.
 Require Import xseq.
-Import ZArith.
+Import Utf8 ZArith.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -55,6 +54,7 @@ Variant op_kind :=
   | Op_w of wsize.
 
 Variant sop1 :=
+| Ozeroext of wsize
 | Onot
 | Olnot of wsize
 | Oneg  of op_kind
@@ -951,19 +951,18 @@ Definition is_bool (e:pexpr) :=
   | _ => None
   end.
 
-(* FIXME.
-Definition wconst s n := Pcast s (Pconst n).
+Definition wconst (sz: wsize) (n: word sz) : pexpr :=
+  Pcast sz (Pconst (wunsigned n)).
 
-Definition is_wconst e :=
+Definition is_wconst (sz: wsize) (e: pexpr) : option (word sz) :=
   match e with
-  | Pcast _ e => is_const e
+  | Pcast sz' e => is_const e >>= λ n, Some (zero_extend sz (wrepr sz' n))
   | _       => None
-  end.
+  end%O.
 
 Variant is_reflect (A:Type) (P:A -> pexpr) : pexpr -> option A -> Prop :=
  | Is_reflect_some : forall a, is_reflect P (P a) (Some a)
  | Is_reflect_none : forall e, is_reflect P e None.
-
 
 Lemma is_boolP e : is_reflect Pbool e (is_bool e).
 Proof. by case e=> *;constructor. Qed.
@@ -971,10 +970,11 @@ Proof. by case e=> *;constructor. Qed.
 Lemma is_constP e : is_reflect Pconst e (is_const e).
 Proof. by case: e=>*;constructor. Qed.
 
-Lemma is_wconstP e : is_reflect (wconst e (is_wconst e).
+(*
+Lemma is_wconstP sz e : is_reflect (@wconst sz) e (is_wconst sz e).
 Proof.
   case e => //=;auto using Is_reflect_none.
-  move=> e1; case: (is_constP e1);auto using Is_reflect_none.
+  move=> sz1 e1; case: (is_constP e1);auto using Is_reflect_none.
   move=> z;apply: Is_reflect_some.
 Qed.
 *)
