@@ -6,14 +6,16 @@
 -R logic Jasmin
 -R lang Jasmin
 -R ssrmisc Jasmin
+-R coqword Jasmin
 -R sandbox Jasmin
 
 ssrmisc/oseq.v
+coqword/ssrZ.v
+coqword/xword.v
 sandbox/gensem.v
 3rdparty/ssrring.v
 3rdparty/ssrify.v
 3rdparty/xseq.v
-3rdparty/ssrZ.v
 compiler/allocation.v
 compiler/array_expansion.v
 compiler/asmgen.v
