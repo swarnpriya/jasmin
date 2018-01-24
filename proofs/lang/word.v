@@ -307,6 +307,10 @@ Definition wsize_bits (s:wsize) : Z :=
 Definition wsize_size (sz: wsize) : Z :=
   wsize_bits sz / 8.
 
+Lemma wsize_size_pos sz :
+  0 < wsize_size sz.
+Proof. by case sz. Qed.
+
 Definition word : wsize -> comRingType :=
   λ sz, word_comRingType (wsize_size_minus_1 sz).
 
@@ -355,7 +359,8 @@ Definition x86_shift_mask (s:wsize) : u8 :=
   | U256 => wrepr U8 255
   end%Z.
 
-Parameters msb lsb : ∀ s, word s → bool.
+Definition lsb {s} (w: word s) : bool := wbit w 0.
+Definition msb {s} (w: word s) : bool := wbit w (wsize_size_minus_1 s).
 
 Parameters wdwordu wdwords : ∀ s, word s → word s → Z.
 
