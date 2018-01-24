@@ -82,7 +82,10 @@ Definition check_nop (rv:lval) (e:pexpr) :=
 
 Definition check_nop_opn (xs:lvals) (o: sopn) (es:pexprs) :=
   match xs, o, es with
-  | [:: x], Ox86_MOV _, [:: e] => check_nop x e
+  | [:: x], Ox86_MOV sz, [:: e] =>
+    if e is Pvar x2 then
+      (vtype x2 == sword sz) && check_nop x e
+    else false
   | _, _, _ => false
   end.
  

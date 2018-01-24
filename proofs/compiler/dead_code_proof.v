@@ -44,7 +44,7 @@ Proof.
   case: x=> //= [v0 t|v0|v0 p] _.
   + by move=> /write_noneP [[]] ->.
   + by apply: rbindP=> z Hz [] ->.
-  apply: on_arr_varP=> n t Ht Hval.
+  apply: on_arr_varP=> sz n t Ht Hval.
   apply: rbindP=> i; apply: rbindP=> x Hx Hi.
   apply: rbindP=> v1 Hv; apply: rbindP=> t0 Ht0.
   by apply: rbindP=> vm Hvm /= [] ->.
@@ -221,43 +221,37 @@ Section PROOF.
   Qed.
 
   Lemma check_nop_opn_spec (xs:lvals) (o:sopn) (es:pexprs): check_nop_opn xs o es ->
-    exists x i1 i2, xs = [:: Lvar (VarI x i1)] /\ o = Ox86_MOV /\ es = [:: Pvar (VarI x i2)].
+    exists x i1 sz i2, xs = [:: Lvar (VarI (Var (sword sz) x) i1)] /\ o = Ox86_MOV sz /\ es = [:: Pvar (VarI (Var (sword sz) x) i2)].
   Proof.
-    move: xs=> [] // rv [] //.
-    move: o=> [] //.
-    move: es=> [] // e [] //= /check_nop_spec [x [i1 [i2 [??]]]]; subst e rv.
-    by exists x, i1, i2.
+  case: xs o es => // rv [] // [] // sz [] // e [] //.
+  case: e => // -[] [] [] // sz' xn xi /andP [] /eqP [->] {sz'} /check_nop_spec [x] [i1] [i2] [->] {rv} [<- ->] {x xi}.
+  by exists xn, i1, sz, i2.
   Qed.
 
-  Lemma set_get_word vm1 vm2 xn v:
-    let x := {| vtype := sword; vname := xn |} in
+  Lemma set_get_word vm1 vm2 sz xn v:
+    let x := {| vtype := sword sz; vname := xn |} in
     get_var vm1 x = ok v ->
     set_var vm1 x v = ok vm2 ->
     vm1 = vm2.
   Proof.
     rewrite /get_var /set_var.
     apply: on_vuP=> [t|] Hr; last first.
-    + move=> []<- //.
-    move=> <- /= []<-; rewrite -Hr; clear.
+    + by move=> []<- /=; rewrite eqxx.
+    move=> <- /= []<-.
     apply: Fv.map_ext=> z.
     set x0 := {| vtype := _; vname := xn |}.
     case: (x0 =P z) => [<-|/eqP Hne];rewrite ?Fv.setP_eq ?Fv.setP_neq //.
+    by rewrite -/x0 Hr /zero_extend wrepr_unsigned.
   Qed.
 
-  Lemma get_var_word w x vm:
-    get_var vm x = ok (Vword w) ->
-    vtype x = sword.
+  Lemma get_var_word sz w x vm:
+    get_var vm x = ok (@Vword sz w) ->
+    vtype x = sword sz.
   Proof.
     move: x=> [vt vn]; rewrite /=.
     rewrite /get_var /on_vu.
     case Hv: vm.[_]=> /= [v|[] //] []H.
-    by move: vt v Hv H=> [].
-  Qed.
-
-  Lemma to_word_ok x w:
-    to_word x = ok w -> x = Vword w.
-  Proof.
-    by move: x=> [] // => [|[]] // w0 []<-.
+    by rewrite -(type_of_to_val v) H.
   Qed.
 
   Local Lemma Hopn_aux s0 ii xs t o es v vs s1 s2 :
@@ -296,20 +290,19 @@ Section PROOF.
       have [? ->]:= Hwrites_disj Hw Hdisj Hnh;split;last by constructor.
       by apply: eq_onT Heq;apply eq_onS.
     case:ifPn => [ | _ /=]; last by apply: Hopn_aux Hexpr Hopn Hw.
-    move=> /check_nop_opn_spec [x [i1 [i2 [?[??]]]]]; subst xs o es=> /=.
+    move=> /check_nop_opn_spec [x [i1 [sz [i2 [?[??]]]]]]; subst xs o es=> /=.
     move=> Hwf vm1' Hvm.
     have Hs: s1 = s2;last by subst s2; exists vm1'; split=> //; exact: Eskip.
     move: x0 Hexpr Hopn=> [] // x0 [] //=;last by  move=> ???; apply: rbindP.
     rewrite /sem_pexprs /=.
     apply: rbindP=> z Hexpr []?; subst z.
-    apply: rbindP=> v0 /to_word_ok Hv0 []?; subst v x0.
-    rewrite /= /write_var in Hw.
-    apply: rbindP Hw=> z; apply: rbindP=> vm Hvm' []<- []<-.
-    move: s1 Hwf Hvm Hexpr Hvm'=> [mem1 vm1] /= Hwf Hvm Hexpr Hvm'; f_equal.
-    have := get_var_word Hexpr.
-    move: x Hexpr Hvm'=> [[] xn] //= Hexpr Hvm' _.
-    by exact: (set_get_word Hexpr Hvm').
-  Qed.  
+    apply: rbindP => v0 /of_val_word [sz0] [v0'] [? ?] [?]; subst.
+    rewrite /= /write_var in Hw; case: Hw => <-.
+    case: (get_var_word Hexpr) => ?; subst sz0.
+    move: s1 Hwf Hvm Hexpr => [mem1 vm1] /= Hwf Hvm Hexpr; f_equal.
+    apply: (set_get_word Hexpr).
+    by rewrite /set_var /= /zero_extend !wrepr_unsigned.
+  Qed.
          
   Local Lemma Hif_true s1 s2 e c1 c2 :
     Let x := sem_pexpr gd s1 e in to_bool x = Ok error true ->
