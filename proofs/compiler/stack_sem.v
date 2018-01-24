@@ -43,7 +43,7 @@ Local Open Scope vmap.
 Local Open Scope seq_scope.
 
 Module S.
-  Notation vstk nstk := {|v_var := {|vtype := sword; vname := nstk|}; v_info := xH|}.
+  Notation vstk nstk := {|v_var := {|vtype := sword U64; vname := nstk|}; v_info := xH|}.
 
   Section SEM.
 
@@ -101,14 +101,14 @@ Module S.
     sem_i s1 (Ccall ii xs f args) s2
 
   with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
-  | EcallRun m1 m2 fn sf vargs s1 s2 m2' vm2 vres p:
+  | EcallRun m1 m2 fn sf vargs s1 s2 m2' vm2 vres m1':
     get_fundef P fn = Some sf ->
-    alloc_stack m1 (sf_stk_sz sf) = ok p ->
-    write_var  (vstk (sf_stk_id sf)) p.1 (Estate p.2 vmap0) = ok s1 ->
+    alloc_stack m1 (sf_stk_sz sf) = ok m1' ->
+    write_var  (vstk (sf_stk_id sf)) (Vword (top_stack m1')) (Estate m2' vmap0) = ok s1 ->
     write_vars (sf_params sf) vargs s1 = ok s2 ->
     sem s2 (sf_body sf) {| emem := m2'; evm := vm2 |} ->
     mapM (fun (x:var_i) => get_var vm2 x) sf.(sf_res) = ok vres ->
-    m2 = free_stack m2' p.1 (sf_stk_sz sf) ->
+    m2 = free_stack m2' (sf_stk_sz sf) ->
     List.Forall is_full_array vres ->
     sem_call m1 fn vargs m2 vres.
 
