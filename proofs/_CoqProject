@@ -6,8 +6,7 @@
 -R logic Jasmin
 -R lang Jasmin
 -R ssrmisc Jasmin
--R coqword Jasmin
--R sandbox Jasmin
+-R coqword CoqWord
 
 ssrmisc/oseq.v
 coqword/ssrZ.v

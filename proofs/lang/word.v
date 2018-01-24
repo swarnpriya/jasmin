@@ -28,6 +28,7 @@
 (* ** Imports and settings *)
 
 From mathcomp Require Import all_ssreflect all_algebra.
+From CoqWord Require Import xword.
 Require Import ZArith utils type.
 Import Utf8.
 
@@ -283,22 +284,38 @@ Qed.
 
 *)
 
-Definition wsize_size (s:wsize) := 
+Definition nat7 : nat := 7.
+Definition nat15 : nat := nat7.+4.+4.
+Definition nat31 : nat := nat15.+4.+4.+4.+4.
+Definition nat63 : nat := nat31.+4.+4.+4.+4.+4.+4.+4.+4.
+Definition nat127 : nat := nat63.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.
+Definition nat255 : nat := nat127.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.+4.
+
+Definition wsize_size_minus_1 (s: wsize) : nat :=
   match s with
-  | U8     => 1%Z
-  | U16    => 2%Z
-  | U32    => 4%Z
-  | U64    => 8%Z
-  | U128   => 16%Z
-  | U256   => 32%Z
+  | U8 => nat7
+  | U16 => nat15
+  | U32 => nat31
+  | U64 => nat63
+  | U128 => nat127
+  | U256 => nat255
   end.
 
-Definition wsize_bits (sz: wsize) : Z :=
-  wsize_size sz * 8.
+Definition wsize_bits (s:wsize) : Z :=
+  Zpos (Pos.of_succ_nat (wsize_size_minus_1 s)).
 
-Parameter word : wsize -> comRingType.
+Definition wsize_size (sz: wsize) : Z :=
+  wsize_bits sz / 8.
 
-Parameters wand wor wxor wmulhu wmulhs : forall {s}, word s -> word s -> word s.
+Definition word : wsize -> comRingType :=
+  λ sz, word_comRingType (wsize_size_minus_1 sz).
+
+Global Opaque word.
+
+Definition wand {s} (x y: word s) : word s := wand x y.
+Definition wor {s} (x y: word s) : word s := wor x y.
+
+Parameters wxor wmulhu wmulhs : forall {s}, word s -> word s -> word s.
 
 Parameter wshr wshl wsar : forall {s}, word s -> Z -> word s.
 
@@ -306,13 +323,19 @@ Parameters wlt wle : forall {s}, signedness -> word s -> word s -> bool.
 
 Parameter wnot : forall {s}, word s -> word s.
 
-Parameter wbase : wsize -> Z.
+Definition wbase (s: wsize) : Z :=
+  modulus (wsize_size_minus_1 s).+1.
 
-Parameters wsigned wunsigned : forall {s}, word s -> Z.
+Definition wunsigned {s} (w: word s) : Z :=
+  urepr w.
 
-Parameter wrepr : forall s, Z -> word s.
+Parameters wsigned : forall {s}, word s -> Z.
 
-Axiom wrepr_unsigned : forall s (w: word s), wrepr s (wunsigned w) = w.
+Definition wrepr s (z: Z) : word s :=
+  mkword (wsize_size_minus_1 s).+1 z.
+
+Lemma wrepr_unsigned s (w: word s) : wrepr s (wunsigned w) = w.
+Proof. by rewrite /wrepr /wunsigned ureprK. Qed.
 
 Axiom wlt_irrefl : ∀ sz sg (w: word sz), wlt sg w w = false.
 Axiom wle_refl : ∀ sz sg (w: word sz), wle sg w w = true.
