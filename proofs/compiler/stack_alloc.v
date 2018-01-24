@@ -23,11 +23,8 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ----------------------------------------------------------------------- *)
 
-(* * Prove properties about semantics of dmasm input language *)
-
 (* ** Imports and settings *)
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat ssrint ssralg.
-From mathcomp Require Import choice fintype eqtype div seq zmodp finset.
+From mathcomp Require Import all_ssreflect all_algebra.
 Require Import Coq.Logic.Eqdep_dec.
 Require Import strings word utils type var expr low_memory.
 Require Import constant_prop.
@@ -73,8 +70,8 @@ Definition map := (Mvar.t Z * Ident.ident)%type.
 
 Definition size_of (t:stype) := 
   match t with
-  | sword  => ok 8%Z
-  | sarr n => ok (8 * (Zpos n))%Z
+  | sword sz => ok (wsize_size sz)
+  | sarr sz n => ok (wsize_size sz * (Zpos n))%Z
   | _      => cerror (Cerr_stk_alloc "size_of")
   end.
 
@@ -94,7 +91,7 @@ Definition is_in_stk (m:map) (x:var) :=
   | None   => false
   end.
 
-Definition vstk (m:map) :=  {|vtype := sword; vname := m.2|}.
+Definition vstk (m:map) :=  {|vtype := sword U64; vname := m.2|}.
 Definition estk (m:map) := Pvar {|v_var := vstk m; v_info := xH|}.
 
 Definition is_vstk (m:map) (x:var) :=
@@ -103,51 +100,42 @@ Definition is_vstk (m:map) (x:var) :=
 Definition check_var (m:map) (x1 x2:var_i) :=
   ~~ is_in_stk m x1 && (v_var x1 == v_var x2) && ~~is_vstk m x1.
 
-Definition check_var_stk (m:map) (x1 x2:var_i) (e2:pexpr) := 
-  is_vstk m x2 && (vtype x1 == sword) &&
+Definition check_var_stk (m:map) sz (x1 x2:var_i) (e2:pexpr) :=
+  is_vstk m x2 && (vtype x1 == sword sz) &&
     match Mvar.get m.1 x1 with
-    | Some ofs => e2 == (Pcast (Pconst ofs))
+    | Some ofs => e2 == (Pcast sz (Pconst ofs))
     | _ => false
     end.
 
-Definition is_arr_type (t:stype) := 
-  match t with
-  | sarr _ => true
-  | _      => false
+Definition is_arr_type (t:stype) :=
+  if t is sarr sz _ then Some sz else None.
+
+Definition is_addr_ofs sz ofs e1 e2 :=
+  match is_const e1, is_wconst U64 e2 with
+  | Some i, Some zofs => (ofs + wsize_size sz * i)%Z == wunsigned zofs
+  | _, _              => false
   end.
 
-Definition is_addr_ofs (*check_e *) ofs e1 e2 := 
-(*  match e2 with
-  | Papp2 (Oadd Op_w) ofs' (Papp2 (Omul Op_w) scale (Pcast e2')) => 
-    match is_wconst ofs', is_wconst scale with
-    | Some zofs, Some zscale => (ofs == zofs) && (zscale == 8%Z) && check_e e1 e2'
-    | _, _                   => false
-    end 
-  | _ => *) 
-    match is_const e1, is_wconst e2 with
-    | Some i, Some zofs => (ofs + 8*i)%Z == zofs
-    | _, _              => false
-    end
-(*  end *).
-
-Definition check_arr_stk' (* check_e *) (m:map) (x1:var_i) (e1:pexpr) (x2:var_i) (e2:pexpr) :=
-  is_vstk m x2 && is_arr_type (vtype x1) &&
-    match Mvar.get m.1 x1 with
-    | Some ofs => is_addr_ofs (* (check_e m) *) ofs e1 e2
-    | _ => false
-    end.
+Definition check_arr_stk' (* check_e *) (m:map) (sz1: wsize) (x1:var_i) (e1:pexpr) (x2:var_i) (e2:pexpr) :=
+  is_vstk m x2 &&
+  if is_arr_type (vtype x1) is Some sz then
+  (sz == sz1) &&
+  match Mvar.get m.1 x1 with
+  | Some ofs => is_addr_ofs sz ofs e1 e2
+  | _ => false end
+  else false.
 
 Fixpoint check_e (m:map) (e1 e2: pexpr) :=
   match e1, e2 with 
   | Pconst n1, Pconst n2 => n1 == n2 
   | Pbool  b1, Pbool  b2 => b1 == b2 
-  | Pcast  e1, Pcast  e2 => check_e m e1 e2 
+  | Pcast w1 e1, Pcast w2 e2 => (w1 == w2) && check_e m e1 e2
   | Pvar   x1, Pvar   x2 => check_var m x1 x2 
-  | Pvar   x1, Pload x2 e2 => check_var_stk m x1 x2 e2
+  | Pvar   x1, Pload w2 x2 e2 => check_var_stk m w2 x1 x2 e2
   | Pglobal g1, Pglobal g2 => g1 == g2
   | Pget  x1 e1, Pget x2 e2 => check_var m x1 x2 && check_e m e1 e2
-  | Pget  x1 e1, Pload x2 e2 => check_arr_stk' (* check_e *) m x1 e1 x2 e2
-  | Pload x1 e1, Pload x2 e2 => check_var m x1 x2 && check_e m e1 e2
+  | Pget  x1 e1, Pload w2 x2 e2 => check_arr_stk' (* check_e *) m w2 x1 e1 x2 e2
+  | Pload w1 x1 e1, Pload w2 x2 e2 => (w1 == w2) && check_var m x1 x2 && check_e m e1 e2
   | Papp1 o1 e1, Papp1 o2 e2 => (o1 == o2) && check_e m e1 e2 
   | Papp2 o1 e11 e12, Papp2 o2 e21 e22 =>
     (o1 == o2) && check_e m e11 e21 && check_e m e12 e22
@@ -161,10 +149,10 @@ Definition check_lval (m:map) (r1 r2:lval) :=
   match r1, r2 with
   | Lnone _ t1, Lnone _ t2 => t1 == t2
   | Lvar x1, Lvar x2 => check_var m x1 x2
-  | Lvar x1, Lmem x2 e2 => check_var_stk m x1 x2 e2
-  | Lmem x1 e1, Lmem x2 e2 => check_var m x1 x2 && check_e m e1 e2
+  | Lvar x1, Lmem w2 x2 e2 => check_var_stk m w2 x1 x2 e2
+  | Lmem w1 x1 e1, Lmem w2 x2 e2 => (w1 == w2) && check_var m x1 x2 && check_e m e1 e2
   | Laset x1 e1, Laset x2 e2 => check_var m x1 x2 && check_e m e1 e2
-  | Laset x1 e1, Lmem x2 e2 => check_arr_stk m x1 e1 x2 e2
+  | Laset x1 e1, Lmem w2 x2 e2 => check_arr_stk m w2 x1 e1 x2 e2
   | _, _ => false
   end.
 
