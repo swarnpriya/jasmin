@@ -176,6 +176,14 @@ Ltac t_xrbindP :=
   | _ => idtac
   end.
 
+Ltac clarify :=
+  repeat match goal with
+  | H : ?a = ?b |- _ => subst a || subst b
+  | H : ok _ = ok _ |- _ => apply ok_inj in H
+  | H : Some _ = Some _ |- _ => apply Some_inj in H
+  | H : ?a = _, K : ?a = _ |- _ => rewrite H in K
+  end.
+
 Fixpoint mapM eT aT bT (f : aT -> result eT bT) (xs : seq aT) : result eT (seq bT) :=
   match xs with
   | [::] =>
@@ -583,6 +591,12 @@ case: n m => [|n] [|m] //=; rewrite ?ltnS; first last.
   rewrite size_drop in h; have := leq_trans h (leq_subr _ _).
   by rewrite ltnn.
 Qed.
+
+Lemma ZleP x y : reflect (x <= y) (x <=? y).
+Proof. by apply: (equivP idP);rewrite Zle_is_le_bool. Qed.
+
+Lemma ZltP x y : reflect (x < y) (x <? y).
+Proof. by apply: (equivP idP);rewrite Zlt_is_lt_bool. Qed.
 
 Lemma eq_dec_refl
            (T: Type) (dec: ∀ x y : T, { x = y } + { x ≠ y })

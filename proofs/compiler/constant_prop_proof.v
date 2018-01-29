@@ -158,12 +158,6 @@ Proof.
   by case: eqP => [-> // | /= _];rewrite Hv1 //= Z.add_0_r.
 Qed.
 
-Ltac clarify :=
-  repeat match goal with
-  | H : ok _ = ok _ |- _ => apply ok_inj in H; subst
-  | H : ?a = _, K : ?a = _ |- _ => rewrite H in K; clear H
-  end.
-
 Lemma sadd_wP sz e1 e2 : Papp2 (Oadd (Op_w sz)) e1 e2 =E sadd_w sz e1 e2.
 Proof.
 rewrite /sadd_w.

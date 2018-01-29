@@ -212,8 +212,7 @@ Definition to_val t : sem_t t -> value :=
 Lemma of_val_to_val vt (v: sem_t vt): of_val vt (to_val v) = ok v.
 Proof.
   case: vt v=> // [s p | s] v /=.
-  + have ->: wsize_eq_dec s s = left (erefl s).
-    + by case: s {v}.
+  + rewrite eq_dec_refl.
     have ->: CEDecStype.pos_dec p p = left (erefl p).
     + by elim: p {v} => // p0 /= ->.
     by [].
@@ -238,6 +237,16 @@ Proof.
 case: v => //.
 - by move => sz' w' [<-]; eauto.
 by case => // sz' /=; case: ifP.
+Qed.
+
+Lemma to_arr_ok sz n v t :
+  to_arr sz n v = ok t →
+  v = Varr t.
+Proof.
+case: v => // [ sz' n' a | [] // sz' n' ] /=; last by case: andP.
+case: wsize_eq_dec => // ?; subst.
+case: CEDecStype.pos_dec => // ?; subst.
+by case => ->.
 Qed.
 
 (* ** Variable map
