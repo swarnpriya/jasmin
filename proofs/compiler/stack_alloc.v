@@ -75,11 +75,22 @@ Definition size_of (t:stype) :=
   | _      => cerror (Cerr_stk_alloc "size_of")
   end.
 
+Definition aligned_for (ty: stype) (ofs: Z) : bool :=
+  match ty with
+  | sarr sz _
+  | sword sz => Memory.is_align (wrepr _ ofs) sz
+  | sbool | sint => false
+  end.
+
 Definition init_map (sz:Z) (nstk:Ident.ident) (l:list (var * Z)):=
   let add (vp:var*Z) (mp:Mvar.t Z * Z) :=
-    if (mp.2 <=? vp.2)%Z then 
-      Let s := size_of (vtype vp.1) in
-      cok (Mvar.set mp.1 vp.1 vp.2, vp.2 + s)%Z
+      let '(v, p) := vp in
+    if (mp.2 <=? p)%Z then
+      let ty := vtype v in
+      if aligned_for ty vp.2 then
+      Let s := size_of ty in
+      cok (Mvar.set mp.1 v p, p + s)%Z
+    else cerror (Cerr_stk_alloc "not aligned")
     else cerror (Cerr_stk_alloc "overlap") in
   Let mp := foldM add (Mvar.empty Z, 0%Z) l in 
   if (mp.2 <=? sz)%Z then cok (mp.1, nstk)
@@ -91,7 +102,7 @@ Definition is_in_stk (m:map) (x:var) :=
   | None   => false
   end.
 
-Definition vstk (m:map) :=  {|vtype := sword U64; vname := m.2|}.
+Definition vstk (m:map) :=  {|vtype := sword Uptr; vname := m.2|}.
 Definition estk (m:map) := Pvar {|v_var := vstk m; v_info := xH|}.
 
 Definition is_vstk (m:map) (x:var) :=
@@ -103,7 +114,7 @@ Definition check_var (m:map) (x1 x2:var_i) :=
 Definition check_var_stk (m:map) sz (x1 x2:var_i) (e2:pexpr) :=
   is_vstk m x2 && (vtype x1 == sword sz) &&
     match Mvar.get m.1 x1 with
-    | Some ofs => e2 == (Pcast sz (Pconst ofs))
+    | Some ofs => e2 == (Pcast Uptr (Pconst ofs))
     | _ => false
     end.
 
@@ -111,8 +122,8 @@ Definition is_arr_type (t:stype) :=
   if t is sarr sz _ then Some sz else None.
 
 Definition is_addr_ofs sz ofs e1 e2 :=
-  match is_const e1, is_wconst U64 e2 with
-  | Some i, Some zofs => (ofs + wsize_size sz * i)%Z == wunsigned zofs
+  match is_const e1, is_wconst_of_size Uptr e2 with
+  | Some i, Some zofs => (wsize_size sz * i + ofs)%Z == zofs
   | _, _              => false
   end.
 

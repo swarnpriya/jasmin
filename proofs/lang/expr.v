@@ -960,6 +960,12 @@ Definition is_wconst (sz: wsize) (e: pexpr) : option (word sz) :=
   | _       => None
   end%O.
 
+Definition is_wconst_of_size sz (e: pexpr) : option Z :=
+  match e with
+  | Pcast sz' (Pconst z) =>
+    if sz' == sz then Some z else None
+  | _ => None end.
+
 Variant is_reflect (A:Type) (P:A -> pexpr) : pexpr -> option A -> Prop :=
  | Is_reflect_some : forall a, is_reflect P (P a) (Some a)
  | Is_reflect_none : forall e, is_reflect P e None.
@@ -978,6 +984,15 @@ Proof.
   move=> z;apply: Is_reflect_some.
 Qed.
 *)
+
+Lemma is_wconst_of_sizeP sz e :
+  is_reflect (fun z => Pcast sz (Pconst z)) e (is_wconst_of_size sz e).
+Proof.
+case: e; try constructor.
+move => sz' []; try constructor.
+move => z /=; case: eqP; try constructor.
+move => ->; exact: Is_reflect_some.
+Qed.
 
 (* --------------------------------------------------------------------- *)
 (* Test the equality of two expressions modulo variable info              *)

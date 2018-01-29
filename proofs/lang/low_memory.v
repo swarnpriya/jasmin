@@ -27,7 +27,8 @@
 
 From mathcomp Require Import all_ssreflect all_algebra.
 Require Import strings word utils type var.
-Require Import ZArith.
+Require Psatz.
+Import ZArith.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -36,7 +37,8 @@ Unset Printing Implicit Defensive.
 (* ** Memory
  * -------------------------------------------------------------------- *)
 
-Definition pointer := word U64.
+Definition Uptr := U64.
+Definition pointer := word Uptr.
 
 Module Memory.
 
@@ -47,6 +49,9 @@ Parameter write_mem : mem -> pointer -> forall (s:wsize), word s -> exec mem.
 Arguments write_mem : clear implicits.
 
 Parameter valid_pointer : mem -> pointer -> wsize -> bool.
+
+Definition no_overflow (p: pointer) (sz: Z) : bool :=
+  (wunsigned p + sz <? wbase Uptr)%Z.
 
 Parameter readV : forall m p s,
   reflect (exists v, read_mem m p s = ok v) (valid_pointer m p s).
@@ -62,15 +67,11 @@ Parameter writeP_eq : forall m m' p s (v :word s),
   write_mem m p s v = ok m' ->
   read_mem m' p s = ok v.
 
-Parameter disjoint_zrange : pointer -> Z -> pointer -> Z -> Prop.
- 
-
-(*
-Definition disjoint_zrange p s p' s' :=
-  [/\ I64.unsigned p + s < I64.modulus,
-      I64.unsigned p' + s' < I64.modulus &
-      I64.unsigned p + s <= I64.unsigned p' \/
-        I64.unsigned p' + s' <= I64.unsigned p]%Z. *)
+Definition disjoint_zrange (p: pointer) (s: Z) (p': pointer) (s': Z) :=
+  [/\ no_overflow p s,
+      no_overflow p' s' &
+      wunsigned p + s <= wunsigned p' \/
+        wunsigned p' + s' <= wunsigned p]%Z.
 
 Definition disjoint_range p s p' s' := 
   disjoint_zrange p (wsize_size s) p' (wsize_size s').
@@ -80,9 +81,19 @@ Parameter writeP_neq : forall m m' p s (v :word s) p' s',
   disjoint_range p s p' s' ->
   read_mem m' p' s' = read_mem m p' s'. 
 
+Parameter write_valid : forall m m' p s (v :word s) p' s',
+  write_mem m p s v = ok m' ->
+  valid_pointer m' p' s' = valid_pointer m p' s'.
+
 Parameter is_align : pointer -> wsize -> bool.
 
 Parameter valid_align : forall m p s, valid_pointer m p s -> is_align p s.
+
+Parameter is_align_array :
+  forall ptr sz j, is_align ptr sz -> is_align (wrepr _ (wsize_size sz * j) + ptr) sz.
+
+Parameter is_align_no_overflow :
+  forall ptr sz, is_align ptr sz -> no_overflow ptr (wsize_size sz).
 
 (* -------------------------------------------------------------------- *)
 Parameter top_stack  : mem -> pointer.
@@ -93,29 +104,34 @@ Parameter alloc_stack : mem -> Z -> exec mem.
 
 Parameter free_stack : mem -> Z -> mem.
 
-Parameter between : pointer -> Z -> pointer -> wsize -> Prop.
-(*
-Definition between (pstk : pointer)  (sz : Z) (p : pointer) (s : wsize):= 
-  ((pstk <=? p) && (p + wsize_size s <=? pstk + sz))%Z.
-*)
+Definition between (pstk : pointer)  (sz : Z) (p : pointer) (s : wsize) : bool :=
+  ((wunsigned pstk <=? wunsigned p) && (wunsigned p + wsize_size s <=? wunsigned pstk + sz))%Z.
 
-(*
+Lemma between_leb pstk sz p s pstk' sz' :
+  ((wunsigned pstk' <=? wunsigned pstk) && (wunsigned pstk + sz <=? wunsigned pstk' + sz'))%Z ->
+  between pstk sz p s ->
+  between pstk' sz' p s.
+Proof.
+rewrite /between => /andP [] /ZleP a /ZleP b /andP [] /ZleP c /ZleP d.
+apply/andP; split; apply/ZleP; Psatz.lia.
+Qed.
+
 Section SPEC.
   Variables (m:mem) (sz:Z) (m':mem).
   Let pstk := top_stack m'.
  
   Record alloc_stack_spec : Prop := mkASS {
-    ass_mod      : (pstk + sz < wbase U64)%Z;
+    ass_mod      : (wunsigned pstk + sz < wbase Uptr)%Z;
     ass_read_old : forall p s, valid_pointer m p s -> read_mem m p s = read_mem m' p s;
     ass_valid    : forall p s, 
       valid_pointer m' p s = 
       valid_pointer m p s || (between pstk sz p s && is_align p s);
     ass_align    : forall ofs s, 
       (0 <= ofs /\ ofs + wsize_size s <= sz)%Z -> 
-      is_align (I64.add pstk (I64.repr ofs)) s = is_align (I64.repr ofs) s;
+      is_align (pstk + wrepr _ ofs) s = is_align (wrepr _ ofs) s;
     ass_fresh    : forall p s, valid_pointer m p s -> 
-      (I64.unsigned p + wsize_size s <= I64.unsigned pstk \/
-       I64.unsigned pstk + sz <= I64.unsigned p)%Z;
+      (wunsigned p + wsize_size s <= wunsigned pstk \/
+       wunsigned pstk + sz <= wunsigned p)%Z;
     ass_caller   : forall p, caller m' p = if p == pstk then Some (top_stack m) else caller m p;
     ass_size     : forall p, frame_size m' p = if p == pstk then Some sz else frame_size m p;
   }.
@@ -149,5 +165,4 @@ Parameter free_stackP : forall m sz,
   frame_size m (top_stack m) = Some sz -> 
   free_stack_spec m sz (free_stack m sz).
 
-*)
 End Memory.
