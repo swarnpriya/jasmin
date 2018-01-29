@@ -341,6 +341,21 @@ Definition wrepr s (z: Z) : word s :=
 Lemma wrepr_unsigned s (w: word s) : wrepr s (wunsigned w) = w.
 Proof. by rewrite /wrepr /wunsigned ureprK. Qed.
 
+Lemma wunsigned_range sz (p: word sz) :
+  0 <= wunsigned p < wbase sz.
+Proof. by have /iswordZP := isword_word p. Qed.
+
+Lemma wunsigned_add sz (p: word sz) (n: Z) :
+  0 <= wunsigned p + n < wbase sz →
+  wunsigned (p + wrepr sz n) = wunsigned p + n.
+Proof.
+case: p => p i h.
+change (toword (add_word (mkWord i) (wrepr sz n)) = p + n).
+rewrite/add_word mkwordK/= /urepr/=.
+rewrite Zplus_mod_idemp_r.
+exact: Zmod_small.
+Qed.
+
 Axiom wlt_irrefl : ∀ sz sg (w: word sz), wlt sg w w = false.
 Axiom wle_refl : ∀ sz sg (w: word sz), wle sg w w = true.
 
