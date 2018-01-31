@@ -223,7 +223,6 @@ Module CBEA.
     sem_pexpr gd {|emem := m1; evm:= vm1|} e1 = ok v1 ->
     exists v2, sem_pexpr gd {|emem := m1; evm:= vm2 |} e2 = ok v2 /\ value_uincl v1 v2.
   Proof.
-    Print pexpr.
     move=> Hrn; elim: e1 e2 v1 =>
      [ z1 | b1 | sw1 e1 He1 | x1 | g1 | x1 e1 He1 | sw1 x1 e1 He1 | o1 e1 He1 | o1 e11 He11 e12 He12 | e He e11 He11 e12 He12]
      [ z2 | b2 | sw2 e2 | x2 | g2 | x2 e2 | sw2 x2 e2 | o2 e2 | o2 e21 e22 | e' e21 e22] //= v1.
