@@ -104,7 +104,7 @@ Module S.
   | EcallRun m1 m2 fn sf vargs s1 s2 m2' vm2 vres m1':
     get_fundef P fn = Some sf ->
     alloc_stack m1 (sf_stk_sz sf) = ok m1' ->
-    write_var  (vstk (sf_stk_id sf)) (Vword (top_stack m1')) (Estate m2' vmap0) = ok s1 ->
+    write_var  (vstk (sf_stk_id sf)) (Vword (top_stack m1')) (Estate m1' vmap0) = ok s1 ->
     write_vars (sf_params sf) vargs s1 = ok s2 ->
     sem s2 (sf_body sf) {| emem := m2'; evm := vm2 |} ->
     mapM (fun (x:var_i) => get_var vm2 x) sf.(sf_res) = ok vres ->

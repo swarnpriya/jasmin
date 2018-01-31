@@ -28,7 +28,7 @@
 (* ** Imports and settings *)
 Require Import Setoid Morphisms.
 
-From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import all_ssreflect all_algebra.
 Require Import ZArith Utf8. 
         Import Relations.
 
@@ -396,56 +396,34 @@ Proof.
   rewrite /sem_pexprs /= Hw1 /= Hw2 /=; eexists; eexists; eauto.
 Qed.
 
-Lemma sem_op1_w_dec gd v s e f:
+Lemma sem_op1_w_dec gd sz v s e f:
   Let v1 := sem_pexpr gd s e in sem_op1_w f v1 = ok v ->
-  exists z, Vword (f z) = v /\ sem_pexpr gd s e = ok (Vword z).
+  exists sz' (z: word sz'), Vword (f (zero_extend sz z)) = v /\ sem_pexpr gd s e = ok (Vword z).
 Proof.
   t_xrbindP=> v1 Hv1; rewrite /sem_op1_w /mk_sem_sop1.
   t_xrbindP=> z1 Hz1 Hv.
   move: v1 Hv1 Hz1=> [] //; last by move=> [].
-  move=> w1 Hw1 []Hz1; subst w1; eauto.
+  move=> sz1 w1 Hw1 []Hz1; subst z1; eauto.
 Qed.
 
-Lemma of_val_same_type v1 v2 y:
-  of_val (type_of_val v1) v2 = ok y ->
-  type_of_val v1 = type_of_val v2.
-Proof.
-  move: v1 y=> [b|z|n a|w|[]] /= y; move: v2=> [b2|z2|n2 a2|w2|[]] //=.
-  + case: (CEDecStype.pos_dec _ _)=> [H _|//]; by rewrite H.
-  + by move=> p; case: (n == p).
-  + move=> a.
-    case: (CEDecStype.pos_dec _ _)=> [H _|//]; by rewrite H.
-  + move=> p ?; by case: (_ == _).
-Qed.
-
-Lemma snot_spec gd s e v:
-  sem_pexpr gd s e = ok v ->
-  type_of_val v = sbool ->
+Lemma snot_spec gd s e b :
+  sem_pexpr gd s e = ok (Vbool b) →
   sem_pexpr gd s (snot e) = sem_pexpr gd s (Papp1 Onot e).
 Proof.
-  elim: e v=> //.
-  + move=> [] // e He v /sem_op1_b_dec /= [z [<- ->]] /= _.
-    by move: z=> [].
-  + move=> [] // e1 He1 e2 He2 v /sem_op2_b_dec /= [z1 [z2 [Hz [Hz1 Hz2]]]] _.
-    + rewrite (He1 _ Hz1) // (He2 _ Hz2) //= Hz1 Hz2 /=.
-      rewrite /sem_op2_b /sem_op1_b /mk_sem_sop2 /mk_sem_sop1 /=.
-      by rewrite negb_and.
-    + rewrite (He1 _ Hz1) // (He2 _ Hz2) //= Hz1 Hz2 /=.
-      rewrite /sem_op2_b /sem_op1_b /mk_sem_sop2 /mk_sem_sop1 /=.
-      by rewrite negb_or.
-  + move=> e _ e1 He1 e2 He2 v /=.
-    t_xrbindP=> b bv Hbv Hb b1 Hb1 b2 Hb2 y1 Hy1 y2 Hy2 <- Hv.
-    rewrite Hbv /= Hb /=.
-    have Ht := of_val_same_type Hy2.
-    have H1: type_of_val b1 = sbool.
-      by move: b Hb Hv=> [] // _ <-.
-    have H2: type_of_val b2 = sbool.
-      by move: b Hb Hv=> [] // _ <-.
-    rewrite (He1 _ Hb1) //= (He2 _ Hb2) //= Hb1 /= Hb2 /=.
-    rewrite Hy2 /= Hy1 /=.
-    rewrite H1 /= in y1, Hy1, y2, Hy2.
-    rewrite /sem_op1_b /mk_sem_sop1 /= Hy1 Hy2 /=.
-    by case: (b); rewrite ?Hy1 // Hy2.
+elim: e b => //.
+- by case => // e _ b /sem_op1_b_dec [b'] [] [?]; subst b => /= -> /=; rewrite /sem_op1_b /mk_sem_sop1/= negbK.
+- by case => // e1 He1 e2 He2 b /sem_op2_b_dec [b1] [b2] [] [?] [h1 h2]; subst b;
+  rewrite /= (He1 _ h1) (He2 _ h2) /= h1 h2;
+  apply: (f_equal (@Ok _ _)); rewrite ?negb_and ?negb_or.
+move => p hp e1 he1 e2 he2 b /=.
+t_xrbindP => bp vp -> /= -> v1 h1 v2 h2 k1 hk1 k2 hk2 hb /=.
+have hty : type_of_val v1 = sbool.
+- case: bp hb => ?; subst => //.
+  by case: v1 {h1 k1 hk1} k2 hk2 => //= -[].
+case: v1 hty h1 k1 hk1 k2 hk2 hb => // [ | [] // ] /=.
+move => b' _ h1 k1 [?] k2 /to_bool_inv ? hb; subst k1 v2.
+rewrite (he1 _ h1) (he2 _ h2) /= h1 h2 /=.
+by case: bp {hb}.
 Qed.
 
 Section PROOF.
