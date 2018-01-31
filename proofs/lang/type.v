@@ -244,6 +244,10 @@ Module CEDecStype.
 
 End CEDecStype.
 
+Lemma pos_dec_n_n n: CEDecStype.pos_dec n n = left (erefl n).
+Proof. by elim: n=> // p0 /= ->. Qed.
+
+
 Module Mt := DMmake CmpStype CEDecStype.
 
 Delimit Scope mtype_scope with mt.

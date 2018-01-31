@@ -753,9 +753,6 @@ Section PROOF.
   exact: valid_var_stk Hv Hm' Hget.
   Qed.
 
-  Lemma pos_dec_n_n n: CEDecStype.pos_dec n n = left (erefl n).
-  Proof. by elim: n=> // p0 /= ->. Qed.
-
   Lemma valid_stk_arr_arr_stk s1 s2 n n' sz xn sz' xn' ofsx ofsx' m' v0 i (a: Array.array n (word sz)) t:
     let x := {| vtype := sarr sz n; vname := xn |} in
     Mvar.get m.1 x = Some ofsx ->
