@@ -976,6 +976,13 @@ Proof. by case e=> *;constructor. Qed.
 Lemma is_constP e : is_reflect Pconst e (is_const e).
 Proof. by case: e=>*;constructor. Qed.
 
+Lemma is_reflect_some_inv {A P e a} (H: @is_reflect A P e (Some a)) : e = P a.
+Proof.
+  set (d e m := match m with None => True | Some a => e = P a end).
+  change (d e (Some a)).
+  case H; simpl; auto.
+Qed.
+
 (*
 Lemma is_wconstP sz e : is_reflect (@wconst sz) e (is_wconst sz e).
 Proof.
