@@ -54,6 +54,13 @@ Variant signedness :=
   | Signed
   | Unsigned.
 
+Notation sword8   := (sword U8).
+Notation sword16  := (sword U16).
+Notation sword32  := (sword U32).
+Notation sword64  := (sword U64).
+Notation sword128 := (sword U128).
+Notation sword256 := (sword U256).
+
 (* -------------------------------------------------------------------- *)
 Scheme Equality for wsize. 
 
