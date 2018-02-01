@@ -548,6 +548,69 @@ Proof.
   by have := is_constP e; rewrite h => {h} h; inversion h => {h}; subst.
 Qed.
 
+Lemma sem_op1_b_dec gd v s e f:
+  Let v1 := sem_pexpr gd s e in sem_op1_b f v1 = ok v ->
+  exists z, Vbool (f z) = v /\ sem_pexpr gd s e = ok (Vbool z).
+Proof.
+  rewrite /sem_op1_b /mk_sem_sop1.
+  t_xrbindP=> -[] //.
+  + by move=> b -> b1 []<- <-; exists b; split.
+  + by move=> [] //.
+Qed.
+
+Lemma sem_op2_b_dec gd v s e1 e2 f:
+  Let v1 := sem_pexpr gd s e1 in (Let v2 := sem_pexpr gd s e2 in sem_op2_b f v1 v2) = ok v ->
+  exists z1 z2, Vbool (f z1 z2) = v /\ sem_pexpr gd s e1 = ok (Vbool z1) /\ sem_pexpr gd s e2 = ok (Vbool z2).
+Proof.
+  t_xrbindP=> v1 Hv1 v2 Hv2; rewrite /sem_op2_b /mk_sem_sop2.
+  t_xrbindP=> z1 Hz1 z2 Hz2 Hv.
+  move: v1 Hv1 Hz1=> [] //; last by move=> [].
+  move=> w1 Hw1 []Hz1; subst w1.
+  move: v2 Hv2 Hz2=> [] //; last by move=> [].
+  move=> w2 Hw2 []Hz1; subst w2.
+  rewrite /sem_pexprs /= Hw1 /= Hw2 /=; eexists; eexists; eauto.
+Qed.
+
+Lemma sem_op1_w_dec gd sz v s e f:
+  Let v1 := sem_pexpr gd s e in sem_op1_w f v1 = ok v ->
+  exists sz' (z: word sz'), Vword (f (zero_extend sz z)) = v /\ sem_pexpr gd s e = ok (Vword z).
+Proof.
+  t_xrbindP=> v1 Hv1; rewrite /sem_op1_w /mk_sem_sop1.
+  t_xrbindP=> z1 Hz1 Hv.
+  move: v1 Hv1 Hz1=> [] //; last by move=> [].
+  move=> sz1 w1 Hw1 []Hz1; subst z1; eauto.
+Qed.
+
+Lemma sem_op2_w_dec gd sz v e1 e2 s (f: word sz → word sz → _):
+  Let v1 := sem_pexpr gd s e1 in (Let v2 := sem_pexpr gd s e2 in sem_op2_w f v1 v2) = ok v ->
+  ∃ sz1 (z1: word sz1) sz2 (z2: word sz2),
+    Vword (f (zero_extend _ z1) (zero_extend _ z2)) = v
+    ∧ sem_pexprs gd s [:: e1; e2] = ok [:: Vword z1; Vword z2].
+Proof.
+  rewrite /sem_op2_w /mk_sem_sop2.
+  t_xrbindP=> v1 Hv1 v2 Hv2 z1 Hz1 z2 Hz2 Hv.
+  move: v1 Hv1 Hz1=> [] //; last by case.
+  move=> sz1 w1 Hw1 []Hz1; subst z1.
+  move: v2 Hv2 Hz2=> [] //; last by case.
+  move=> sz2 w2 Hw2 []Hz1; subst z2.
+  rewrite /sem_pexprs /= Hw1 /= Hw2 /=; eexists; eexists; eauto.
+Qed.
+
+Lemma sem_op2_wb_dec gd sz v e1 e2 s f:
+  Let v1 := sem_pexpr gd s e1 in (Let v2 := sem_pexpr gd s e2 in sem_op2_wb f v1 v2) = ok v ->
+  ∃ sz1 (z1: word sz1) sz2 (z2: word sz2),
+    Vbool (f (zero_extend sz z1) (zero_extend sz z2)) = v
+    ∧ sem_pexprs gd s [:: e1; e2] = ok [:: Vword z1; Vword z2].
+Proof.
+  rewrite /sem_op2_wb /mk_sem_sop2.
+  t_xrbindP=> v1 Hv1 v2 Hv2 z1 Hz1 z2 Hz2 Hv.
+  move: v1 Hv1 Hz1=> [] //; last by move=> [].
+  move=> sz1 w1 Hw1 []Hz1; subst z1.
+  move: v2 Hv2 Hz2=> [] //; last by move=> [].
+  move=> sz2 w2 Hw2 []Hz1; subst z2.
+  rewrite /sem_pexprs /= Hw1 /= Hw2 /=; eexists; eexists; eauto.
+Qed.
+
 Fixpoint app_sopn ts : sem_prod ts (exec values) -> values -> exec values :=
   match ts return sem_prod ts (exec values) -> values -> exec values with
   | [::] => fun (o:exec values) (vs:values) =>

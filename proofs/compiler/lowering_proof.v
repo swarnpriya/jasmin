@@ -26,7 +26,7 @@
 (* * Correctness proof of the lowering pass *)
 
 (* ** Imports and settings *)
-From mathcomp Require Import all_ssreflect.
+From mathcomp Require Import all_ssreflect all_algebra.
 Require Import ZArith sem compiler_util.
 Require Export lowering.
 Import Utf8.
@@ -184,65 +184,6 @@ Section PROOF.
   Local Lemma HmkI ii i s1 s2 :
     sem_i p gd s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
   Proof. move=> _ Hi; exact: Hi. Qed.
-
-  Lemma sem_op2_w_dec v e1 e2 s f:
-    Let v1 := sem_pexpr gd s e1 in (Let v2 := sem_pexpr gd s e2 in sem_op2_w f v1 v2) = ok v ->
-    exists z1 z2, Vword (f z1 z2) = v /\ sem_pexprs gd s [:: e1; e2] = ok [:: Vword z1; Vword z2].
-  Proof.
-    t_xrbindP=> v1 Hv1 v2 Hv2; rewrite /sem_op2_w /mk_sem_sop2.
-    t_xrbindP=> z1 Hz1 z2 Hz2 Hv.
-    move: v1 Hv1 Hz1=> [] //; last by move=> [].
-    move=> w1 Hw1 []Hz1; subst w1.
-    move: v2 Hv2 Hz2=> [] //; last by move=> [].
-    move=> w2 Hw2 []Hz1; subst w2.
-    rewrite /sem_pexprs /= Hw1 /= Hw2 /=; eexists; eexists; eauto.
-  Qed.
-
-  Lemma sem_op2_wb_dec v e1 e2 s f:
-    Let v1 := sem_pexpr gd s e1 in (Let v2 := sem_pexpr gd s e2 in sem_op2_wb f v1 v2) = ok v ->
-    exists z1 z2, Vbool (f z1 z2) = v /\ sem_pexprs gd s [:: e1; e2] = ok [:: Vword z1; Vword z2].
-  Proof.
-    t_xrbindP=> v1 Hv1 v2 Hv2; rewrite /sem_op2_wb /mk_sem_sop2.
-    t_xrbindP=> z1 Hz1 z2 Hz2 Hv.
-    move: v1 Hv1 Hz1=> [] //; last by move=> [].
-    move=> w1 Hw1 []Hz1; subst w1.
-    move: v2 Hv2 Hz2=> [] //; last by move=> [].
-    move=> w2 Hw2 []Hz1; subst w2.
-    rewrite /sem_pexprs /= Hw1 /= Hw2 /=; eexists; eexists; eauto.
-  Qed.
-
-  Lemma sem_op1_b_dec v s e f:
-    Let v1 := sem_pexpr gd s e in sem_op1_b f v1 = ok v ->
-    exists z, Vbool (f z) = v /\ sem_pexpr gd s e = ok (Vbool z).
-  Proof.
-   rewrite /sem_op1_b /mk_sem_sop1.
-   t_xrbindP=> -[] //.
-    + by move=> b -> b1 []<- <-; exists b; split.
-    + by move=> [] //.
-  Qed.
-
-  Lemma sem_op2_b_dec v s e1 e2 f:
-    Let v1 := sem_pexpr gd s e1 in (Let v2 := sem_pexpr gd s e2 in sem_op2_b f v1 v2) = ok v ->
-    exists z1 z2, Vbool (f z1 z2) = v /\ sem_pexpr gd s e1 = ok (Vbool z1) /\ sem_pexpr gd s e2 = ok (Vbool z2).
-  Proof.
-    t_xrbindP=> v1 Hv1 v2 Hv2; rewrite /sem_op2_b /mk_sem_sop2.
-    t_xrbindP=> z1 Hz1 z2 Hz2 Hv.
-    move: v1 Hv1 Hz1=> [] //; last by move=> [].
-    move=> w1 Hw1 []Hz1; subst w1.
-    move: v2 Hv2 Hz2=> [] //; last by move=> [].
-    move=> w2 Hw2 []Hz1; subst w2.
-    rewrite /sem_pexprs /= Hw1 /= Hw2 /=; eexists; eexists; eauto.
-  Qed.
-
-  Lemma sem_op1_w_dec v s e f:
-    Let v1 := sem_pexpr gd s e in sem_op1_w f v1 = ok v ->
-    exists z, Vword (f z) = v /\ sem_pexpr gd s e = ok (Vword z).
-  Proof.
-    t_xrbindP=> v1 Hv1; rewrite /sem_op1_w /mk_sem_sop1.
-    t_xrbindP=> z1 Hz1 Hv.
-    move: v1 Hv1 Hz1=> [] //; last by move=> [].
-    move=> w1 Hw1 []Hz1; subst w1; eauto.
-  Qed.
 
   Lemma write_lval_undef l v s1 s2:
     write_lval gd l v s1 = ok s2 ->
