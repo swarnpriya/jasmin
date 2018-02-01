@@ -39,6 +39,18 @@ Local Open Scope vmap_scope.
 
 Local Notation cpm := (Mvar.t const_v).
 
+Lemma opp_zero_extend sz sz' (w: word sz') :
+  wsize_cmp sz' sz ≠ Lt →
+  (- zero_extend sz w)%R = zero_extend sz (- w).
+Proof.
+Admitted.
+
+Lemma wnot_zero_extend sz sz' (w: word sz') :
+  wsize_cmp sz' sz ≠ Lt →
+  wnot (zero_extend sz w) = zero_extend sz (wnot w).
+Proof.
+Admitted.
+
 (* ** proofs
  * -------------------------------------------------------------------- *)
 
@@ -61,6 +73,16 @@ Proof. by move=> ???. Qed.
 
 Hint Resolve eeq_refl.
 
+Lemma to_word_extend sz sz' v w :
+  wsize_cmp sz' sz ≠ Lt →
+  to_word sz' v = ok w →
+  to_word sz v = ok (zero_extend sz w).
+Proof.
+move => hlt.
+case: v => //= [ sz'' w'' | [] // ] [<-] {w}.
+by rewrite {3} /zero_extend zero_extend_wrepr.
+Qed.
+
 Lemma sem_zeroext_zeroext sz sz' z1 z2 z3 :
   wsize_cmp sz' sz ≠ Lt →
   sem_zeroext sz' z1 = ok z2 →
@@ -80,8 +102,15 @@ rewrite /szeroext; case: e => //=.
 - case => //=.
   + move => sz' e'; case: eqP => // hlt s v /=; t_xrbindP => ? ? -> /=.
     exact: sem_zeroext_zeroext.
-  move => sz' e'; case: eqP => // hlt s v /=; t_xrbindP => ? [] // => [? ? | [] //] -> [<-] [<-] /=.
-  rewrite /= /sem_op1_w /mk_sem_sop1 /=; f_equal.
+  + move => sz' e'; case: eqP => // hlt s v /=; t_xrbindP => ? w' ->.
+    rewrite /sem_op1_w /mk_sem_sop1 /=; t_xrbindP => w hw ?; subst => [<-] /=.
+    by rewrite (to_word_extend hlt hw) /= (wnot_zero_extend _ hlt).
+  case => // sz' e'; case: eqP => // hlt s v /=; t_xrbindP => ? w' -> /=.
+  rewrite /sem_op1_w /mk_sem_sop1 /=; t_xrbindP => w hw ?; subst => [<-] /=.
+  by rewrite (to_word_extend hlt hw) /= (opp_zero_extend _ hlt).
+case => //=.
+- case => // sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+  rewrite /sem_op2_w /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
 Admitted.
 
 Lemma snot_boolP e : Papp1 Onot e =E snot_bool e.
