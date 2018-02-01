@@ -359,12 +359,16 @@ Qed.
 Axiom wlt_irrefl : ∀ sz sg (w: word sz), wlt sg w w = false.
 Axiom wle_refl : ∀ sz sg (w: word sz), wle sg w w = true.
 
-Definition u8   := word U8.
-Definition u16  := word U16.
-Definition u32  := word U32.
-Definition u64  := word U64.
-Definition u128 := word U128.
-Definition u256 := word U256.
+Parameter wmax_unsigned : wsize -> Z.
+Parameter wmin_signed   : wsize -> Z.
+Parameter wmax_signed   : wsize -> Z.
+
+Notation u8   := (word U8).
+Notation u16  := (word U16).
+Notation u32  := (word U32).
+Notation u64  := (word U64).
+Notation u128 := (word U128).
+Notation u256 := (word U256).
 
 Definition x86_shift_mask (s:wsize) : u8 :=
   match s with 
@@ -397,12 +401,20 @@ Definition wumul sz (x y: word sz) :=
 Definition zero_extend sz sz' (w: word sz') : word sz :=
   wrepr sz (wunsigned w).
 
+Definition wbit sz (w i: word sz) : bool :=
+  wbit w (Z.to_nat (wunsigned i mod wsize_bits sz)).
+
+Definition wror sz (w:word sz) (z:Z) := 
+  let i := z mod wsize_bits sz in
+  wor (wshr w i) (wshl w (wsize_bits sz - i)).
+
+Definition wrol sz (w:word sz) (z:Z) := 
+  let i := z mod wsize_bits sz in
+  wor (wshl w i) (wshr w (wsize_bits sz - i)).
+
 (* -------------------------------------------------------------------*)
 
 (*
-Definition x86_shift_mask : word :=
-  (* FIXME *)
-  I64.mone.
 
 Definition b_to_w (b:bool) := if b then I64.one else I64.zero.
 
