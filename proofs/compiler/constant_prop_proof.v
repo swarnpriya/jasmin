@@ -61,13 +61,6 @@ Proof. by move=> ???. Qed.
 
 Hint Resolve eeq_refl.
 
-(* TODO: move to word *)
-Lemma zero_extend_wrepr sz sz' z :
-  wsize_cmp sz' sz ≠ Lt →
-  zero_extend sz (wrepr sz' z) = wrepr sz z.
-Proof.
-Admitted.
-
 Lemma sem_zeroext_zeroext sz sz' z1 z2 z3 :
   wsize_cmp sz' sz ≠ Lt →
   sem_zeroext sz' z1 = ok z2 →

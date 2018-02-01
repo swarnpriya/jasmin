@@ -29,7 +29,7 @@
 
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import xword.
-Require Import ZArith utils type.
+Require Import Psatz ZArith utils type.
 Import Utf8.
 
 Set Implicit Arguments.
@@ -411,6 +411,47 @@ Definition wror sz (w:word sz) (z:Z) :=
 Definition wrol sz (w:word sz) (z:Z) := 
   let i := z mod wsize_bits sz in
   wor (wshl w i) (wshr w (wsize_bits sz - i)).
+
+Lemma wsize_cmpP sz sz' :
+  wsize_cmp sz sz' = Nat.compare (wsize_size_minus_1 sz) (wsize_size_minus_1 sz').
+Proof. by case: sz sz' => -[]; vm_compute. Qed.
+
+Ltac elim_div :=
+   unfold Zdiv, Zmod;
+     match goal with
+       |  H : context[ Zdiv_eucl ?X ?Y ] |-  _ =>
+          generalize (Z_div_mod_full X Y) ; destruct (Zdiv_eucl X Y)
+       |  |-  context[ Zdiv_eucl ?X ?Y ] =>
+          generalize (Z_div_mod_full X Y) ; destruct (Zdiv_eucl X Y)
+     end; unfold Remainder.
+
+Lemma mod_pq_mod_q x p q :
+  0 < p → 0 < q →
+  (x mod (p * q)) mod q = x mod q.
+Proof.
+move => hzp hzq.
+have hq : q ≠ 0 by nia.
+have hpq : p * q ≠ 0 by nia.
+elim_div => /(_ hq); elim_div => /(_ hpq) => [] [?] hr1 [?] hr2; subst.
+elim_div => /(_ hq) [heq hr3].
+intuition (try nia).
+suff : p * z1 + z = z2; nia.
+Qed.
+
+Lemma zero_extend_wrepr sz sz' z :
+  wsize_cmp sz' sz ≠ Lt →
+  zero_extend sz (wrepr sz' z) = wrepr sz z.
+Proof.
+rewrite wsize_cmpP Nat.compare_ge_iff => hle.
+rewrite /zero_extend /wrepr /wunsigned /urepr.
+apply/val_eqP/eqP => /=.
+move: hle. set a := wsize_size_minus_1 sz; set b := wsize_size_minus_1 sz' => hle.
+have : ∃ n, modulus b.+1 = modulus n * modulus a.+1.
+- exists (b - a)%nat; rewrite /modulus !two_power_nat_equiv -Z.pow_add_r; try lia.
+  rewrite (Nat2Z.inj_sub _ _ hle); f_equal; lia.
+case => n -> {hle b}.
+exact: mod_pq_mod_q.
+Qed.
 
 (* -------------------------------------------------------------------*)
 
