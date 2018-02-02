@@ -1,3 +1,4 @@
+From mathcomp Require Import all_ssreflect all_algebra.
 Require Import x86_variables.
 Import Utf8.
 Import all_ssreflect.
@@ -48,7 +49,7 @@ Definition eqflags (m: estate) (rf: rflagmap) : Prop :=
 Variant lom_eqv (m : estate) (lom : x86_mem) :=
   | MEqv of
          emem m = xmem lom
-    & (∀ r v, get_var (evm m) (var_of_register r) = ok v → value_uincl v (xreg lom r))
+    & (∀ r v, get_var (evm m) (var_of_register r) = ok v → value_uincl v (Vword (xreg lom r)))
     & eqflags m (xrf lom).
 
 (* -------------------------------------------------------------------- *)
@@ -64,10 +65,10 @@ Lemma xgetreg_ex ii x r v s xs :
   lom_eqv s xs →
   reg_of_var ii x = ok r →
   get_var s.(evm) x = ok v →
-  value_uincl v (xs.(xreg) r).
+  value_uincl v (Vword (xs.(xreg) r)).
 Proof.
 move: (@var_of_register_of_var x).
-move => h [_ eqv _]; case: x h => -[] //= x.
+move => h [_ eqv _]; case: x h => -[] //= [] // x.
 rewrite /register_of_var /=.
 case: reg_of_string => [vx|] // /(_ _ erefl) <- {x} [<-] ok_v.
 exact: eqv.
@@ -77,10 +78,11 @@ Corollary xgetreg ii x r v s xs w :
   lom_eqv s xs →
   reg_of_var ii x = ok r →
   get_var s.(evm) x = ok v →
-  to_word v = ok w →
+  to_word U64 v = ok w →
   xreg xs r = w.
 Proof.
-by move => eqm hx hv hw; move: (xgetreg_ex eqm hx hv) => /value_uincl_word -/(_ _ hw) [] _ [].
+  move => eqm hx hv hw; move: (xgetreg_ex eqm hx hv) => /value_uincl_word -/(_ _ _ hw) [].
+  by rewrite zero_extend_u64. 
 Qed.
 
 (* -------------------------------------------------------------------- *)
@@ -245,39 +247,42 @@ move=> eqv; case: e => //.
 Qed.
 
 (* -------------------------------------------------------------------- *)
-Definition sem_ofs m o : exec word :=
+Definition sem_ofs m o : exec u64 :=
   match o with
-  | Ofs_const z => ok (I64.repr z)
-  | Ofs_var x => get_var (evm m) x >>= to_word
+  | Ofs_const z => ok (wrepr U64 z)
+  | Ofs_var x => get_var (evm m) x >>= to_word U64
   | Ofs_mul sc x =>
-    Let w := get_var (evm m) x >>= to_word in
-    ok (I64.mul (I64.repr sc) w)
+    Let w := get_var (evm m) x >>= to_word U64 in
+    ok ((wrepr U64 sc) * w)%R
   | Ofs_add sc x z =>
-    Let w := get_var (evm m) x >>= to_word in
-    ok (I64.add (I64.mul (I64.repr sc) w) (I64.repr z))
+    Let w := get_var (evm m) x >>= to_word U64 in
+    ok (wrepr U64 sc * w + wrepr U64 z)%R
   | Ofs_error => type_error
   end.
 
 Lemma addr_ofsP gd m e v w :
   sem_pexpr gd m e = ok v →
-  to_word v = ok w →
+  to_word U64 v = ok w →
   let ofs := addr_ofs e in
   (if ofs is Ofs_error then false else true) →
   sem_ofs m ofs = ok w.
 Proof.
 elim: e v w => //=.
 - (* Cast Const *)
-  by case => // z ih v w ; t_xrbindP => ? ? [<-] [<-] <- [<-].
+  case => // -[] // z ih v w ; t_xrbindP => ? ? [<-] [<-] <- [<-].
+  by rewrite zero_extend_u64.
 - (* Pvar *)
   by move => x z w ->.
 - (* Papp2 *)
   case => // -[] //.
   (* Add *)
-  + move => p ihp q ihq v w ; t_xrbindP => vp hvp vq hvq hv hw.
+  + move => [] // p ihp q ihq v w ; t_xrbindP => vp hvp vq hvq hv hw.
     case: (addr_ofs p) ihp => //; case: (addr_ofs q) ihq => //.
     * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
       move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl) [<-] {wq} ?; subst v.
       case: hw => <-; f_equal.
+      rewrite zero_extend_u64.
+Search wrepr.
       by rewrite -iword_addP /iword_add repr_mod.
     * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
       move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
