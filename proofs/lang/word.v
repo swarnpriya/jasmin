@@ -478,3 +478,13 @@ Definition lsb (w : word) := (I64.and w I64.one) != I64.zero.
 (* -------------------------------------------------------------------*)
 Definition check_scale (s:Z) :=
   (s == 1%Z) || (s == 2%Z) || (s == 4%Z) || (s == 8%Z).
+
+Lemma zero_extend_u sz (w:word sz) : zero_extend sz w = w.
+Proof. by rewrite /zero_extend wrepr_unsigned. Qed.
+
+Lemma zero_extend_wrepr sz sz' z :
+  wsize_cmp sz' sz ≠ Lt →
+  zero_extend sz (wrepr sz' z) = wrepr sz z.
+Proof.
+  rewrite /zero_extend.
+Admitted.
