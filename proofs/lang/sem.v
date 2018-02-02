@@ -132,7 +132,7 @@ Variant value : Type :=
   | Vbool  :> bool -> value
   | Vint   :> Z    -> value
   | Varr   : forall s n, Array.array n (word s) -> value
-  | Vword  :> forall s, word s -> value
+  | Vword  : forall s, word s -> value
   | Vundef : stype -> value.
 
 Definition undef_b := Vundef sbool.

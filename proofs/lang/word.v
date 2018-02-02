@@ -29,6 +29,7 @@
 
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import xword.
+Require Export ssrring.
 Require Import Psatz ZArith utils type.
 Import Utf8.
 
@@ -378,8 +379,11 @@ Definition x86_shift_mask (s:wsize) : u8 :=
   | U256 => wrepr U8 255
   end%Z.
 
-Definition lsb {s} (w: word s) : bool := wbit w 0.
-Definition msb {s} (w: word s) : bool := wbit w (wsize_size_minus_1 s).
+Definition wbit_n sz (w:word sz) (n:nat) : bool := 
+   wbit (wunsigned w) n.
+
+Definition lsb {s} (w: word s) : bool := wbit_n w 0.
+Definition msb {s} (w: word s) : bool := wbit_n w (wsize_size_minus_1 s).
 
 Parameters wdwordu wdwords : ∀ s, word s → word s → Z.
 
@@ -402,7 +406,7 @@ Definition zero_extend sz sz' (w: word sz') : word sz :=
   wrepr sz (wunsigned w).
 
 Definition wbit sz (w i: word sz) : bool :=
-  wbit w (Z.to_nat (wunsigned i mod wsize_bits sz)).
+  wbit_n w (Z.to_nat (wunsigned i mod wsize_bits sz)).
 
 Definition wror sz (w:word sz) (z:Z) := 
   let i := z mod wsize_bits sz in
@@ -412,9 +416,15 @@ Definition wrol sz (w:word sz) (z:Z) :=
   let i := z mod wsize_bits sz in
   wor (wshl w i) (wshr w (wsize_bits sz - i)).
 
+(* -------------------------------------------------------------------*)
+
 Lemma wsize_cmpP sz sz' :
   wsize_cmp sz sz' = Nat.compare (wsize_size_minus_1 sz) (wsize_size_minus_1 sz').
 Proof. by case: sz sz' => -[]; vm_compute. Qed.
+
+Lemma zero_extend_u sz (w:word sz) : zero_extend sz w = w.
+Proof. by rewrite /zero_extend wrepr_unsigned. Qed.
+
 
 Ltac elim_div :=
    unfold Zdiv, Zmod;
@@ -455,36 +465,12 @@ Qed.
 
 (* -------------------------------------------------------------------*)
 
-(*
-
-Definition b_to_w (b:bool) := if b then I64.one else I64.zero.
-
-Definition dwordu (hi lo : word) :=
-  (I64.unsigned hi * I64.modulus + I64.unsigned lo)%Z.
-
-Definition dwords (hi lo : word) :=
-  (I64.signed hi * I64.modulus + I64.unsigned lo)%Z.
-
-Definition wordbit (w : word) (i : nat) :=
-  I64.and (I64.shr w (I64.repr (Z.of_nat i))) I64.one != I64.zero.
-
-Definition word2bits (w : word) : seq bool :=
-  [seq wordbit w i | i <- iota 0 I64.wordsize].
-
-Definition msb (w : word) := (I64.signed w <? 0)%Z.
-Definition lsb (w : word) := (I64.and w I64.one) != I64.zero.
-*)
+Ltac wring := 
+  rewrite ?zero_extend_u; ssring. 
 
 (* -------------------------------------------------------------------*)
 Definition check_scale (s:Z) :=
   (s == 1%Z) || (s == 2%Z) || (s == 4%Z) || (s == 8%Z).
 
-Lemma zero_extend_u sz (w:word sz) : zero_extend sz w = w.
-Proof. by rewrite /zero_extend wrepr_unsigned. Qed.
 
-Lemma zero_extend_wrepr sz sz' z :
-  wsize_cmp sz' sz ≠ Lt →
-  zero_extend sz (wrepr sz' z) = wrepr sz z.
-Proof.
-  rewrite /zero_extend.
-Admitted.
+
