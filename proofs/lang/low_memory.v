@@ -37,8 +37,8 @@ Unset Printing Implicit Defensive.
 (* ** Memory
  * -------------------------------------------------------------------- *)
 
-Definition Uptr := U64.
-Definition pointer := word Uptr.
+Notation Uptr := U64 (only parsing).
+Notation pointer := (word Uptr) (only parsing).
 
 Module Memory.
 
