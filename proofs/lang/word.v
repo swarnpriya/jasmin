@@ -29,7 +29,7 @@
 
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import xword.
-Require Export ssrring.
+Require ssrring.
 Require Import Psatz ZArith utils type.
 Import Utf8.
 
@@ -466,7 +466,7 @@ Qed.
 (* -------------------------------------------------------------------*)
 
 Ltac wring := 
-  rewrite ?zero_extend_u; ssring. 
+  rewrite ?zero_extend_u; ssrring.ssring.
 
 (* -------------------------------------------------------------------*)
 Definition check_scale (s:Z) :=
