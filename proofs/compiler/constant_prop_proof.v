@@ -51,6 +51,60 @@ Lemma wnot_zero_extend sz sz' (w: word sz') :
 Proof.
 Admitted.
 
+Lemma wadd_zero_extend sz sz' (x y: word sz') :
+  wsize_cmp sz' sz ≠ Lt →
+  (zero_extend sz x + zero_extend sz y)%R = zero_extend sz (x + y)%R.
+Proof.
+Admitted.
+
+Lemma wsub_zero_extend sz sz' (x y: word sz') :
+  wsize_cmp sz' sz ≠ Lt →
+  (zero_extend sz x - zero_extend sz y)%R = zero_extend sz (x - y)%R.
+Proof.
+Admitted.
+
+Lemma wmul_zero_extend sz sz' (x y: word sz') :
+  wsize_cmp sz' sz ≠ Lt →
+  (zero_extend sz x * zero_extend sz y)%R = zero_extend sz (x * y)%R.
+Proof.
+Admitted.
+
+Lemma wand_zero_extend sz sz' (x y: word sz') :
+  wsize_cmp sz' sz ≠ Lt →
+  wand (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wand x y).
+Proof.
+Admitted.
+
+Lemma wor_zero_extend sz sz' (x y: word sz') :
+  wsize_cmp sz' sz ≠ Lt →
+  wor (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wor x y).
+Proof.
+Admitted.
+
+Lemma wxor_zero_extend sz sz' (x y: word sz') :
+  wsize_cmp sz' sz ≠ Lt →
+  wxor (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wxor x y).
+Proof.
+Admitted.
+
+Lemma wshr_zero_extend sz sz' (x: word sz') (y: u8) :
+  wsize_cmp sz' sz ≠ Lt →
+  sem_shr (zero_extend sz x) y = zero_extend sz (sem_shr x y).
+Proof.
+Admitted.
+
+Lemma wshl_zero_extend sz sz' (x: word sz') (y: u8) :
+  wsize_cmp sz' sz ≠ Lt →
+  sem_shl (zero_extend sz x) y = zero_extend sz (sem_shl x y).
+Proof.
+Admitted.
+
+Lemma wsar_zero_extend sz sz' (x: word sz') (y: u8) :
+  wsize_cmp sz' sz ≠ Lt →
+  sem_sar (zero_extend sz x) y = zero_extend sz (sem_sar x y).
+Proof.
+Admitted.
+
 (* ** proofs
  * -------------------------------------------------------------------- *)
 
@@ -111,7 +165,32 @@ rewrite /szeroext; case: e => //=.
 case => //=.
 - case => // sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
   rewrite /sem_op2_w /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
-Admitted.
+  by rewrite (to_word_extend hlt h) (to_word_extend hlt h') /= wadd_zero_extend.
+- case => // sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+  rewrite /sem_op2_w /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
+  by rewrite (to_word_extend hlt h) (to_word_extend hlt h') /= wmul_zero_extend.
+- case => // sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+  rewrite /sem_op2_w /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
+  by rewrite (to_word_extend hlt h) (to_word_extend hlt h') /= wsub_zero_extend.
+- move => sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+  rewrite /sem_op2_w /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
+  by rewrite (to_word_extend hlt h) (to_word_extend hlt h') /= wand_zero_extend.
+- move => sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+  rewrite /sem_op2_w /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
+  by rewrite (to_word_extend hlt h) (to_word_extend hlt h') /= wor_zero_extend.
+- move => sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+  rewrite /sem_op2_w /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
+  by rewrite (to_word_extend hlt h) (to_word_extend hlt h') /= wxor_zero_extend.
+- move => sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+  rewrite /sem_op2_w8 /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
+  by rewrite (to_word_extend hlt h) (to_word_extend _ h') //= zero_extend_u wshr_zero_extend.
+- move => sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+  rewrite /sem_op2_w8 /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
+  by rewrite (to_word_extend hlt h) (to_word_extend _ h') //= zero_extend_u wshl_zero_extend.
+move => sz' e1 e2; case: eqP => // hlt s v /=; t_xrbindP => ?? -> ? -> /=.
+rewrite /sem_op2_w8 /mk_sem_sop2 /=; t_xrbindP => ? h ? h' <- [<-].
+by rewrite (to_word_extend hlt h) (to_word_extend _ h') //= zero_extend_u wsar_zero_extend.
+Qed.
 
 Lemma snot_boolP e : Papp1 Onot e =E snot_bool e.
 Proof. 
