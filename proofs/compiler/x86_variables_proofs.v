@@ -82,7 +82,7 @@ Corollary xgetreg ii x r v s xs w :
   xreg xs r = w.
 Proof.
   move => eqm hx hv hw; move: (xgetreg_ex eqm hx hv) => /value_uincl_word -/(_ _ _ hw) [].
-  by rewrite zero_extend_u64. 
+  by rewrite zero_extend_u. 
 Qed.
 
 (* -------------------------------------------------------------------- *)
@@ -247,22 +247,22 @@ move=> eqv; case: e => //.
 Qed.
 
 (* -------------------------------------------------------------------- *)
-Definition sem_ofs m o : exec u64 :=
+Definition sem_ofs m o : exec pointer :=
   match o with
-  | Ofs_const z => ok (wrepr U64 z)
-  | Ofs_var x => get_var (evm m) x >>= to_word U64
+  | Ofs_const z => ok z
+  | Ofs_var x => get_var (evm m) x >>= to_pointer
   | Ofs_mul sc x =>
-    Let w := get_var (evm m) x >>= to_word U64 in
-    ok ((wrepr U64 sc) * w)%R
+    Let w := get_var (evm m) x >>= to_pointer in
+    ok (sc * w)%R
   | Ofs_add sc x z =>
-    Let w := get_var (evm m) x >>= to_word U64 in
-    ok (wrepr U64 sc * w + wrepr U64 z)%R
+    Let w := get_var (evm m) x >>= to_pointer in
+    ok (sc * w + z)%R
   | Ofs_error => type_error
   end.
-
+Import word.
 Lemma addr_ofsP gd m e v w :
   sem_pexpr gd m e = ok v →
-  to_word U64 v = ok w →
+  to_pointer v = ok w →
   let ofs := addr_ofs e in
   (if ofs is Ofs_error then false else true) →
   sem_ofs m ofs = ok w.
@@ -270,7 +270,7 @@ Proof.
 elim: e v w => //=.
 - (* Cast Const *)
   case => // -[] // z ih v w ; t_xrbindP => ? ? [<-] [<-] <- [<-].
-  by rewrite zero_extend_u64.
+  by rewrite zero_extend_u.
 - (* Pvar *)
   by move => x z w ->.
 - (* Papp2 *)
@@ -279,61 +279,55 @@ elim: e v w => //=.
   + move => [] // p ihp q ihq v w ; t_xrbindP => vp hvp vq hvq hv hw.
     case: (addr_ofs p) ihp => //; case: (addr_ofs q) ihq => //.
     * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
-      move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl) [<-] {wq} ?; subst v.
-      case: hw => <-; f_equal.
-      rewrite zero_extend_u64.
-Search wrepr.
-      by rewrite -iword_addP /iword_add repr_mod.
+      move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => 
+        wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl) [<-] {wq} ?; subst v.
+      by case: hw => <-; rewrite zero_extend_u.
     * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
       move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
-      t_xrbindP => vz -> /= -> /= ?; subst v; f_equal.
-      rewrite I64.mul_commut I64.mul_one I64.add_commut.
-      by case: hw.
+      t_xrbindP => vz -> /= -> /= ?; subst v.
+      case: hw => <-;f_equal;wring.
     * move => /= x z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _.
       move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
-      by t_xrbindP => ? ? -> /= -> <- /= <-; rewrite I64.add_commut.
+      by t_xrbindP => ? ? -> /= -> <- /= <- [<-];f_equal; wring.
     * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
       move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
-      by t_xrbindP => vz' -> /= -> wq /hz /(_ erefl) [<-] {wq} <- [<-] /=; rewrite I64.mul_commut I64.mul_one.
-    * move => /= z /(_ _ _ hvq) hz x z' /(_ _ _ hvp) hz' _ /=.
-      move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
-      by t_xrbindP => y vz' -> /= -> /= <- ? /hz /(_ erefl) [<-] <-.
+      by t_xrbindP => vz' -> /= -> wq /hz /(_ erefl) [<-] {wq} <- [<-] /=;f_equal;wring.
+    move => /= z /(_ _ _ hvq) hz x z' /(_ _ _ hvp) hz' _ /=.
+    move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
+    by t_xrbindP => y vz' -> /= -> /= <- ? /hz /(_ erefl) [<-] <- [<-];rewrite zero_extend_u.
   (* Mul *)
-  move => p ihp q ihq v w ; t_xrbindP => vp hvp vq hvq hv hw.
+  move => [] // p ihp q ihq v w ; t_xrbindP => vp hvp vq hvq hv hw.
   case: (addr_ofs p) ihp => //; case: (addr_ofs q) ihq => //.
-    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
-      move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl) [<-] {wq} ?; subst v.
-      case: hw => <-; f_equal.
-      by rewrite -iword_mulP /iword_mul repr_mod.
-    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
-      move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
-      t_xrbindP => vz -> /= -> /= ?; subst v; f_equal.
-      by case: hw.
-    * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _.
-      move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
-      t_xrbindP => ? -> /= -> ? /hz /(_ erefl) [<-] <- /=.
-      by rewrite I64.mul_commut.
+  * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
+    move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl) [<-] {wq} ?; subst v.
+    by case: hw => <-; f_equal;wring.
+  * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
+    move: hv => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
+    by t_xrbindP => vz -> /= -> /= ?; subst v; f_equal; case: hw => <-;rewrite zero_extend_u.
+  move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _.
+  move: hv hw => /=; rewrite /sem_op2_w /mk_sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
+  by t_xrbindP => ? -> /= -> ? /hz /(_ erefl) [<-] <- /= [<-];f_equal;wring.
 Qed.
 
 (* -------------------------------------------------------------------- *)
 Lemma xscale_ok ii z sc :
-   scale_of_z' ii z = ok sc
--> I64.repr z = word_of_scale sc.
-Proof. by case: sc z; do! case=> //. Qed.
-
-Lemma I64_mul_one_l x : I64.mul I64.one x = x.
-Proof. by rewrite I64.mul_commut I64.mul_one. Qed.
-
-Definition rw64 := (I64.mul_zero, I64.mul_one, I64_mul_one_l, I64.add_zero, I64.add_zero_l).
+  scale_of_z' ii z = ok sc -> 
+  z = word_of_scale sc.
+Proof. 
+  rewrite /scale_of_z' -[X in _ -> X = _]wrepr_unsigned.
+  by case: sc (wunsigned z); do! case=> //. 
+Qed.
 
 (* -------------------------------------------------------------------- *)
-Lemma eval_oprd_of_pexpr ii gd s m e c v:
+
+(*
+Lemma eval_oprd_of_pexpr ii gd sz s m e c v:
   lom_eqv s m →
-  oprd_of_pexpr ii e = ok c →
+  oprd_of_pexpr ii sz e = ok c →
   sem_pexpr gd s e = ok v →
   exists2 w,
-    read_oprd gd c m = ok w &
-    value_uincl v w.
+    read_oprd gd sz c m = ok w &
+    value_uincl v (Vword w).
 Proof.
 move=> eqv; case: e => //.
 + by case=> //= z [<-] [<-] /=; eexists.
@@ -363,3 +357,4 @@ rewrite /decode_addr /=.
 rewrite (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv hx1 hx2 hx3).
 by rewrite I64.add_commut I64.add_assoc.
 Qed.
+*)
