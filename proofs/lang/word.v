@@ -319,8 +319,9 @@ Global Opaque word.
 
 Definition wand {s} (x y: word s) : word s := wand x y.
 Definition wor {s} (x y: word s) : word s := wor x y.
+Definition wxor {s} (x y: word s) : word s := wxor x y.
 
-Parameters wxor wmulhu wmulhs : forall {s}, word s -> word s -> word s.
+Parameters wmulhu wmulhs : forall {s}, word s -> word s -> word s.
 
 Parameter wshr wshl wsar : forall {s}, word s -> Z -> word s.
 
