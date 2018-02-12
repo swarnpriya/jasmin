@@ -193,10 +193,12 @@ Variant add_inc_dec : Type :=
   | AddDec of pexpr
   | AddNone.
 
-Definition add_inc_dec_classify (a: pexpr) (b: pexpr) :=
+Definition add_inc_dec_classify (sz: wsize) (a: pexpr) (b: pexpr) :=
   match a, b with
-  | Pcast _ (Pconst 1), y | y, Pcast _ (Pconst 1) => AddInc y
-  | Pcast _ (Pconst (-1)), y | y, Pcast _ (Pconst (-1)) => AddDec y
+  | Pcast w (Pconst 1), y | y, Pcast w (Pconst 1) =>
+    if w == sz then AddInc y else AddNone
+  | Pcast w (Pconst (-1)), y | y, Pcast w (Pconst (-1)) =>
+    if w == sz then AddDec y else AddNone
   | _, _ => AddNone
   end.
 
@@ -205,10 +207,10 @@ Variant sub_inc_dec : Type :=
   | SubDec
   | SubNone.
 
-Definition sub_inc_dec_classify (e: pexpr) :=
+Definition sub_inc_dec_classify sz (e: pexpr) :=
   match e with
-  | Pcast _ (Pconst (-1)) => SubInc
-  | Pcast _ (Pconst 1) => SubDec
+  | Pcast w (Pconst (-1)) => if w == sz then SubInc else SubNone
+  | Pcast w (Pconst 1) => if w == sz then SubDec else SubNone
   | _ => SubNone
   end.
 
@@ -347,7 +349,7 @@ Definition lower_cassgn_classify e x : lower_cassgn_t :=
       match is_lea x e with
       | Some l => LowerLea l
       | None   => 
-        match add_inc_dec_classify a b with
+        match add_inc_dec_classify sz a b with
         | AddInc y => LowerInc (Ox86_INC sz) y
         | AddDec y => LowerInc (Ox86_DEC sz) y
         | AddNone  => LowerFopn (Ox86_ADD sz) [:: a ; b ] (wbase U32)
@@ -357,7 +359,7 @@ Definition lower_cassgn_classify e x : lower_cassgn_t :=
       match is_lea x e with
       | Some l => LowerLea l 
       | None   => 
-        match sub_inc_dec_classify b with
+        match sub_inc_dec_classify sz b with
         | SubInc => LowerInc (Ox86_INC sz) a
         | SubDec => LowerInc (Ox86_DEC sz) a
         | SubNone => LowerFopn (Ox86_SUB sz) [:: a ; b ] (wbase U32)

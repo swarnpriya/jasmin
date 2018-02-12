@@ -321,49 +321,47 @@ Section PROOF.
       rewrite -Hvm //.
   Qed.
 
-  Lemma add_inc_dec_classifyP' a b:
-    match add_inc_dec_classify a b with
-    | AddInc y => (a = y /\ b = Pcast (Pconst 1)) \/ (a = Pcast (Pconst 1) /\ b = y)
-    | AddDec y => (a = y /\ b = Pcast (Pconst (-1))) \/ (a = Pcast (Pconst (-1)) /\ b = y)
+  Lemma add_inc_dec_classifyP' sz a b:
+    match add_inc_dec_classify sz a b with
+    | AddInc y => (a = y /\ b = Pcast sz (Pconst 1)) \/ (a = Pcast sz (Pconst 1) /\ b = y)
+    | AddDec y => (a = y /\ b = Pcast sz (Pconst (-1))) \/ (a = Pcast sz (Pconst (-1)) /\ b = y)
     | AddNone => True
     end.
   Proof.
     rewrite /add_inc_dec_classify.
-    move: a b=> -[z|bv|[[//|z|z]|bv|e|x| g |x e|x e|o e|o e1 e2|e e1 e2]|x| g |x e|x e|o e|o e1 e2|e e1 e2] [z'|bv'|[[//|[//|//|]|[//|//|]]|bv'|e'|x'| g' |x' e'|x' e'|o' e'|o' e1' e2'|e' e1' e2']|x'| g' |x' e'|x' e'|o' e'|o' e1' e2'|e' e1' e2'] //; try (by left; split); try (
-    by move: z=> [] //; right; split); try (
-    by move: z=> [z|z|]; left; split).
-    move: z=> [z|z|]; try (by left; split); by right; split.
+    move: a b=> -[z|bv|w[[//|z|z]|bv|wi e|x| g |x e|wi x e|o e|o e1 e2|e e1 e2]|x| g |x e|w x e|o e|o e1 e2|e e1 e2] [z'|bv'|w'[[//|[//|//|]|[//|//|]]|bv'|wi' e'|x'| g' |x' e'|wi' x' e'|o' e'|o' e1' e2'|e' e1' e2']|x'| g' |x' e'|w' x' e'|o' e'|o' e1' e2'|e' e1' e2'] //;
+    try (case: eqP => // ?; subst);
+    try (by left; split); try (
+    by move: z => [] //; right); try (
+    by move: z => [z|z|] //; try (by left); case: eqP => // ?; subst; right).
   Qed.
 
-  Lemma add_inc_dec_classifyP s (a b : pexpr) (z1 z2 : word):
+  Lemma add_inc_dec_classifyP s sz (a b : pexpr) (z1 z2 : word sz):
     sem_pexprs gd s [:: a; b] = ok [:: Vword z1; Vword z2] ->
-    match add_inc_dec_classify a b with
-    | AddInc y => exists w, sem_pexpr gd s y = ok (Vword w) /\ I64.add w I64.one = I64.add z1 z2
-    | AddDec y => exists w, sem_pexpr gd s y = ok (Vword w) /\ I64.sub w I64.one = I64.add z1 z2
+    match add_inc_dec_classify sz a b with
+    | AddInc y => exists w, sem_pexpr gd s y = ok (Vword w) /\ w + 1 = z1 + z2
+    | AddDec y => exists w, sem_pexpr gd s y = ok (Vword w) /\ w - 1 = z1 + z2
     | AddNone => True
-    end.
+    end%R.
   Proof.
-    have := add_inc_dec_classifyP' a b.
-    case: (add_inc_dec_classify a b)=> [y|y|//].
+    have := add_inc_dec_classifyP' sz a b.
+    case: (add_inc_dec_classify sz a b)=> [y|y|//].
     + case=> [[??]|[??]]; subst; rewrite /sem_pexprs /=; t_xrbindP.
-      + by move=> z -> -> <-; eexists.
-      + move=> zs z -> <- <- []->; eexists; split=> //.
-        by rewrite I64.add_commut.
+      + by move => z -> -> <-; exists z1; split => //; rewrite /wrepr xword.mkword1E.
+      by move => ? z -> <- <- [->]; exists z2; split => //; rewrite /wrepr xword.mkword1E GRing.addrC.
     + case=> [[??]|[??]]; subst; rewrite /sem_pexprs /=; t_xrbindP.
       + move=> z -> -> <-; eexists; split=> //.
-        by rewrite I64.sub_add_opp /I64.one I64.neg_repr /=.
-      + move=> zs z -> <- <- []->; eexists; split=> //.
-        by rewrite I64.sub_add_opp /I64.one I64.neg_repr I64.add_commut.
+      by move => ? z -> <- <- [->]; exists z2; split => //; rewrite /wrepr xword.mkwordN1E GRing.addrC.
   Qed.
 
-  Lemma sub_inc_dec_classifyP e:
-    match sub_inc_dec_classify e with
-    | SubInc => e = Pcast (Pconst (-1))
-    | SubDec => e = Pcast (Pconst 1)
+  Lemma sub_inc_dec_classifyP sz e:
+    match sub_inc_dec_classify sz e with
+    | SubInc => e = Pcast sz (Pconst (-1))
+    | SubDec => e = Pcast sz (Pconst 1)
     | SubNone => True
     end.
   Proof.
-    by move: e=> [] // [] // [] // [].
+  by case: e => // w [] // [] // [] //=; case: eqP => // ->.
   Qed.
 
   Lemma assgn_keep s1' s2' e l tag ii s2 v:
