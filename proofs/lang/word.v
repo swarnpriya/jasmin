@@ -32,6 +32,7 @@ From CoqWord Require Import xword.
 Require ssrring.
 Require Import Psatz ZArith utils type.
 Import Utf8.
+Import ssrZ.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -325,7 +326,13 @@ Parameters wmulhu wmulhs : forall {s}, word s -> word s -> word s.
 
 Parameter wshr wshl wsar : forall {s}, word s -> Z -> word s.
 
-Parameters wlt wle : forall {s}, signedness -> word s -> word s -> bool.
+Definition wlt {sz} (sg: signedness) : word sz → word sz → bool :=
+  match sg with
+  | Unsigned => λ x y, (urepr x < urepr y)%R
+  | Signed => λ x y, (srepr x < srepr y)%R
+  end.
+
+Parameter wle : forall {s}, signedness -> word s -> word s -> bool.
 
 Parameter wnot : forall {s}, word s -> word s.
 
@@ -335,7 +342,8 @@ Definition wbase (s: wsize) : Z :=
 Definition wunsigned {s} (w: word s) : Z :=
   urepr w.
 
-Parameters wsigned : forall {s}, word s -> Z.
+Definition wsigned {s} (w: word s) : Z :=
+  srepr w.
 
 Definition wrepr s (z: Z) : word s :=
   mkword (wsize_size_minus_1 s).+1 z.
