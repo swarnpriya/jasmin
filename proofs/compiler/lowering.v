@@ -140,26 +140,26 @@ Definition lower_cond_classify vi (e: pexpr) :=
   match e with
   | Papp2 op x y =>
     match op with
-    | Oeq (Op_w _) =>
-      Some ([:: nil ; nil ; nil ; nil ; lzf ], Cond1 CondVar vzf, x, y)
-    | Oneq (Op_w _) =>
-      Some ([:: nil ; nil ; nil ; nil ; lzf ], Cond1 CondNotVar vzf, x, y)
-    | Olt (Cmp_w Signed _) =>
-      Some ([:: lof ; nil ; lsf ; nil ; nil ], Cond2 CondNeq vsf vof, x, y)
-    | Olt (Cmp_w Unsigned _) =>
-      Some ([:: nil ; lcf ; nil ; nil ; nil ], Cond1 CondVar vcf, x, y)
-    | Ole (Cmp_w Signed _) =>
-      Some ([:: lof ; nil ; lsf ; nil ; lzf ], Cond3 CondOrNeq vzf vsf vof, x, y)
-    | Ole (Cmp_w Unsigned _) =>
-      Some ([:: nil ; lcf ; nil ; nil ; lzf ], Cond2 CondOr vcf vzf, x, y)
-    | Ogt (Cmp_w Signed _) =>
-      Some ([:: lof ; nil ; lsf ; nil ; lzf ], Cond3 CondAndNotEq vzf vsf vof, x, y)
-    | Ogt (Cmp_w Unsigned _) =>
-      Some ([:: nil ; lcf ; nil ; nil ; lzf ], Cond2 CondAndNot vcf vzf, x, y)
-    | Oge (Cmp_w Signed _) =>
-      Some ([:: lof ; nil ; lsf ; nil ; nil ], Cond2 CondEq vsf vof, x, y)
-    | Oge (Cmp_w Unsigned _) =>
-      Some ([:: nil ; lcf ; nil ; nil ; nil ], Cond1 CondNotVar vcf, x, y)
+    | Oeq (Op_w sz) =>
+      Some ([:: nil ; nil ; nil ; nil ; lzf ], sz, Cond1 CondVar vzf, x, y)
+    | Oneq (Op_w sz) =>
+      Some ([:: nil ; nil ; nil ; nil ; lzf ], sz, Cond1 CondNotVar vzf, x, y)
+    | Olt (Cmp_w Signed sz) =>
+      Some ([:: lof ; nil ; lsf ; nil ; nil ], sz, Cond2 CondNeq vsf vof, x, y)
+    | Olt (Cmp_w Unsigned sz) =>
+      Some ([:: nil ; lcf ; nil ; nil ; nil ], sz, Cond1 CondVar vcf, x, y)
+    | Ole (Cmp_w Signed sz) =>
+      Some ([:: lof ; nil ; lsf ; nil ; lzf ], sz, Cond3 CondOrNeq vzf vsf vof, x, y)
+    | Ole (Cmp_w Unsigned sz) =>
+      Some ([:: nil ; lcf ; nil ; nil ; lzf ], sz, Cond2 CondOr vcf vzf, x, y)
+    | Ogt (Cmp_w Signed sz) =>
+      Some ([:: lof ; nil ; lsf ; nil ; lzf ], sz, Cond3 CondAndNotEq vzf vsf vof, x, y)
+    | Ogt (Cmp_w Unsigned sz) =>
+      Some ([:: nil ; lcf ; nil ; nil ; lzf ], sz, Cond2 CondAndNot vcf vzf, x, y)
+    | Oge (Cmp_w Signed sz) =>
+      Some ([:: lof ; nil ; lsf ; nil ; nil ], sz, Cond2 CondEq vsf vof, x, y)
+    | Oge (Cmp_w Unsigned sz) =>
+      Some ([:: nil ; lcf ; nil ; nil ; nil ], sz, Cond1 CondNotVar vcf, x, y)
     | _ => None
     end
   | _ => None
@@ -170,8 +170,8 @@ Definition neq_f v1 v2 := Pif (Pvar v1) (Papp1 Onot (Pvar v2)) (Pvar v2).
 
 Definition lower_condition vi (pe: pexpr) : seq instr_r * pexpr :=
   match lower_cond_classify vi pe with
-  | Some (l, r, x, y) =>
-    ([:: Copn l AT_none (Ox86_CMP U64) [:: x; y] ],
+  | Some (l, sz, r, x, y) =>
+    ([:: Copn l AT_none (Ox86_CMP sz) [:: x; y] ],
     match r with
     | Cond1 CondVar v => Pvar v
     | Cond1 CondNotVar v => Papp1 Onot (Pvar v)
@@ -301,17 +301,17 @@ Fixpoint mk_lea e :=
   match e with
   | Pcast sz' (Pconst z) => Some (lea_const (zero_extend Uptr (wrepr sz' z)))
   | Pvar  x          => Some (lea_var x)
-  | Papp2 (Omul (Op_w sz)) e1 e2 =>
+  | Papp2 (Omul (Op_w Uptr)) e1 e2 =>
     match mk_lea e1, mk_lea e2 with
     | Some l1, Some l2 => lea_mul l1 l2
     | _      , _       => None
     end
-  | Papp2 (Oadd (Op_w sz')) e1 e2 =>
+  | Papp2 (Oadd (Op_w Uptr)) e1 e2 =>
     match mk_lea e1, mk_lea e2 with
     | Some l1, Some l2 => lea_add l1 l2
     | _      , _       => None
     end
-  | Papp2 (Osub (Op_w sz)) e1 e2 =>
+  | Papp2 (Osub (Op_w Uptr)) e1 e2 =>
     match mk_lea e1, mk_lea e2 with
     | Some l1, Some l2 => lea_sub l1 l2
     | _      , _       => None
