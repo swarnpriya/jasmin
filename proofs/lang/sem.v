@@ -755,7 +755,7 @@ Definition add_carry sz (x y c: Z) : word sz :=
   wrepr sz (x + y + c).
 
 Definition x86_adc {sz} (v1 v2 : word sz) (c: bool) :=
-  let c := Z_of_bool c in
+  let c := Z.b2z c in
   rflags_of_aluop_w
     (add_carry sz (wunsigned v1) (wunsigned v2) c)
     (wunsigned v1 + wunsigned v2 + c)%Z
@@ -765,7 +765,7 @@ Definition sub_borrow sz (x y c: Z) : word sz :=
   wrepr sz (x - y - c).
 
 Definition x86_sbb {sz} (v1 v2 : word sz) (c:bool) :=
-  let c := Z_of_bool c in
+  let c := Z.b2z c in
   rflags_of_aluop_w
     (sub_borrow sz (wunsigned v1) (wunsigned v2) c)
     (wunsigned v1 - (wunsigned v2 + c))%Z
@@ -789,7 +789,7 @@ Definition x86_dec {sz} (w: word sz) :=
     (w - 1)
     (wsigned w - 1)%Z.
 
-Definition x86_setcc (b:bool) : exec values := ok [:: Vword (wrepr U8 (Z_of_bool b))].
+Definition x86_setcc (b:bool) : exec values := ok [:: Vword (wrepr U8 (Z.b2z b))].
 
 Definition x86_bt {sz} (x y: word sz) : exec values :=
   ok [:: Vbool (wand x (wshl 1 (wunsigned y mod (wsize_bits sz))) != 0)%R ].

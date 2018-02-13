@@ -396,15 +396,12 @@ Definition msb {s} (w: word s) : bool := wbit_n w (wsize_size_minus_1 s).
 
 Parameters wdwordu wdwords : ∀ s, word s → word s → Z.
 
-Definition Z_of_bool (b: bool) : Z :=
-  if b then 1 else 0.
-
 Definition waddcarry sz (x y: word sz) (c: bool) :=
-  let n := wunsigned x + wunsigned y + Z_of_bool c in
+  let n := wunsigned x + wunsigned y + Z.b2z c in
   (wbase sz <=? n, wrepr sz n).
 
 Definition wsubcarry sz (x y: word sz) (c: bool) :=
-  let n := wunsigned x - wunsigned y - Z_of_bool c in
+  let n := wunsigned x - wunsigned y - Z.b2z c in
   (n <? 0, wrepr sz n).
 
 Definition wumul sz (x y: word sz) :=
