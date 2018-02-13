@@ -995,64 +995,68 @@ Ltac elim_div :=
       + move=> /sem_op2_w_dec [w1 [z1 [w2 [z2 [Hz1z2 Hv]]]]]; subst v.
         case Heq: is_lea => [lea|]. 
         (* LEA *)
-        + have [/mk_leaP -/(_ s (I64.sub z1 z2))]:= is_leaP Heq.
-          apply: rbindP Hv => /= v1 -> /=. rewrite /sem_pexprs /=. 
-          t_xrbindP => ? v2 -> /= <- ? [] ?;subst v1 v2.
-          move=> /(_ (refl_equal _)) ?;eexists;eauto. 
-        have := sub_inc_dec_classifyP e2.
-        case: (sub_inc_dec_classify e2)=> [He2|He2|//]; try subst e2.
+        * case/is_leaP: Heq => /mk_leaP -/(_ s sz (zero_extend _ z1 - zero_extend _ z2)%R).
+          apply: rbindP Hv => /= v1 -> /=. rewrite /sem_pexprs /=.
+          by t_xrbindP => ? v2 -> /= <- ? [] ?;subst v1 v2 => /(_ erefl); eauto.
+        have := sub_inc_dec_classifyP sz e2.
+        case: (sub_inc_dec_classify _ _)=> [He2|He2|//]; try subst e2.
         (* SubInc *)
-        + rewrite /sem_pexprs /= in Hv.
-          rewrite /sem_pexprs /=.
-          apply: rbindP Hv=> z -> /= []-> <- /=.
+        * move: Hv; rewrite /sem_pexprs /=; t_xrbindP => v1 -> -> -> [<-] /=.
           rewrite /x86_inc /rflags_of_aluop_nocf_w /flags_w /=.
-          rewrite I64.sub_add_opp I64.neg_repr /=; eauto.
+          eexists _, _, _, _. repeat f_equal. rewrite zero_extend_u /wrepr xword.mkwordN1E.
+          ssrring.ssring.
         (* SubDec *)
-        + rewrite /sem_pexprs /= in Hv.
-          rewrite /sem_pexprs /=.
-          apply: rbindP Hv=> z -> /= []-> <- /=.
-          rewrite /x86_dec /rflags_of_aluop_nocf_w /flags_w /=; eauto.
+      + move: Hv; rewrite /sem_pexprs /=; t_xrbindP => v1 -> -> -> [<-] /=.
+          rewrite /x86_dec /rflags_of_aluop_nocf_w /flags_w /=.
+          by eexists _, _, _, _; repeat f_equal; rewrite zero_extend_u /wrepr xword.mkword1E.
         (* SubNone *)
         + split. by rewrite read_es_swap. by rewrite Hv /= Hw.
       (* Oland Op_w *)
       + move=> A. split. by rewrite read_es_swap. move: A.
-        by case/sem_op2_w_dec => z1 [z2] [hv ->] /=; subst v; rewrite Hw.
+        by case/sem_op2_w_dec => w1 [z1] [w2] [z2] [hv ->] /=; subst v; rewrite Hw.
       (* Olor Op_w *)
       + move=> A. split. by rewrite read_es_swap. move: A.
-        by case/sem_op2_w_dec => z1 [z2] [hv ->] /=; subst v; rewrite Hw.
+        by case/sem_op2_w_dec => w1 [z1] [w2] [z2] [hv ->] /=; subst v; rewrite Hw.
       + move=> A. split. by rewrite read_es_swap. move: A.
-          by move=> /sem_op2_w_dec [z1 [z2 [Hz1z2 ->]]] /=; subst v; rewrite Hw.
-      + move=> /sem_op2_w_dec [z1 [z2 [Hz1z2 ->]]] /=; subst v.
-        rewrite /x86_shr /=.
-        rewrite /sem_lsr in Hw.
-        case: (_ == _) Hw=> /= Hw.
-        + split. by rewrite read_es_swap. by rewrite Hw.
-        + split. by rewrite read_es_swap. by case: (_ == _) Hw=> Hw; rewrite /= Hw.
-      + move=> /sem_op2_w_dec [z1 [z2 [Hz1z2 ->]]] /=; subst v.
-        rewrite /x86_shl /=.
-        rewrite /sem_lsl in Hw.
-        case: (_ == _) Hw=> /= Hw.
-        + split. by rewrite read_es_swap. by rewrite Hw.
-        + split. by rewrite read_es_swap. by case: (_ == _) Hw=> Hw; rewrite /= Hw.
-      + move=> /sem_op2_w_dec [z1 [z2 [Hz1z2 ->]]] /=; subst v.
-        rewrite /x86_sar /=.
-        rewrite /sem_asr in Hw.
-        case: (_ == _) Hw=> /= Hw.
-        + split. by rewrite read_es_swap. by rewrite Hw.
-        + split. by rewrite read_es_swap. by case: (_ == _) Hw=> Hw; rewrite /= Hw.
-      + move=> /sem_op2_wb_dec [z1 [z2 [<- ->]]] /=.
-        rewrite /x86_cmp /vbools /=.
-        by rewrite weq_sub; eauto.
-      + move=> /sem_op2_wb_dec [z1 [z2 [<- ->]]] /=.
-        rewrite /x86_cmp /vbools /=.
-        by rewrite weq_sub; eauto.
-      + move=> /sem_op2_wb_dec [z1 [z2 [<- ->]]] /=.
-        rewrite /x86_cmp /vbools /=.
-        by rewrite wult_sub; eauto.
-      + case Ht: (_ == _)=> //.
-        move=> _; split=> //.
-        by apply/eqP.
-  Qed.
+          by move=> /sem_op2_w_dec [w1 [z1 [w2 [z2 [Hz1z2 ->]]]]] /=; subst v; rewrite Hw.
+      (* Olsr *)
+      + rewrite /sem_pexprs /=; t_xrbindP => v1 -> v2 ->.
+         rewrite /sem_op2_w8 /mk_sem_sop2 /=; t_xrbindP => w1 -> w2 -> /= ?; subst v.
+         split. by rewrite read_es_swap.
+         move: Hw; rewrite /sem_shr /sem_shift /x86_shr /=.
+         case: eqP.
+         * move => -> /=. admit.
+         move => _ /=.
+         by case: ifP => /= _ ->.
+      (* Olsl *)
+      + rewrite /sem_pexprs /=; t_xrbindP => v1 -> v2 ->.
+         rewrite /sem_op2_w8 /mk_sem_sop2 /=; t_xrbindP => w1 -> w2 -> /= ?; subst v.
+         split. by rewrite read_es_swap.
+         move: Hw; rewrite /sem_shl /sem_shift /x86_shl /=.
+         case: eqP.
+         * move => -> /=. admit.
+         move => _ /=.
+         by case: ifP => /= _ ->.
+      (* Oasr *)
+      + rewrite /sem_pexprs /=; t_xrbindP => v1 -> v2 ->.
+         rewrite /sem_op2_w8 /mk_sem_sop2 /=; t_xrbindP => w1 -> w2 -> /= ?; subst v.
+         split. by rewrite read_es_swap.
+         move: Hw; rewrite /sem_sar /sem_shift /x86_sar /=.
+         case: eqP.
+         * move => -> /=. admit.
+         move => _ /=.
+         by case: ifP => /= _ ->.
+       (* Oeq Op_w *)
+       + case/sem_op2_wb_dec => w1 [z1] [w2] [z2] [<- ->] /=.
+         rewrite -GRing.subr_eq0; eexists _, _, _, _; reflexivity.
+       (* Olt Op_w *)
+       + case/sem_op2_wb_dec => w1 [z1] [w2] [z2] [<- ->] /=.
+         rewrite /x86_cmp /vbools /rflags_of_aluop /=.
+         eexists _, _, _, _; repeat f_equal.
+         admit.
+       (* Pif *)
+       by case: stype_of_lval.
+  Admitted.
 
   Lemma vars_I_assgn ii l tag e:
     Sv.Equal (vars_I (MkI ii (Cassgn l tag e))) (Sv.union (vars_lval l) (read_e e)).
