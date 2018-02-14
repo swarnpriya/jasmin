@@ -74,6 +74,27 @@ Qed.
 Definition wsize_eqMixin     := Equality.Mixin wsize_axiom.
 Canonical  wsize_eqType      := Eval hnf in EqType wsize wsize_eqMixin.
 
+Definition wsizes :=
+  [:: U8 ; U16 ; U32 ; U64 ; U128 ; U256 ].
+
+Lemma wsize_fin_axiom : Finite.axiom wsizes.
+Proof. by case. Qed.
+
+Definition wsize_choiceMixin :=
+  PcanChoiceMixin (FinIsCount.pickleK wsize_fin_axiom).
+Canonical wsize_choiceType :=
+  Eval hnf in ChoiceType wsize wsize_choiceMixin.
+
+Definition wsize_countMixin :=
+  PcanCountMixin (FinIsCount.pickleK wsize_fin_axiom).
+Canonical wsize_countType :=
+  Eval hnf in CountType wsize wsize_countMixin.
+
+Definition wsize_finMixin :=
+  FinMixin wsize_fin_axiom.
+Canonical wsize_finType :=
+  Eval hnf in FinType wsize wsize_finMixin.
+
 (* -------------------------------------------------------------------- *)
 Scheme Equality for stype. 
 
