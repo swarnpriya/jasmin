@@ -1043,7 +1043,7 @@ Ltac elim_div :=
          split. by rewrite read_es_swap.
          move: Hw; rewrite /sem_sar /sem_shift /x86_sar /=.
          case: eqP.
-         * move => -> /=. admit.
+         * by move => ->; rewrite /= wsar0 => ->.
          move => _ /=.
          by case: ifP => /= _ ->.
        (* Oeq Op_w *)

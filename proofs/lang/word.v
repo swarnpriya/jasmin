@@ -369,6 +369,19 @@ Qed.
 Axiom wlt_irrefl : ∀ sz sg (w: word sz), wlt sg w w = false.
 Axiom wle_refl : ∀ sz sg (w: word sz), wle sg w w = true.
 
+Lemma wshr0 sz (w: word sz) : wshr w 0 = w.
+Proof. Admitted.
+
+Lemma wshl0 sz (w: word sz) : wshl w 0 = w.
+Proof. Admitted.
+
+Lemma wsar0 sz (w: word sz) : wsar w 0 = w.
+Proof. Admitted.
+
+Lemma wltE sg sz (w1 w2: word sz) :
+  wlt sg w1 w2 = (wunsigned (w1 - w2) != (wunsigned w1 - wunsigned w2))%Z.
+Proof. Admitted.
+
 Parameter wmax_unsigned : wsize -> Z.
 Parameter wmin_signed   : wsize -> Z.
 Parameter wmax_signed   : wsize -> Z.
