@@ -378,11 +378,7 @@ Proof. Admitted.
 Lemma wsar0 sz (w: word sz) : wsar w 0 = w.
 Proof. Admitted.
 
-Lemma wltE sg sz (w1 w2: word sz) :
-  wlt sg w1 w2 = (wunsigned (w1 - w2) != (wunsigned w1 - wunsigned w2))%Z.
-Proof. Admitted.
-
-Parameter wmax_unsigned : wsize -> Z.
+Definition wmax_unsigned sz := wbase sz - 1.
 Parameter wmin_signed   : wsize -> Z.
 Parameter wmax_signed   : wsize -> Z.
 
@@ -434,6 +430,28 @@ Definition wror sz (w:word sz) (z:Z) :=
 Definition wrol sz (w:word sz) (z:Z) := 
   let i := z mod wsize_bits sz in
   wor (wshl w i) (wshr w (wsize_bits sz - i)).
+
+(* -------------------------------------------------------------------*)
+
+Lemma wltE sg sz (w1 w2: word sz) :
+  wlt sg w1 w2 = (wunsigned (w1 - w2) != (wunsigned w1 - wunsigned w2))%Z.
+Proof. Admitted.
+
+Lemma wltuE' sz (α β: word sz) :
+  wlt Unsigned α β = (wunsigned (β - α) == (wunsigned β - wunsigned α)%Z) && (β != α).
+Proof. Admitted.
+
+Lemma wleuE sz (w1 w2: word sz) :
+  wle Unsigned w1 w2 = (wunsigned (w2 - w1) == (wunsigned w2 - wunsigned w1))%Z.
+Proof. Admitted.
+
+Lemma wleuE' sz (α β: word sz) :
+  wle Unsigned β α = (wunsigned (β - α) != (wunsigned β - wunsigned α)%Z) || (β == α).
+Proof. Admitted.
+
+Lemma wlesE sz (w1 w2: word sz) :
+  wle Signed w1 w2 = (msb (w2 - w1) == (wsigned (w2 - w1) != (wsigned w2 - wsigned w1)%Z)).
+Proof. Admitted.
 
 (* -------------------------------------------------------------------*)
 
