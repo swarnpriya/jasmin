@@ -37,7 +37,7 @@ Record fresh_vars : Type :=
     fresh_PF : Equality.sort Ident.ident;
     fresh_ZF : Equality.sort Ident.ident;
 
-    fresh_multiplicand : Equality.sort Ident.ident;
+    fresh_multiplicand : wsize → Equality.sort Ident.ident;
   }.
 
 Record lowering_options : Type := 
@@ -71,7 +71,7 @@ Definition vars_p (p: prog) :=
   foldr (fun f x => let '(fn, fd) := f in Sv.union x (vars_fd fd)) Sv.empty p.
 
 Definition vbool vn := {| vtype := sbool ; vname := vn |}.
-Definition vword vn := {| vtype := sword U64 ; vname := vn |}.
+Definition vword vt vn := {| vtype := sword vt ; vname := vn |}.
 
 Context (fv: fresh_vars).
 
@@ -81,7 +81,10 @@ Definition fv_sf := vbool fv.(fresh_SF).
 Definition fv_pf := vbool fv.(fresh_PF).
 Definition fv_zf := vbool fv.(fresh_ZF).
 
-Definition fvars := Sv.add (vword fv.(fresh_multiplicand)) (Sv.add fv_of (Sv.add fv_cf (Sv.add fv_sf (Sv.add fv_pf (Sv.singleton fv_zf))))).
+Definition fvars :=
+  foldl (λ s sz, Sv.add (vword sz (fv.(fresh_multiplicand) sz)) s)
+    (Sv.add fv_of (Sv.add fv_cf (Sv.add fv_sf (Sv.add fv_pf (Sv.singleton fv_zf)))))
+    wsizes.
 
 Definition disj_fvars v := disjoint v fvars.
 
@@ -103,6 +106,22 @@ Definition stype_of_lval (x: lval) : stype :=
   match x with
   | Lnone _ t => t
   | Lvar v | Lmem _ v _ | Laset v _ => v.(vtype)
+  end.
+
+Definition wsize_of_stype (ty: stype) : wsize :=
+  match ty with
+  | sarr sz _
+  | sword sz => sz
+  | sbool | sint => U64
+  end.
+
+Definition wsize_of_lval (lv: lval) : wsize :=
+  match lv with
+  | Lnone _ ty
+  | Lvar {| v_var := {| vtype := ty |} |}
+  | Laset {| v_var := {| vtype := ty |} |} _
+    => wsize_of_stype ty
+  | Lmem sz _ _ => sz
   end.
 
 Variant lower_cond1 :=
@@ -227,10 +246,10 @@ Record lea := MkLea {
 (* -------------------------------------------------------------------- *)
 
 Variant lower_cassgn_t : Type :=
-  | LowerMov  of bool (* whether it needs a intermediate register *)
+  | LowerMov  of wsize & bool (* whether it needs a intermediate register *)
   | LowerCopn of sopn & pexpr
   | LowerInc  of sopn & pexpr
-  | LowerLea of lea
+  | LowerLea of wsize & lea
   | LowerFopn of sopn & list pexpr & Z
   | LowerEq   of wsize & pexpr & pexpr
   | LowerLt   of wsize & pexpr & pexpr
@@ -319,8 +338,11 @@ Fixpoint mk_lea e :=
   | _ => None
   end.
 
-Definition is_lea x e :=
-  if ~~ is_lval_in_memory x then
+Definition small_size sz :=
+  if wsize_cmp Uptr sz is Lt then false else true.
+
+Definition is_lea sz x e :=
+  if small_size sz && ~~ is_lval_in_memory x then
     match mk_lea e with 
     | Some (MkLea d b sc o) => 
       let check o := match o with Some x => ~~(is_var_in_memory x) | None => true end in
@@ -335,10 +357,10 @@ Definition is_lea x e :=
 
 Definition lower_cassgn_classify e x : lower_cassgn_t :=
   match e with
-  | Pcast sz (Pconst _) => LowerMov false
-  | Pget v _
-  | Pvar ({| v_var := {| vtype := sword _ |} |} as v) => LowerMov (if is_var_in_memory v then is_lval_in_memory x else false)
-  | Pload _ _ _ => LowerMov (is_lval_in_memory x)
+  | Pcast sz (Pconst _) => LowerMov sz false
+  | Pget ({| v_var := {| vtype := sword sz |} |} as v) _
+  | Pvar ({| v_var := {| vtype := sword sz |} |} as v) => LowerMov sz (if is_var_in_memory v then is_lval_in_memory x else false)
+  | Pload sz _ _ => LowerMov sz (is_lval_in_memory x)
 
   | Papp1 (Olnot sz) a => LowerCopn (Ox86_NOT sz) a
   | Papp1 (Oneg (Op_w sz)) a => LowerFopn (Ox86_NEG sz) [:: a] 0
@@ -346,8 +368,8 @@ Definition lower_cassgn_classify e x : lower_cassgn_t :=
   | Papp2 op a b =>
     match op with
     | Oadd (Op_w sz) =>
-      match is_lea x e with
-      | Some l => LowerLea l
+      match is_lea sz x e with
+      | Some l => LowerLea sz l
       | None   => 
         match add_inc_dec_classify sz a b with
         | AddInc y => LowerInc (Ox86_INC sz) y
@@ -356,8 +378,8 @@ Definition lower_cassgn_classify e x : lower_cassgn_t :=
         end
       end
     | Osub (Op_w sz) =>
-      match is_lea x e with
-      | Some l => LowerLea l 
+      match is_lea sz x e with
+      | Some l => LowerLea sz l
       | None   => 
         match sub_inc_dec_classify sz b with
         | SubInc => LowerInc (Ox86_INC sz) a
@@ -366,8 +388,8 @@ Definition lower_cassgn_classify e x : lower_cassgn_t :=
         end
       end
     | Omul (Op_w sz) =>
-      match is_lea x e with 
-      | Some l => LowerLea l
+      match is_lea sz x e with
+      | Some l => LowerLea sz l
       | _      => 
         match is_wconst sz a with
         | Some _ => LowerFopn (Ox86_IMULtimm sz) [:: b ; a ] (wbase U32)
@@ -390,8 +412,8 @@ Definition lower_cassgn_classify e x : lower_cassgn_t :=
     end
 
   | Pif e e1 e2 => 
-    if stype_of_lval x is sword sz then
-      LowerIf sz e e1 e2
+    if stype_of_lval x is sword _ then
+      LowerIf (wsize_of_lval x) e e1 e2
     else
       LowerAssgn
   | _ => LowerAssgn
@@ -430,7 +452,7 @@ Definition opn_5flags (immed_bound: Z) (vi: var_info)
   let fopn o a := [:: Copn [:: f ; cf ; f ; f ; f ; x ] tg o a ] in
   match opn_5flags_cases a immed_bound with
   | Opn5f_large_immed x y n z _ _ =>
-    let c := {| v_var := {| vtype := sword U64; vname := fresh_multiplicand fv |} ; v_info := vi |} in
+    let c := {| v_var := {| vtype := sword U64; vname := fresh_multiplicand fv U64 |} ; v_info := vi |} in
     Copn [:: Lvar c ] tg (Ox86_MOV U64) [:: y] :: fopn (opn_no_imm o) (x :: Pvar c :: z)
   | Opn5f_other => fopn o a
   end.
@@ -441,27 +463,27 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (e: pexpr) : c
   let copn o a := [:: MkI ii (Copn [:: x ] tg o [:: a]) ] in
   let inc o a := [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg o [:: a ]) ] in
   match lower_cassgn_classify e x with
-  | LowerMov b =>
+  | LowerMov sz b =>
     if b
     then
-      let c := {| v_var := {| vtype := sword U64; vname := fresh_multiplicand fv |} ; v_info := vi |} in
-      [:: MkI ii (Copn [:: Lvar c] tg (Ox86_MOV U64) [:: e ]) ; MkI ii (Copn [:: x ] tg (Ox86_MOV U64) [:: Pvar c ]) ]
+      let c := {| v_var := {| vtype := sword sz; vname := fresh_multiplicand fv sz |} ; v_info := vi |} in
+      [:: MkI ii (Copn [:: Lvar c] tg (Ox86_MOV sz) [:: e ]) ; MkI ii (Copn [:: x ] tg (Ox86_MOV sz) [:: Pvar c ]) ]
     else 
       (* IF e is 0 then use Oset0 instruction *)
-      if (e == @wconst U64 0) && ~~ is_lval_in_memory x && options.(use_set0) then
-        [:: MkI ii (Copn [:: f ; f ; f ; f ; f ; x] tg (Oset0 U64) [::]) ]
-      else copn (Ox86_MOV U64) e
+      if (e == @wconst sz 0) && ~~ is_lval_in_memory x && options.(use_set0) then
+        [:: MkI ii (Copn [:: f ; f ; f ; f ; f ; x] tg (Oset0 sz) [::]) ]
+      else copn (Ox86_MOV sz) e
   | LowerCopn o e => copn o e
   | LowerInc o e => inc o e
   | LowerFopn o es m => map (MkI ii) (opn_5flags m vi f x tg o es)
-  | LowerLea (MkLea d b sc o) => 
+  | LowerLea sz (MkLea d b sc o) =>
     let de := wconst d in
     let sce := wconst sc in
-    let b := oapp Pvar (@wconst U64 0) b in
-    let o := oapp Pvar (@wconst U64 0) o in
+    let b := oapp Pvar (@wconst sz 0) b in
+    let o := oapp Pvar (@wconst sz 0) o in
     let lea tt := 
       let ii := warning ii Use_lea in
-      [:: MkI ii (Copn [::x] tg (Ox86_LEA U64) [:: de; b; sce; o]) ] in
+      [:: MkI ii (Copn [::x] tg (Ox86_LEA sz) [:: de; b; sce; o]) ] in
     if options.(use_lea) then lea tt
     (* d + b + sc * o *)
     else 
@@ -469,15 +491,15 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (e: pexpr) : c
         (* b + sc * o *)
         if sc == 1%R then
           (* b + o *)
-          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86_ADD U64) [:: b ; o])]
-        else if b == @wconst U64 0 then
+          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86_ADD sz) [:: b ; o])]
+        else if b == @wconst sz 0 then
           (* sc * o *)
-          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86_IMULt U64) [:: o; sce])]
+          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86_IMULt sz) [:: o; sce])]
         else lea tt
-      else if o == @wconst U64 0 then
+      else if o == @wconst sz 0 then
           (* d + b *)
-          if d == 1%R then inc (Ox86_INC U64) b
-          else [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86_ADD U64) [:: b ; de])]
+          if d == 1%R then inc (Ox86_INC sz) b
+          else [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86_ADD sz) [:: b ; de])]
       else lea tt
       
   | LowerEq sz a b => [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg (Ox86_CMP sz) [:: a ; b ]) ]
@@ -518,13 +540,13 @@ Definition lower_mulu sz (xs: lvals) tg (es: pexprs) : seq instr_r :=
     let f := Lnone_b vi in
     match is_wconst sz x with
     | Some _ =>
-      let c := {| v_var := {| vtype := sword sz; vname := fresh_multiplicand fv |} ; v_info := vi |} in
+      let c := {| v_var := {| vtype := sword sz; vname := fresh_multiplicand fv sz |} ; v_info := vi |} in
       [:: Copn [:: Lvar c ] tg (Ox86_MOV sz) [:: x ] ;
           Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86_MUL sz) [:: y ; Pvar c ] ]
     | None =>
     match is_wconst sz y with
     | Some _ =>
-      let c := {| v_var := {| vtype := sword sz; vname := fresh_multiplicand fv |} ; v_info := vi |} in
+      let c := {| v_var := {| vtype := sword sz; vname := fresh_multiplicand fv sz |} ; v_info := vi |} in
       [:: Copn [:: Lvar c ] tg (Ox86_MOV sz) [:: y ] ;
           Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86_MUL sz) [:: x ; Pvar c ] ]
     | None => [:: Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86_MUL sz) es ]
