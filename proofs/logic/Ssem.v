@@ -26,13 +26,10 @@
 (* * New semantic which is "unsafe" (may not fail on invalid code) but simplifies the Hoare logic *)
 
 (* ** Imports and settings *)
-
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat ssrint ssralg tuple.
-From mathcomp Require Import choice fintype eqtype div seq zmodp.
-Require Import ZArith.
-
 Require Import strings word utils type var expr sem.
 Require Import low_memory.
+Import all_ssreflect all_algebra zmodp.
+Import ZArith.
 
 Require Import Utf8.
 
@@ -45,30 +42,30 @@ Open Scope string_scope.
 (* ** Type interpretation
  * -------------------------------------------------------------------- *)
 
-Variant sstype : Type := ssbool | ssint | ssarr | ssword.
+Variant sstype : Type := ssbool | ssint | ssarr of wsize | ssword of wsize.
 
 Coercion sstype_of_stype (ty: stype) : sstype :=
   match ty with
   | sbool => ssbool
   | sint => ssint
-  | sarr _ => ssarr
-  | sword => ssword
+  | sarr s _ => ssarr s
+  | sword s => ssword s
   end.
 
 Definition ssem_t (t : sstype) : Type :=
   match t with
   | ssbool  => bool
   | ssint   => Z
-  | ssarr => FArray.array word
-  | ssword  => word
+  | ssarr s => FArray.array (word s)
+  | ssword s => word s
   end.
 
 Definition sdflt_val st : ssem_t st :=
   match st with
   | ssbool         => false
   | ssint          => Z0
-  | ssarr        => FArray.cnst (n2w 0)
-  | ssword         => I64.repr Z0
+  | ssarr s => FArray.cnst 0%R
+  | ssword s => 0%R
   end.
 
 (* ** Values
@@ -77,8 +74,8 @@ Definition sdflt_val st : ssem_t st :=
 Variant svalue : Type :=
   | SVbool :> bool -> svalue
   | SVint  :> Z    -> svalue
-  | SVarr  : FArray.array word -> svalue
-  | SVword :> word -> svalue.
+  | SVarr  s : FArray.array (word s) -> svalue
+  | SVword s : (word s) -> svalue.
 
 Definition svalues := seq svalue.
 
@@ -94,15 +91,15 @@ Definition sto_int v :=
   | _       => type_error
   end.
 
-Definition sto_arr v :=
-  match v with
-  | SVarr t => ok t
-  | _         => type_error
-  end.
+Definition sto_arr sz (v: svalue) : exec (FArray.array (word sz)) :=
+  if v is SVarr s t then
+    if wsize_eq_dec s sz is left eqsz then ok (eq_rect s (λ s, FArray.array (word s)) t sz eqsz)
+    else type_error
+  else type_error.
 
-Definition sto_word v :=
+Definition sto_word sz v :=
   match v with
-  | SVword w => ok w
+  | SVword sz' w => ok (zero_extend sz w)
   | _        => type_error
   end.
 
@@ -110,31 +107,35 @@ Definition sval_sstype (v: svalue) : sstype :=
   match v with
   | SVbool _    => ssbool
   | SVint  _    => ssint
-  | SVarr _  => ssarr
-  | SVword _    => ssword
+  | SVarr sz  _ => ssarr sz
+  | SVword sz _    => ssword sz
   end.
 
 Definition of_sval t : svalue -> exec (ssem_t t) :=
   match t return svalue -> exec (ssem_t t) with
   | ssbool  => sto_bool
   | ssint   => sto_int
-  | ssarr => sto_arr
-  | ssword  => sto_word
+  | ssarr sz => sto_arr sz
+  | ssword sz => sto_word sz
   end.
 
 Definition to_sval t : ssem_t t -> svalue :=
   match t return ssem_t t -> svalue with
   | ssbool  => SVbool
   | ssint   => SVint
-  | ssarr => SVarr
-  | ssword  => SVword
+  | ssarr sz => @SVarr sz
+  | ssword  sz => @SVword sz
   end.
 
 Lemma of_sval_ex ty (s: svalue) :
   ty = sval_sstype s →
   ∃ v,
   of_sval ty s = ok v ∧ to_sval v = s.
-Proof. move=>->; case: s => /=; eauto. Qed.
+Proof.
+move=>->; case: s => /=; eauto.
+- by move => sz t; exists t; rewrite eq_dec_refl.
+move => sz w; rewrite zero_extend_u; eauto.
+Qed.
 
 (* ** Variable map
  * -------------------------------------------------------------------- *)
@@ -148,7 +149,7 @@ Definition sget_var (m:svmap) x :=
 
 Definition sset_var (m: svmap) x v :=
   on_vu (λ v, m.[x <- v]%vmap)
-        (if x.(vtype) == sword then type_error
+        (if x.(vtype) is sword _ then type_error
          else ok m)
         (of_sval (vtype x) v).
 
@@ -167,25 +168,35 @@ Definition mk_ssem_sop2 t1 t2 tr (o:ssem_t t1 -> ssem_t t2 -> ssem_t tr) v1 v2 :
   ok (@to_sval tr (o v1 v2)).
 
 Definition ssem_op1_b  := @mk_ssem_sop1 sbool sbool.
-Definition ssem_op1_w  := @mk_ssem_sop1 sword sword.
+Definition ssem_op1_i  := @mk_ssem_sop1 sint sint.
+Definition ssem_op1_w sz := @mk_ssem_sop1 (sword sz) (sword sz).
 
-Definition ssem_arr_init (v:svalue) := 
+Definition ssem_zeroext (sz: wsize) (v: svalue) : exec svalue :=
+  match v with
+  | SVword sz' w' => ok (SVword (@zero_extend sz sz' w'))
+  | _ => type_error
+  end.
+
+Definition ssem_arr_init sz (v:svalue) :=
   Let n := sto_int v in 
-  ok (SVarr (FArray.cnst I64.zero)).
+  ok (@SVarr sz (FArray.cnst 0%R)).
 
 Definition ssem_sop1 (o:sop1) := 
   match o with
+  | Ozeroext sz => ssem_zeroext sz
   | Onot      => ssem_op1_b negb
-  | Olnot     => ssem_op1_w I64.not
-  | Oneg      => ssem_op1_w I64.neg
-  | Oarr_init => ssem_arr_init
-  end.
+  | Olnot sz => @ssem_op1_w sz wnot
+  | Oneg Op_int => ssem_op1_i Z.opp
+  | Oneg (Op_w sz) => @ssem_op1_w sz -%R
+  | Oarr_init sz => ssem_arr_init sz
+  end%R.
 
 Definition ssem_op2_b  := @mk_ssem_sop2 sbool sbool sbool.
 Definition ssem_op2_i  := @mk_ssem_sop2 sint  sint  sint.
-Definition ssem_op2_w  := @mk_ssem_sop2 sword sword sword.
+Definition ssem_op2_w sz := @mk_ssem_sop2 (sword sz) (sword sz) (sword sz).
+Definition ssem_op2_w8 sz := @mk_ssem_sop2 (sword sz) sword8 (sword sz).
 Definition ssem_op2_ib := @mk_ssem_sop2 sint  sint  sbool.
-Definition ssem_op2_wb := @mk_ssem_sop2 sword sword sbool.
+Definition ssem_op2_wb sz := @mk_ssem_sop2 (sword sz) (sword sz) sbool.
 
 Definition ssem_sop2 (o:sop2) :=
   match o with
@@ -193,38 +204,31 @@ Definition ssem_sop2 (o:sop2) :=
   | Oor  => ssem_op2_b orb
 
   | Oadd Op_int  => ssem_op2_i Z.add
-  | Oadd Op_w    => ssem_op2_w I64.add
+  | Oadd (Op_w sz) => @ssem_op2_w sz +%R
   | Osub Op_int  => ssem_op2_i Z.sub
-  | Osub Op_w    => ssem_op2_w I64.sub
+  | Osub (Op_w sz)    => ssem_op2_w (λ x y : word sz, x - y)%R
   | Omul Op_int  => ssem_op2_i Z.mul
-  | Omul Op_w    => ssem_op2_w I64.mul
+  | Omul (Op_w sz)    => @ssem_op2_w sz *%R
 
-  | Oland Op_int => ssem_op2_i Z.land
-  | Oland Op_w => ssem_op2_w I64.and
-  | Olor Op_int => ssem_op2_i Z.lor
-  | Olor Op_w => ssem_op2_w I64.or
-  | Olxor Op_int => ssem_op2_i Z.lxor
-  | Olxor Op_w => ssem_op2_w I64.xor
-  | Olsr         => ssem_op2_w sem_lsr 
-  | Olsl         => ssem_op2_w sem_lsl
-  | Oasr         => ssem_op2_w sem_asr 
+  | Oland sz => @ssem_op2_w sz wand
+  | Olor sz => @ssem_op2_w sz wor
+  | Olxor sz => @ssem_op2_w sz wxor
+  | Olsr sz => @ssem_op2_w8 sz sem_shr
+  | Olsl sz => @ssem_op2_w8 sz sem_shl
+  | Oasr sz => @ssem_op2_w8 sz sem_sar
 
-  | Oeq Cmp_int  => ssem_op2_ib Z.eqb
-  | Oeq _        => ssem_op2_wb weq 
-  | Oneq Cmp_int => ssem_op2_ib (fun x y => negb (Z.eqb x y))
-  | Oneq _       => ssem_op2_wb (fun x y => negb (weq x y))
+  | Oeq Op_int  => ssem_op2_ib Z.eqb
+  | Oeq (Op_w sz) => @ssem_op2_wb sz eq_op
+  | Oneq Op_int => ssem_op2_ib (fun x y => negb (Z.eqb x y))
+  | Oneq (Op_w sz) => ssem_op2_wb (λ x y : word sz, x != y)
   | Olt Cmp_int  => ssem_op2_ib Z.ltb
   | Ole Cmp_int  => ssem_op2_ib Z.leb
   | Ogt Cmp_int  => ssem_op2_ib Z.gtb
   | Oge Cmp_int  => ssem_op2_ib Z.geb
-  | Olt Cmp_sw   => ssem_op2_wb wslt
-  | Ole Cmp_sw   => ssem_op2_wb wsle
-  | Ogt Cmp_sw   => ssem_op2_wb (fun x y => wslt y x)
-  | Oge Cmp_sw   => ssem_op2_wb (fun x y => wsle y x)
-  | Olt Cmp_uw   => ssem_op2_wb wult
-  | Ole Cmp_uw   => ssem_op2_wb wule
-  | Ogt Cmp_uw   => ssem_op2_wb (fun x y => wult y x)
-  | Oge Cmp_uw   => ssem_op2_wb (fun x y => wule y x)
+  | Olt (Cmp_w sg sz)   => @ssem_op2_wb sz (wlt sg)
+  | Ole (Cmp_w sg sz)   => @ssem_op2_wb sz (wle sg)
+  | Ogt (Cmp_w sg sz)   => ssem_op2_wb (λ x y : word sz, wlt sg y x)
+  | Oge (Cmp_w sg sz)   => ssem_op2_wb (λ x y : word sz, wle sg y x)
   end.
 
 Import UnsafeMemory.
