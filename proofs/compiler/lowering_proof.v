@@ -1388,16 +1388,6 @@ Ltac elim_div :=
     by eauto.
   Qed.
 
-  (* TODO: is this even true? *)
-  Lemma mulhu_repr w1 w2:
-    I64.mulhu w1 w2 = I64.repr (w1 * w2 ÷ I64.modulus).
-  Proof.
-    rewrite /I64.mulhu.
-    case: w1 w2 => [z1 h1] [z2 h2] /=.
-    rewrite Zquot.Zquot_Zdiv_pos //.
-    apply: Z.mul_nonneg_nonneg; lia.
-  Qed.
-
   Lemma lower_addcarry_classifyP sub xs es :
     if lower_addcarry_classify sub xs es
     is Some (vi, op, es', cf, r)

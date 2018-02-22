@@ -378,6 +378,18 @@ Proof. Admitted.
 Lemma wsar0 sz (w: word sz) : wsar w 0 = w.
 Proof. Admitted.
 
+Lemma wmulE sz (x y: word sz) : (x * y)%R = wrepr sz (wunsigned x * wunsigned y).
+Proof. Admitted.
+
+Lemma wmulhuE sz (x y: word sz) : wmulhu x y = wrepr sz (wunsigned x * wunsigned y ÷ wbase sz).
+Proof. (* I64.mulhu w1 w2 = I64.repr (w1 * w2 ÷ I64.modulus).
+Proof.
+    rewrite /I64.mulhu.
+    case: w1 w2 => [z1 h1] [z2 h2] /=.
+    rewrite Zquot.Zquot_Zdiv_pos //.
+    apply: Z.mul_nonneg_nonneg; lia. *)
+Admitted.
+
 Definition wmax_unsigned sz := wbase sz - 1.
 Parameter wmin_signed   : wsize -> Z.
 Parameter wmax_signed   : wsize -> Z.
