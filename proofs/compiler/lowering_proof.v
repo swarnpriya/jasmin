@@ -1469,62 +1469,65 @@ Ltac elim_div :=
     apply: rbindP=> v; apply: rbindP=> x Hx Hv Hw ii Hdisj s1' Hs1'.
     move: Hdisj; rewrite /disj_fvars /lowering.disj_fvars vars_I_opn=> /disj_fvars_union [Hdisjl Hdisje].
     have Hx' := sem_pexprs_same Hdisje Hs1' Hx; have [s2' [Hw' Hs2']] := write_lvals_same Hdisjl Hs1' Hw.
-    move: o Hv=> [] Hv; try (
+    case: o Hv; (move => sz Hv || move => Hv); try (
       exists s2'; split=> //; apply: sem_seq1; apply: EmkI; apply: Eopn;
       rewrite /sem_sopn Hx' /=; rewrite /= in Hv; by rewrite Hv).
     (* Omulu *)
-    + move: Hv=> /app_ww_dec [w1 [w2 [Hz []Hv]]]; subst x v.
+    + case/app_ww_dec: Hv => sz1 [w1 [sz2 [w2 [Hz [Hv]]]]]; subst x v.
       move=> {Hx Hw}.
       have [x1 [x2 ?]] := write_lvals_dec2_s Hw'; subst xs.
       have [e1 [e2 ?]] := sem_pexprs_dec2_s Hx'; subst es.
       rewrite /=.
-      case: (is_wconstP e1) Hx' Hdisje=> [n1|{e1} e1] Hx' Hdisje.
-      + have [[]? He2] := sem_pexprs_dec2 Hx'; subst w1.
-        set s2'' := {| emem := emem s1'; evm := (evm s1').[vword fv.(fresh_multiplicand) <- ok (I64.repr n1)] |}.
+      have [He1 He2] := sem_pexprs_dec2 Hx'.
+      have := @is_wconstP gd s1' sz e1; case: is_wconst => [ n1 | _ ].
+      + move => /(_ _ erefl) /=; rewrite He1 => - [?]; subst n1.
+        set s2'' := {| emem := emem s1'; evm := (evm s1').[vword sz (fv.(fresh_multiplicand) sz) <- ok (zero_extend _ w1) ] |}.
         have Heq: eq_exc_fresh s2'' s1'.
           split=> //.
           rewrite /s2'' /= => x Hx.
           rewrite Fv.setP_neq //.
           apply/eqP=> Habs; apply: Hx; rewrite -Habs //.
         have [s3'' [Hw'' Hs3'']] := write_lvals_same Hdisjl Heq Hw'.
-        have He2' := sem_pexpr_same Hdisje Heq He2.
+        have Hd2 : disj_fvars (read_e e2).
+        - move: Hdisje.
+          rewrite (disj_fvars_m (read_es_cons _ _)) => /disj_fvars_union [_].
+          rewrite (disj_fvars_m (read_es_cons _ _)) => /disj_fvars_union [//].
+        have He2' := sem_pexpr_same Hd2 Heq He2.
         eexists; split.
         + apply: Eseq.
-          + by apply: EmkI; apply: Eopn.
+          + apply: EmkI; apply: Eopn; eauto.
+            by rewrite /sem_sopn /sem_pexprs /= He1 /= zero_extend_u.
           + apply: sem_seq1; apply: EmkI; apply: Eopn=> /=.
             rewrite /= /read_es /= in Hdisje.
             rewrite /sem_sopn /sem_pexprs /= He2' /=.
-            rewrite /get_var /on_vu /= Fv.setP_eq /=.
-            rewrite /= in Hw''.
-            rewrite mulhu_repr Z.mul_comm /I64.mul (Z.mul_comm w2).
-            exact: Hw''.
+            rewrite /get_var /on_vu /= Fv.setP_eq /= zero_extend_u wmulhuE Z.mul_comm GRing.mulrC wmulE.
+            exact Hw''.
         + exact: (eq_exc_freshT Hs3'' Hs2').
-      case: (is_wconstP e2) Hx' Hdisje=> [n2|{e2} e2] Hx' Hdisje.
-      + have [He1 []He2] := sem_pexprs_dec2 Hx'; subst w2.
-        set s2'' := {| emem := emem s1'; evm := (evm s1').[vword fv.(fresh_multiplicand) <- ok (I64.repr n2)] |}.
+      have := @is_wconstP gd s1' sz e2; case: is_wconst => [ n2 | _ ].
+      + move => /(_ _ erefl) /=; rewrite He2 => - [?]; subst n2.
+        set s2'' := {| emem := emem s1'; evm := (evm s1').[vword sz (fv.(fresh_multiplicand) sz) <- ok (zero_extend _ w2) ] |}.
         have Heq: eq_exc_fresh s2'' s1'.
-          split=> //.
+        * split=> //.
           rewrite /s2'' /= => x Hx.
           rewrite Fv.setP_neq //.
-          apply/eqP=> Habs; apply: Hx; rewrite -Habs /fvars /lowering.fvars.
-          SvD.fsetdec.
+          apply/eqP=> Habs; apply: Hx; rewrite -Habs //.
         have [s3'' [Hw'' Hs3'']] := write_lvals_same Hdisjl Heq Hw'.
-        have He1' := sem_pexpr_same Hdisje Heq He1.
+        have Hd1 : disj_fvars (read_e e1).
+        * by move: Hdisje; rewrite (disj_fvars_m (read_es_cons _ _)) => /disj_fvars_union [].
+        have He1' := sem_pexpr_same Hd1 Heq He1.
         eexists; split.
         + apply: Eseq.
-          + by apply: EmkI; apply: Eopn.
+          + apply: EmkI; apply: Eopn; eauto.
+            by rewrite /sem_sopn /sem_pexprs /= He2 /= zero_extend_u.
           + apply: sem_seq1; apply: EmkI; apply: Eopn=> /=.
             rewrite /= /read_es /= in Hdisje.
             rewrite /sem_sopn /sem_pexprs /= He1' /=.
-            rewrite /get_var /on_vu /= Fv.setP_eq /=.
-            rewrite /= in Hw''.
-            rewrite mulhu_repr.
+            rewrite /get_var /on_vu /= Fv.setP_eq /= zero_extend_u wmulhuE wmulE.
             exact: Hw''.
         + exact: (eq_exc_freshT Hs3'' Hs2').
       exists s2'; split=> //; apply: sem_seq1; apply: EmkI; apply: Eopn.
       rewrite /sem_sopn Hx' /=.
-      rewrite /= -mulhu_repr in Hw'.
-      exact: Hw'.
+      by rewrite /wumul -wmulhuE in Hw'.
     (* Oaddcarry *)
     + case: (lower_addcarry_correct ii t (sub:= false) Hs1' Hdisjl Hdisje Hx' Hv Hw').
       by intuition eauto using eq_exc_freshT.
