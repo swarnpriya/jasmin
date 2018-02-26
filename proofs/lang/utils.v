@@ -391,22 +391,115 @@ Notation Lex u v :=
   | Gt => Gt
   end.
 
-Section LEX.
+(* -------------------------------------------------------------------- *)
 
-  Class Cmp {T:Type} (cmp:T -> T -> comparison) := {
+Scheme Equality for comparison.
+
+Lemma comparison_beqP : Equality.axiom comparison_beq.
+Proof.
+  move=> e1 e2;case Heq: comparison_beq;constructor.
+  + by apply: internal_comparison_dec_bl.
+  by move=> /internal_comparison_dec_lb;rewrite Heq.
+Qed.
+
+Canonical comparison_eqMixin := EqMixin comparison_beqP.
+Canonical comparison_eqType := Eval hnf in EqType comparison comparison_eqMixin.
+
+(* -------------------------------------------------------------------- *)
+
+Class Cmp {T:Type} (cmp:T -> T -> comparison) := {
     cmp_sym    : forall x y, cmp x y = CompOpp (cmp y x);
     cmp_ctrans : forall y x z c, ctrans (cmp x y) (cmp y z) = Some c -> cmp x z = c;
     cmp_eq     : forall x y, cmp x y = Eq -> x = y;
   }.
 
-  Lemma cmp_trans {T} {cmp} {C:@Cmp T cmp} y x z c:
+Definition gcmp {T:Type} {cmp:T -> T -> comparison} {C:Cmp cmp} := cmp.
+
+Section CMP.
+
+  Context {T:Type} {cmp:T -> T -> comparison} {C:Cmp cmp}. 
+
+  Lemma cmp_trans y x z c:
     cmp x y = c -> cmp y z = c -> cmp x z = c.
   Proof.
     by move=> H1 H2;apply (@cmp_ctrans _ _ C y);rewrite H1 H2 ctransI.
   Qed.
 
-  Lemma cmp_refl  {T} {cmp} {C:@Cmp T cmp} x : cmp x x = Eq.
+  Lemma cmp_refl x : cmp x x = Eq.
   Proof. by have := @cmp_sym _ _ C x x;case: (cmp x x). Qed.
+
+  Definition cmp_lt x1 x2 := gcmp x1 x2 == Lt.
+
+  Definition cmp_le x1 x2 := gcmp x2 x1 != Lt.
+
+  Lemma cmp_le_refl x : cmp_le x x.
+  Proof. by rewrite /cmp_le /gcmp cmp_refl. Qed.
+
+  Lemma cmp_lt_trans y x z : cmp_lt x y -> cmp_lt y z -> cmp_lt x z.
+  Proof. 
+    rewrite /cmp_lt /gcmp => /eqP h1 /eqP h2;apply /eqP;apply (@cmp_ctrans _ _ C y).
+    by rewrite h1 h2. 
+  Qed.
+
+  Lemma cmp_le_trans y x z : cmp_le x y -> cmp_le y z -> cmp_le x z.
+  Proof. 
+    rewrite /cmp_le /gcmp => h1 h2;have := (@cmp_ctrans _ _ C y z x).
+    by case: cmp h1 => // _;case: cmp h2 => //= _;rewrite /ctrans => /(_ _ erefl) ->.
+  Qed.
+
+  Lemma cmp_nle_lt x y: ~~ (cmp_le x y) = cmp_lt y x.
+  Proof. by rewrite /cmp_le /cmp_lt /gcmp Bool.negb_involutive. Qed.
+
+  Lemma cmp_nlt_le x y: ~~ (cmp_lt x y) = cmp_le y x.
+  Proof. done. Qed.
+
+  Lemma cmp_lt_le_trans y x z: cmp_lt x y -> cmp_le y z -> cmp_lt x z.
+  Proof.
+    rewrite /cmp_le /cmp_lt /gcmp (cmp_sym z) => h1 h2.
+    have := (@cmp_ctrans _ _ C y x z).
+    by case: cmp h1 => // _;case: cmp h2 => //= _;rewrite /ctrans => /(_ _ erefl) ->.
+  Qed.
+
+  Lemma cmp_le_lt_trans y x z: cmp_le x y -> cmp_lt y z -> cmp_lt x z.
+  Proof.
+    rewrite /cmp_le /cmp_lt /gcmp (cmp_sym y) => h1 h2.
+    have := (@cmp_ctrans _ _ C y x z).    
+    by case: cmp h1 => // _;case: cmp h2 => //= _;rewrite /ctrans => /(_ _ erefl) ->.
+  Qed.
+
+  Lemma cmp_lt_le x y : cmp_lt x y -> cmp_le x y.
+  Proof.
+    rewrite /cmp_lt /cmp_le /gcmp => /eqP h.
+    by rewrite cmp_sym h.
+  Qed.
+
+  Lemma cmp_le_antisym x y : ~~ (cmp_le x y) -> cmp_le y x.
+  Proof. by move=> h;apply cmp_lt_le;rewrite -cmp_nle_lt. Qed.
+
+End CMP.
+
+Notation "m < n" := (cmp_lt m n) : cmp_scope.
+Notation "m <= n" := (cmp_le m n) : cmp_scope.
+Delimit Scope cmp_scope with CMP.
+
+Hint Resolve cmp_le_refl.
+
+Section EqCMP.
+
+  Context {T:eqType} {cmp:T -> T -> comparison} {C:Cmp cmp}. 
+
+  Lemma cmp_le_eq_lt (s1 s2:T): cmp_le s1 s2 = cmp_lt s1 s2 || (s1 == s2).
+  Proof.
+    rewrite /cmp_le /cmp_lt cmp_sym /gcmp.
+    case heq: cmp => //=.
+    + by rewrite (cmp_eq heq) eqxx.
+    case: eqP => // ?;subst.
+    by rewrite cmp_refl in heq.
+  Qed.
+
+End EqCMP.
+
+Section LEX.
  
   Variables (T1 T2:Type) (cmp1:T1 -> T1 -> comparison) (cmp2:T2 -> T2 -> comparison).
 
@@ -605,3 +698,4 @@ Proof.
 case: (dec _ _) => // e; apply: f_equal.
 exact: Eqdep_dec.UIP_dec.
 Qed.
+

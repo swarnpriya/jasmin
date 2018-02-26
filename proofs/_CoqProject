@@ -49,6 +49,7 @@ lang/extraction.v
 lang/gen_map.v
 lang/low_memory.v
 lang/sem.v
+lang/psem.v
 lang/strings.v
 lang/type.v
 lang/utils.v

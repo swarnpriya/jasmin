@@ -130,6 +130,14 @@ Definition wsize_cmp s s' :=
   | U256, U256 => Eq
   end.
 
+Instance wsizeO : Cmp wsize_cmp.
+Proof.
+  constructor.
+  + by move=> [] [].
+  + by move=> [] [] [] //= ? [].
+  by move=> [] [].
+Qed.
+
 Definition stype_cmp t t' :=
   match t, t' with
   | sbool   , sbool         => Eq 
@@ -147,15 +155,7 @@ Definition stype_cmp t t' :=
   | sarr _ _ , _             => Gt
   end.
 
-Instance wsizeO : Cmp wsize_cmp.
-Proof.
-  constructor.
-  + by move=> [] [].
-  + by move=> [] [] [] //= ? [].
-  by move=> [] [].
-Qed.
-
-Instance stypeO : Cmp stype_cmp.
+Instance stypeO : Cmp stype_cmp. 
 Proof.
   constructor.
   + case => [||w n|w] [||w' n'|w'] //=.
@@ -180,11 +180,16 @@ Module CmpStype.
   
 End CmpStype.
 
+Lemma wsize_le_U8 s: (U8 <= s)%CMP.
+Proof. by case: s. Qed.
+
+Lemma wsize_le_U8_inv s: (s <= U8)%CMP -> s = U8.
+Proof. by case: s. Qed.
+
 Module CEDecStype.
 
   Definition t := [eqType of stype].
   
-
   Fixpoint pos_dec (p1 p2:positive) : {p1 = p2} + {True} :=
     match p1 as p1' return {p1' = p2} + {True} with
     | xH =>
@@ -275,7 +280,6 @@ End CEDecStype.
 Lemma pos_dec_n_n n: CEDecStype.pos_dec n n = left (erefl n).
 Proof. by elim: n=> // p0 /= ->. Qed.
 
-
 Module Mt := DMmake CmpStype CEDecStype.
 
 Delimit Scope mtype_scope with mt.
@@ -290,3 +294,5 @@ Definition is_sword t :=
   | sword _ => true
   | _       => false
   end.
+
+

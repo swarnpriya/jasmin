@@ -498,10 +498,10 @@ suff : p * z1 + z = z2; nia.
 Qed.
 
 Lemma zero_extend_wrepr sz sz' z :
-  wsize_cmp sz' sz ≠ Lt →
+  (sz <= sz')%CMP →
   zero_extend sz (wrepr sz' z) = wrepr sz z.
 Proof.
-rewrite wsize_cmpP Nat.compare_ge_iff => hle.
+move=> /eqP; rewrite /cmp_le /gcmp wsize_cmpP Nat.compare_ge_iff => hle.
 rewrite /zero_extend /wrepr /wunsigned /urepr.
 apply/val_eqP/eqP => /=.
 move: hle. set a := wsize_size_minus_1 sz; set b := wsize_size_minus_1 sz' => hle.
@@ -510,6 +510,12 @@ have : ∃ n, modulus b.+1 = modulus n * modulus a.+1.
   rewrite (Nat2Z.inj_sub _ _ hle); f_equal; lia.
 case => n -> {hle b}.
 exact: mod_pq_mod_q.
+Qed.
+
+Lemma zero_extend_idem s s1 s2 (w:word s) : 
+  (s1 <= s2)%CMP -> zero_extend s1 (zero_extend s2 w) = zero_extend s1 w.
+Proof.
+  by move=> hle;rewrite [X in (zero_extend _ X) = _]/zero_extend zero_extend_wrepr.
 Qed.
 
 (* -------------------------------------------------------------------*)
@@ -521,5 +527,13 @@ Ltac wring :=
 Definition check_scale (s:Z) :=
   (s == 1%Z) || (s == 2%Z) || (s == 4%Z) || (s == 8%Z).
 
+(* -------------------------------------------------------------------*)
 
+Definition mask_word (sz:wsize) : u64 := 
+  match sz with
+  | U8 | U16 => wshl (wrepr _ (-1)) (wsize_bits sz)
+  | _ => 0%R
+  end.
 
+Definition merge_word (wr: u64) (sz:wsize) (w:word sz) := 
+   wxor (wand (mask_word sz) wr) (zero_extend U64 w).

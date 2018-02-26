@@ -58,7 +58,7 @@ Module MkOrdT (T:CmpType) <: OrderedType.
   Proof. by rewrite /eq=> Heq;rewrite cmp_sym Heq. Qed.
 
   Lemma eq_trans x y z: eq x y -> eq y z -> eq x z.
-  Proof. by apply cmp_trans. Qed.
+  Proof. apply cmp_trans. Qed.
 
   Lemma lt_trans x y z: lt x y -> lt y z -> lt x z.
   Proof. apply cmp_trans. Qed.
