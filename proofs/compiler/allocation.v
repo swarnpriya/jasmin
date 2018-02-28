@@ -1376,7 +1376,7 @@ Module CBAreg.
     case: ifPn => //= /Sv_memP Hid Hgetx.
     rewrite !Fv.setP_neq //;first by apply Hget.
     move: Hgetx;rewrite M.Mv.mvalid => Hgetx.
-    by apply /eqP => -[] ?;subst id;apply Hid.
+    by apply/eqP => ?; subst id; apply: Hid.
   Qed.
 
   Lemma eq_alloc_add x1 (v1:exec (psem_t (vtype x1))) r x2  vm1 vm2 (h:M.vsubtype x1 x2) : 
