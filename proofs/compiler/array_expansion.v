@@ -26,7 +26,7 @@
 (* ** Imports and settings *)
 
 From mathcomp Require Import all_ssreflect all_algebra.
-Require Import sem allocation.
+Require Import psem allocation.
 Require Import compiler_util ZArith.
 
 Set Implicit Arguments.
@@ -134,7 +134,7 @@ Module CBEA.
        let x := Var (sarr sw s) id' in
        let x' := Var (sword sw) id in
        exists t, vm.[x] = ok t /\ 
-       @Array.get _ s t n = vm'.[x']
+       ((@Array.get _ s t n) >>= (fun w => ok (pword_of_word w))) = vm'.[x']
      | _ => False
      end).
 
@@ -212,9 +212,10 @@ Module CBEA.
   Proof.
     move=> [Hee _] /andP[]/eqP <- /Sv_memP /Hee Hin Hget;move: Hin;rewrite /get_var.
     apply: on_vuP Hget => [z ->|->[]] ?;subst v1.
-    + by case: vm2.[x1] => //= a Ha; exists (to_val a);rewrite -to_val_uincl.
+    + by case: vm2.[x1] => //= a Ha; exists (pto_val a).
     case: vm2.[x1] => [a Ha | e <-] /=;last by eauto.
-    by exists (to_val a);rewrite type_of_to_val.
+    exists (pto_val a);split=> //.
+    by symmetry;apply subtype_eq_vundef_type;apply subtype_type_of_val.
   Qed.
 
   Lemma check_ebP gd e1 e2 r m1 v1 vm1 vm2:
@@ -237,9 +238,11 @@ Module CBEA.
       move:Hget; rewrite Htx1 /get_var /= => -[t1 [-> /=]] Hget Heq.
       pose p := fun ov => if ov is Ok v then v = Varr t else True.
       have : p error (ok (Varr t)) by done. 
-      rewrite -Heq /= => /Varr_inj1 => {p Heq} ?;subst t1;rewrite Hget /= => {Hget}.
+      rewrite -Heq /= => /Varr_inj1 => {p Heq} ?;subst t1.
+      t_xrbindP => w heq ?;subst v1.
+      move: Hget;rewrite heq /=.
       case: x2 Htx2 => -[xt2 xn2] x2i /= ->.
-      by rewrite Htx1; apply: rbindP => z -> [<-] /=;exists (Vword z);split=>//;exists erefl.
+      by rewrite Htx1 /= => <-;exists (Vword w).
     + move=> /andP[Hcv /He1 Hce];apply: on_arr_varP => sw n t Htx1 /=.
       rewrite /on_arr_var/= => /(check_varP Hrn Hcv) [vx2[->]].
       case:vx2=> //= sw0 n0 t' [] ? [ ? Htt'];subst.
@@ -261,12 +264,10 @@ Module CBEA.
     move=> /value_uincl_bool H/H [_ ->] /=.
     apply: rbindP=> v2 /He11 [] v2' [] -> Hv2'.
     apply: rbindP=> v3 /He12 [] v3' [] -> Hv3'.
-    t_xrbindP=> y2 Hy2 y3 Hy3 <- /=.
-    rewrite -(type_of_val_uincl Hv2').
-    have [? [-> _]] /= := of_val_uincl Hv2' Hy2.
-    have [? [-> _]] /= := of_val_uincl Hv3' Hy3.
-    eexists; split=> //.
-    by case: (b).
+    case: ifP => //=.
+    rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => -> [<-].
+    eexists;split;first by eauto.
+    by case b.
   Qed.
 
   Lemma check_eP gd e1 e2 r re vm1 vm2 :
@@ -279,8 +280,8 @@ Module CBEA.
     by rewrite /check_e;case:ifP => //= /check_ebP H [<-] Hea;split=>// m v1;apply: H.
   Qed.
 
-  (* FIXME: MOVE *)
-  Lemma eval_uincl_apply_undef t (v1 v2 : exec (sem_t t)): 
+  (* TODO: MOVE *)
+  Lemma eval_uincl_apply_undef t (v1 v2 : exec (psem_t t)): 
     eval_uincl v1 v2 -> 
     eval_uincl (apply_undef v1) (apply_undef v2).
   Proof.
@@ -288,7 +289,7 @@ Module CBEA.
     by move=> _; apply eval_uincl_undef.
   Qed.
 
-  Lemma eq_alloc_set x1 (v1 v2:exec (sem_t (vtype x1))) r vm1 vm2  : 
+  Lemma eq_alloc_set x1 (v1 v2:exec (psem_t (vtype x1))) r vm1 vm2  : 
     ~ Sv.In x1 (M.allocated r) ->
     eq_alloc r vm1 vm2 ->
     eval_uincl v1 v2 ->
@@ -317,13 +318,26 @@ Module CBEA.
     move=> /andP[]/eqP Heq /Sv_memP Hin [] Hu Hget Huv.
     rewrite /write_var /=;apply:rbindP => vm1'.
     apply: set_varP => [v1' | ];rewrite -Heq /set_var.
-    + move=> /(of_val_uincl Huv) [v2' [->]] /= Hv' <- [<-] /=.
+    + move=> /(pof_val_uincl Huv) [v2' [->]] /= Hv' <- [<-] /=.
       by eexists;split;eauto; apply: (@eq_alloc_set x1 (ok v1') (ok v2')).
-    move=> /negbTE -> /of_val_error ?;subst v1 => <- [] <-.
-    have := of_val_type_of v2; move /eqP: Huv => <- [[v'] | ] -> /=;
+    move=> /negbTE -> /pof_val_error [t [ht ?]];subst v1 => <- [] <-.
+    have /= := value_uincl_vundef_type_eq Huv.
+    rewrite -(subtype_vundef_type_eq ht) => /pof_val_type_of [[v'] | ] -> /=;
       eexists;split;eauto.
     + by apply (@eq_alloc_set x1 undef_error (ok v')).
     by apply (@eq_alloc_set x1 undef_error undef_error).
+  Qed.
+
+  (* TODO: move *)
+  Lemma to_word_to_pword s v w: to_word s v = ok w -> to_pword s v = ok (pword_of_word w).
+  Proof.
+    case: v => //= [ s' w'| []//?];last by case: ifP.
+    move=> /truncate_wordP [hle] ?;subst w.
+    move: (erefl (s' <=s)%CMP); pattern (s' <=s)%CMP at 2 3; case (s' <=s)%CMP => /=.
+    + move=> e;move: (e);rewrite cmp_le_eq_lt in e => e'.
+      case /orP: e => [hlt | /eqP ?];first by rewrite -cmp_nlt_le hlt in hle.
+      by subst; rewrite /pword_of_word zero_extend_u;do 2 f_equal;apply eq_irrelevance.
+    by move=> /negbT;rewrite cmp_nle_lt /truncate_word => h;rewrite (cmp_lt_le h) /=.
   Qed.
 
   Lemma check_lvalP gd r1 r1' x1 x2 oe2 s1 s1' vm1 v1 v2 :
@@ -361,10 +375,10 @@ Module CBEA.
         rewrite eq_dec_refl pos_dec_n_n.
         case => /= <-.
         case Hea => Hina Hgeta. 
-        exists vm1.[{| vtype := sword sz; vname := xn2 |} <- ok w];split=>//.
-        + by rewrite /write_var /= /set_var /= H.
+        exists vm1.[{| vtype := sword sz; vname := xn2 |} <- ok (pword_of_word w)];split=>//.
+        + by rewrite /write_var /= /set_var /= (to_word_to_pword H) /=.
         split.
-        + move=> x /= Hx;rewrite !Fv.setP_neq;
+        + by move=> x /= Hx;rewrite !Fv.setP_neq;
           [by apply Hina;SvD.fsetdec | |];apply /eqP; SvD.fsetdec. 
         move=> x n0 id.
         case: (({| vtype := sarr sz n; vname := xn1 |}, i) =P (x, n0)).

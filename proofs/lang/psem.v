@@ -1138,8 +1138,7 @@ Proof.
     by split => //;apply val_uincl_array.
   move=> /andP []hsz /eqP ->;rewrite /pof_val /pval_uincl /=.
   case: t z => //= s z. 
-  move: (erefl (sz <=s)%CMP).
-  pattern (sz <=s)%CMP at 2 3; case (sz <=s)%CMP => /=.
+  move: (erefl (sz <=s)%CMP); pattern (sz <=s)%CMP at 2 3; case (sz <=s)%CMP => /=.
   + move=> e [<-].
     move: (erefl (sz' <=s)%CMP).
     pattern (sz' <=s)%CMP at 2 3; case (sz' <=s)%CMP => /=.
