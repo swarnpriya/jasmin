@@ -25,7 +25,7 @@
 
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
-Require Import sem.
+Require Import psem.
 Require Import compiler_util ZArith. 
 
 Set Implicit Arguments.
@@ -252,7 +252,9 @@ Section PROOF.
 
   Let Pfun (mem:Memory.mem) fn vargs1 (mem':Memory.mem) vres :=
     forall vargs2, List.Forall2 value_uincl vargs1 vargs2 ->
-       sem_call p2 gd mem fn vargs2 mem' vres.
+    exists vres',  
+       sem_call p2 gd mem fn vargs2 mem' vres' /\
+       List.Forall2 value_uincl vres vres'.
 
   Local Lemma Hskip s: Pc s [::] s.
   Proof. 
@@ -465,11 +467,9 @@ Section PROOF.
     case: eqP => //= ?;subst fn2;apply: add_iinfoP.
     apply: rbindP => r1' Hca Hcxs.
     have [Hr1' /(_ _ Hes) [vargs2 [Hargs2 Hvargs]]] := check_esP Hca Hr1.
-    have Hs2 := Hfun _ Hvargs.
-    have Hvs : List.Forall2 value_uincl vs vs.
-    + by apply: List_Forall2_refl value_uincl_refl.
+    have [v' [Hs2 Hvs]]:= Hfun _ Hvargs.
     have /(_ _ Hr1') [vm2 [Hw2 Hr2]]:= check_lvalsP Hcxs _ Hvs Hw.
-    exists vm2;split=>//;econstructor;eauto.
+    exists vm2;split=>//. econstructor;eauto.
   Qed.
 
   Section REFL.
@@ -482,10 +482,9 @@ Section PROOF.
       sem p1 gd s1 (f_body f) {| emem := m2; evm := vm2 |} ->
       Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
       mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-      List.Forall is_full_array vres -> 
       Pfun m1 fn vargs m2 vres.
     Proof.
-      move=> Hget Hw Hsem _ Hres Hfull vargs2 Hvargs2;rewrite -eq_prog.
+      move=> Hget Hw Hsem _ Hres vargs2 Hvargs2;rewrite -eq_prog.
       have: sem_call p1 gd m1 fn vargs m2 vres by econstructor;eauto.
       by apply: sem_call_uincl.
     Qed.
@@ -495,11 +494,11 @@ Section PROOF.
       write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
       sem p1 gd s1 (f_body f) s2 ->
       mapM (fun x : var_i => get_var (evm s2) x) (f_res f) = ok vres ->
-      List.Forall is_full_array vres ->
-      exists s1' vm2,
+      exists s1' vm2 vres',
        [ /\ write_vars (f_params f') vargs {| emem := m1; evm := vmap0 |} = ok s1', 
-        sem p2 gd s1' (f_body f') (Estate (emem s2) vm2) &
-        mapM (fun x : var_i => get_var vm2 x) (f_res f') = ok vres].
+        sem p2 gd s1' (f_body f') (Estate (emem s2) vm2),
+        mapM (fun x : var_i => get_var vm2 x) (f_res f') = ok vres' &
+        List.Forall2 value_uincl vres vres'].
     Proof.
       rewrite /check_fundef eq_refl;apply: add_finfoP.
       apply:rbindP => r1;apply:add_iinfoP => Hcparams.
@@ -509,11 +508,11 @@ Section PROOF.
       + by apply: List_Forall2_refl.
       move=> /(sem_Ind Hskip Hcons HmkI Hassgn Hopn Hif_true Hif_false 
                 Hwhile_true Hwhile_false Hfor Hfor_nil Hfor_cons Hcall Hproc_eq) Hc.
-      have [vm4 /= [Hvm4 Hsc2] Hres Hfull]:= Hc _ _ _ _ _ Hvm3 Hcc.
-      do 2 eexists;split;eauto;first by rewrite (write_vars_lvals gd).
+      have [vm4 /= [Hvm4 Hsc2] Hres]:= Hc _ _ _ _ _ Hvm3 Hcc.
       have := check_esP Hcres Hvm4.
-      move=> [Hr3];rewrite sem_pexprs_get_var => /(_ _ Hres) [vres2 /= []].
-      by rewrite sem_pexprs_get_var => ? /(is_full_array_uincls Hfull) ->.
+      move=> [Hr3];rewrite sem_pexprs_get_var => /(_ _ Hres) [vres' /= []].
+      rewrite sem_pexprs_get_var => ??.
+      do 3 eexists;split;eauto;first by rewrite (write_vars_lvals gd).
     Qed.
 
   End REFL.
@@ -524,10 +523,9 @@ Section PROOF.
     sem p1 gd s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-    List.Forall is_full_array vres -> 
     Pfun m1 fn vargs m2 vres.
   Proof.
-    move=> Hget Hw _ Hc Hres Hfull.
+    move=> Hget Hw _ Hc Hres.
     have [fd2 [Hget2 /=]]:= all_checked Hget.
     rewrite eq_refl; apply:add_finfoP;apply:rbindP => r1;apply:add_iinfoP => Hcparams.
     apply:rbindP => r2 Hcc;apply: rbindP => r3;apply: add_iinfoP => Hcres _.
@@ -535,20 +533,23 @@ Section PROOF.
     move: Hw;rewrite (write_vars_lvals gd)=> /(check_lvalsP Hcparams).
     move=> /(_ _ _ eq_alloc_empty Hvargs2) [vm3 /= [Hw2 Hvm3]].
     have [vm4 /= [Hvm4 Hsc2]]:= Hc _ _ _ _ _ Hvm3 Hcc.
-    econstructor;eauto;first by rewrite (write_vars_lvals gd).
     have /(_ {| emem := emem s1; evm := vm2 |} vm4 Hvm4) := check_esP Hcres.
-    move=> [Hr3];rewrite sem_pexprs_get_var => /(_ _ Hres) [vres2 /= []].
-    by rewrite sem_pexprs_get_var => ? /(is_full_array_uincls Hfull) ->.
+    move=> [Hr3];rewrite sem_pexprs_get_var => /(_ _ Hres) [vres' /= []].
+    rewrite sem_pexprs_get_var => ??.
+    econstructor;split;eauto.
+    econstructor;eauto.
+    by rewrite (write_vars_lvals gd).
   Qed.
 
   Lemma alloc_callP f mem mem' va vr:
     sem_call p1 gd mem f va mem' vr ->
-    sem_call p2 gd mem f va mem' vr.
+    exists vr', sem_call p2 gd mem f va mem' vr' /\ List.Forall2 value_uincl vr vr'.
   Proof.
     move=>
       /(@sem_call_Ind p1 gd Pc Pi_r Pi Pfor Pfun Hskip Hcons HmkI Hassgn Hopn
             Hif_true Hif_false Hwhile_true Hwhile_false Hfor Hfor_nil Hfor_cons Hcall Hproc).
-    by move=> H;apply H;apply List_Forall2_refl;apply value_uincl_refl.
+    move=> H;apply H.
+    apply List_Forall2_refl;apply value_uincl_refl.
   Qed.
 
 End PROOF.
@@ -558,11 +559,12 @@ Lemma alloc_funP_eq p gd fn f f' m1 vargs vres s1 s2:
   write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
   sem p gd s1 (f_body f) s2 ->
   mapM (fun x : var_i => get_var (evm s2) x) (f_res f) = ok vres ->
-  List.Forall is_full_array vres ->
-  exists s1' vm2,
+  exists s1' vm2 vres',
    [ /\ write_vars (f_params f') vargs {| emem := m1; evm := vmap0 |} = ok s1', 
-    sem p gd s1' (f_body f') (Estate (emem s2) vm2) &
-    mapM (fun x : var_i => get_var vm2 x) (f_res f') = ok vres].
+    sem p gd s1' (f_body f') (Estate (emem s2) vm2),
+    mapM (fun x : var_i => get_var vm2 x) (f_res f') = ok vres' &
+    List.Forall2 value_uincl vres vres'
+    ].
 Proof. by apply alloc_funP_eq_aux. Qed.
 
 End MakeCheckAlloc.
@@ -781,12 +783,12 @@ Module CBAreg.
 
   Module Mv. 
    
-  Definition oget (mid: Ms.t Sv.t) id := odflt Sv.empty (Ms.get mid id).
+  Definition oget (mid: Mvar.t Sv.t) id := odflt Sv.empty (Mvar.get mid id).
 
-  Definition valid (mvar: Mvar.t Ident.ident) (mid: Ms.t Sv.t) := 
+  Definition valid (mvar: Mvar.t var) (mid: Mvar.t Sv.t) := 
     forall x id, Mvar.get mvar x = Some id <-> Sv.In x (oget mid id).
  
-  Record t_ := mkT { mvar : Mvar.t Ident.ident; mid : Ms.t Sv.t; mvalid : valid mvar mid }.
+  Record t_ := mkT { mvar : Mvar.t var; mid : Mvar.t Sv.t; mvalid : valid mvar mid }.
   Definition t := t_.
 
   Definition get (m:t) (x:var) := Mvar.get (mvar m) x.
@@ -794,29 +796,14 @@ Module CBAreg.
   Definition rm_id (m:t) id := 
      Sv.fold (fun x m => Mvar.remove m x) (oget (mid m) id) (mvar m).
 
-  Definition ms_upd (m:Ms.t Sv.t) (f:Sv.t -> Sv.t) id := 
-    Ms.set m id (f (oget m id)).
+  Definition ms_upd (m:Mvar.t Sv.t) (f:Sv.t -> Sv.t) id := 
+    Mvar.set m id (f (oget m id)).
 
   Definition rm_x (m:t) x := 
     match Mvar.get (mvar m) x with
     | Some id => ms_upd (mid m) (Sv.remove x) id
     | None    => (mid m)
     end.
-
-  (* TODO: move this *)
-  Lemma Sv_elemsP x s : reflect (Sv.In x s) (x \in Sv.elements s).
-  Proof.
-    apply: (equivP idP);rewrite SvD.F.elements_iff.
-    elim: (Sv.elements s) => /= [|v vs];split => //=.
-    + by move /SetoidList.InA_nil.
-    + by rewrite inE => /orP [ /eqP -> | /H];auto.
-    case/SetoidList.InA_cons => [ -> |]; rewrite inE ?eq_refl //.
-    by move /H => ->; rewrite orbT.
-  Qed.
-
-  (* TODO: move this *)
-  Lemma Sv_elems_eq x s : Sv.mem x s = (x \in (Sv.elements s)).
-  Proof. by apply: sameP (Sv_memP x s) (Sv_elemsP x s). Qed.
 
   Lemma valid_get_in m id x : 
     get m x = Some id -> x \in Sv.elements (oget (mid m) id).
@@ -850,14 +837,14 @@ Module CBAreg.
   Qed.
 
   Lemma oget_set m id id' s:
-    oget (m.[id' <- s])%ms id = 
+    oget (Mvar.set m id' s) id = 
      if id' == id then s else oget m id.
-  Proof. by rewrite /oget Ms.setP;case:ifP. Qed.
+  Proof. by rewrite /oget Mvar.setP;case:ifP. Qed.
 
   Lemma oget_rm m id id':
-    oget (Ms.remove m id') id = 
+    oget (Mvar.remove m id') id = 
      if id' == id then Sv.empty else oget m id.
-  Proof. by rewrite /oget Ms.removeP;case:ifP. Qed.
+  Proof. by rewrite /oget Mvar.removeP;case:ifP. Qed.
 
   Lemma rm_xP m x id : Sv.Equal (oget (rm_x m x) id) (Sv.remove x (oget (mid m) id)).
   Proof.
@@ -869,14 +856,14 @@ Module CBAreg.
     by rewrite -mvalid Heq => -[->].
   Qed.
 
-  Lemma valid_rm m id : valid (rm_id m id) (Ms.remove (mid m) id).
+  Lemma valid_rm m id : valid (rm_id m id) (Mvar.remove (mid m) id).
   Proof.
     move=> x id';rewrite oget_rm;case:ifPn => [/eqP <- | Hne].
     + by split => [/rm_id_eq | ] //;SvD.fsetdec.
     by rewrite rm_idP_neq // mvalid.
   Qed.
 
-  Definition remove m id := @mkT (rm_id m id) (Ms.remove (mid m) id) (valid_rm m id).
+  Definition remove m id := @mkT (rm_id m id) (Mvar.remove (mid m) id) (valid_rm m id).
 
   Lemma removeP m id x' : 
     get (remove m id) x' = 
@@ -892,7 +879,7 @@ Module CBAreg.
   Qed.
 
   Lemma valid_set m x id : 
-    valid (Mvar.set (rm_id m id) x id) (Ms.set (rm_x m x) id (Sv.singleton x)).
+    valid (Mvar.set (rm_id m id) x id) (Mvar.set (rm_x m x) id (Sv.singleton x)).
   Proof.
     move=> y idy;rewrite Mvar.setP;case:eqP => [<- | Hne].
     + rewrite oget_set;case:eqP => [<- | Hne'];first by split => //;SvD.fsetdec.
@@ -920,59 +907,23 @@ Module CBAreg.
 
   Definition add m x id := mkT (valid_add m x id).
 
-  Lemma valid_empty : valid (@Mvar.empty _) (@Ms.empty _).
-  Proof. move=> x id;rewrite Mvar.get0 /oget Ms.get0;split => //=;SvD.fsetdec. Qed.
+  Lemma valid_empty : valid (@Mvar.empty _) (@Mvar.empty _).
+  Proof. move=> x id;rewrite Mvar.get0 /oget Mvar.get0;split => //=;SvD.fsetdec. Qed.
 
   Definition empty := mkT valid_empty.
 
-
-  (*
-  Definition incl m1 m2 :=
-    Mvar.fold (fun x id b => b && (get m2 x == Some id))
-              (mvar m1) true.
-  
-  Lemma inclP m1 m2 : 
-    reflect (forall x id, get m1 x = Some id -> get m2 x = Some id) (incl m1 m2).
-  Proof.
-    rewrite /incl Mvar.foldP;set f := (f in foldl f).
-    set l := (Mvar.elements _); set b := true.
-    have : forall p, p \in l -> get m1 p.1 = Some p.2.
-    + by move=> p /Mvar.elementsP.
-    have : uniq [seq x.1 | x <- l]. apply Mvar.elementsU.
-    have : 
-      reflect (forall x id, (x,id) \notin l -> get m1 x = Some id -> get m2 x = Some id) b.
-    + by constructor=> x id /Mvar.elementsP. 
-    elim:l b=> /= [|p ps Hrec] b Hb => [Hu | /andP[Hnin Hu]] Hin.
-    + by apply (equivP Hb);split=> H ?? => [|_];apply H.
-    apply Hrec=> //;first last.
-    + by move=> ? Hp0;apply Hin;rewrite in_cons Hp0 orbC.
-    rewrite /f;case: Hb=> {Hrec} /= Hb.
-    + case: (_ =P _) => Heq;constructor.
-      + move=> x id Hnx;case : ((x,id) =P p)=> [|/eqP/negbTE]Hp;first by subst.
-        by apply Hb;rewrite in_cons Hp.
-      move=> H;apply/Heq/H;last by apply/Hin/mem_head.
-      by move: Hnin;apply: contra;apply: map_f.
-    constructor=> H;apply Hb=> x id.
-    rewrite in_cons negb_or=> /andP [] _;apply H.     
-  Qed.    
-
-  Lemma incl_refl r : incl r r.
-  Proof. by apply/inclP. Qed.
-
-  Lemma incl_trans r2 r1 r3  : incl r1 r2 -> incl r2 r3 -> incl r1 r3.
-  Proof. by move=> /inclP H1 /inclP H2;apply/inclP=> x id /H1 /H2. Qed.
-
-  Lemma merge_incl_l r1 r2 : incl (merge r1 r2) r1.
-  Proof. by apply/inclP=> x id /mergeP []. Qed.
-
-  Lemma merge_incl_r r1 r2 : incl (merge r1 r2) r2.
-  Proof. by apply/inclP=> x id /mergeP []. Qed.
-*)
-
   End Mv.
 
-  Definition mset_valid (mvar: Mvar.t Ident.ident) (mset:Sv.t) := 
-    (forall x id, Mvar.get mvar x = Some id -> Sv.In x mset).
+  Definition bool_dec (b:bool) : {b} + {~~b} :=
+    if b as b0 return ({b0} + {~~ b0}) then left (erefl true) 
+    else right (erefl true).
+
+  Definition vsubtype x y := subtype (vtype x) (vtype y).
+
+  Definition vsubtypeP x y := bool_dec (vsubtype x y).
+
+  Definition mset_valid (mvar: Mvar.t var) (mset:Sv.t) := 
+    forall x id, Mvar.get mvar x = Some id -> Sv.In x mset /\ vsubtype x id.
  
   Record t_ := mkT { 
     mv : Mv.t;
@@ -984,24 +935,36 @@ Module CBAreg.
 
   Definition get (m:t) (x:var) := Mv.get (mv m) x.
 
-  Lemma mset_valid_set m x id : mset_valid (Mv.mvar (Mv.set (mv m) x id)) (Sv.add x (mset m)).
+  Lemma mset_valid_set m x id : 
+    subtype (vtype x) (vtype id) ->
+    mset_valid (Mv.mvar (Mv.set (mv m) x id)) (Sv.add x (mset m)).
   Proof.
-    move=> y idy;rewrite Mvar.setP;case: eqP=> [-> ?|?];first by SvD.fsetdec.
-    rewrite Mv.rm_idP;case:ifPn => // _ /svalid;SvD.fsetdec.
+    move=> hsub y idy;rewrite Mvar.setP;case: eqP => ?.
+    + by move=> [?];subst; split=> //;SvD.fsetdec.
+    by rewrite Mv.rm_idP;case:ifPn => //_ /svalid [??];split => //;SvD.fsetdec.
   Qed.
 
-  Definition set m x id := mkT (@mset_valid_set m x id).
-
-  Lemma mset_valid_add m x id : mset_valid (Mv.mvar (Mv.add (mv m) x id)) (Sv.add x (mset m)).
+  Definition set m x id h := mkT (@mset_valid_set m x id h).
+  Arguments set m x id h : clear implicits. 
+ 
+  Lemma mset_valid_add m x id : 
+    subtype (vtype x) (vtype id) ->
+    mset_valid (Mv.mvar (Mv.add (mv m) x id)) (Sv.add x (mset m)).
   Proof.
-    move=> y idy;rewrite Mvar.setP;case: eqP=> [-> ?|?];first by SvD.fsetdec.
-    by move=> /svalid;SvD.fsetdec.
+    move=> h y idy;rewrite Mvar.setP;case: eqP => ?.
+    + by move=> [?];subst; split=> //;SvD.fsetdec.
+    by move=> /svalid [??];split=> //;SvD.fsetdec.
   Qed.
 
-  Definition add m x id := mkT (@mset_valid_add m x id).
+  Definition add m x id h := mkT (@mset_valid_add m x id h).
+  Arguments add m x id h : clear implicits. 
+
+  Definition addc m x id := 
+    if vsubtypeP x id is left h then add m x id h
+    else m.
 
   Lemma mset_valid_empty s : mset_valid (Mv.mvar Mv.empty) s.
-  Proof. by  move=> x id;rewrite Mvar.get0. Qed.
+  Proof. by move=> x id;rewrite Mvar.get0. Qed.
     
   Definition empty_s s := mkT (mset_valid_empty s). 
 
@@ -1015,10 +978,10 @@ Module CBAreg.
       | None, Some idx      => if ~~(Sv.mem x (mset m1)) then Some idx else None
       | None, None          => None
       end) (Mv.mvar m1.(mv)) (Mv.mvar m2.(mv)).
-    
+
   Definition merge m1 m2 := 
     let mv := merge_aux m1 m2 in
-    Mvar.fold (fun x idx m => add m x idx) mv (empty_s (Sv.union (mset m1) (mset m2))).
+    Mvar.fold (fun x idx m => addc m x idx) mv (empty_s (Sv.union (mset m1) (mset m2))).
 
   Lemma mset_valid_rm m id : mset_valid (Mv.mvar (Mv.remove (mv m) id)) (mset m).
   Proof.
@@ -1026,7 +989,7 @@ Module CBAreg.
     have := Mv.removeP (mv m) id y.
     rewrite /Mv.get => ->.
     case: Mvar.get (@svalid m y) => [id'|] //.
-    by move=> /(_ _ (refl_equal _)).
+    by move=> /(_ _ (refl_equal _));case:eqP => // ?? [<-].
   Qed.
 
   Definition remove m id :=  mkT (@mset_valid_rm m id).
@@ -1037,22 +1000,30 @@ Module CBAreg.
   Lemma get0 x : get empty x = None.
   Proof. apply get0_s. Qed.
 
-  Lemma setP m x id y : 
-    get (set m x id) y = 
-       if x == y then Some id
-       else if Sv.mem y (Mv.oget (Mv.mid (mv m)) id) then None 
-       else get m y.
+  Lemma setP m x id y h : 
+    get (set m x id h) y = 
+      if x == y then Some id
+      else if Sv.mem y (Mv.oget (Mv.mid (mv m)) id) then None 
+      else get m y.
   Proof. by rewrite /get/set /Mv.get/Mv.set /= Mvar.setP Mv.rm_idP. Qed.
 
-  Lemma setP_mset m x id : mset (set m x id) = Sv.add x (mset m).
+  Lemma setP_mset m x id h : mset (set m x id h) = Sv.add x (mset m).
   Proof. by []. Qed.
 
-  Lemma addP m x id y : 
-    get (add m x id) y = if x == y then Some id else get m y.
+  Lemma addP m x id y h : 
+    get (add m x id h) y = if x == y then Some id else get m y.
   Proof. by rewrite /get/add /Mv.get/Mv.add /= Mvar.setP. Qed.
 
-  Lemma addP_mset m x id : mset (add m x id) = Sv.add x (mset m).
+  Lemma addP_mset m x id h : mset (add m x id h) = Sv.add x (mset m).
   Proof. by []. Qed.
+
+  Lemma addcP m x id y :
+    get (addc m x id) y = 
+     if vsubtype x id && (x == y) then Some id else get m y.
+  Proof. 
+    rewrite /addc;case: vsubtypeP => [ heq | /negbTE -> //].
+    by rewrite heq addP.
+  Qed.
  
   Lemma merge_auxP m1 m2 x id : 
     Mvar.get (merge_aux m1 m2) x = Some id ->
@@ -1080,14 +1051,17 @@ Module CBAreg.
        get m1 x = Some id /\ get m2 x = Some id \/
        get m1 x = Some id /\ ~Sv.In x (mset m2) \/
        get m2 x = Some id /\ ~Sv.In x (mset m1).
-    have H : forall (l:list (var * Ident.ident)) m, 
+    have H : forall (l:list (var * var)) m, 
       (forall p, p \in l -> Mvar.get (merge_aux m1 m2) p.1 = Some p.2) ->
       P m -> P (foldl f m l).
     + elim=> [|p l Hrec] //= m Hl Hm;apply Hrec.
       + by move=> ? H;apply Hl;rewrite in_cons H orbC.
       rewrite /f /P.
       have /Hl -/merge_auxP Hp := mem_head p l.
-      by rewrite addP;case:eqP => [<- [<-] //| ne ];apply Hm.
+      have : vsubtype p.1 p.2.
+      + have : get m1 p.1 = Some p.2 \/ get m2 p.1 = Some p.2 by intuition.
+        by move=> [] /svalid [].        
+      by rewrite addcP => ->; case:eqP => [<- [<-] //| ne ];apply Hm.
     apply H;first by move=> p /Mvar.elementsP.
     by rewrite /P get0_s.
   Qed.
@@ -1098,8 +1072,17 @@ Module CBAreg.
     pose P := fun m => Sv.Subset (Sv.union (mset m1) (mset m2)) (mset m).
     have : P (empty_s (Sv.union (mset m1) (mset m2))). 
     + by rewrite /P /empty_s.
-    elim : Mvar.elements (empty_s _) => //= -[x idx] l Hl m Hm.
-    apply Hl;move:Hm;rewrite /f /P addP_mset;SvD.fsetdec.
+    have : 
+      (forall p, p \in Mvar.elements (merge_aux m1 m2) -> vsubtype p.1 p.2).
+    + move=> p /Mvar.elementsP -/merge_auxP ?.
+      have : get m1 p.1 = Some p.2 \/ get m2 p.1 = Some p.2 by intuition.
+      by move=> [] /svalid [].        
+    elim : Mvar.elements (empty_s _) => //= -[x idx] l Hl m Hp Hm.
+    apply Hl;first by move=> p hin;apply Hp;rewrite in_cons hin orbT.
+    move:Hm;rewrite /f /P /addc /=.
+    case: vsubtypeP => [? | ]. 
+    + rewrite addP_mset;SvD.fsetdec.
+    by have /= -> := Hp _ (mem_head (x, idx) l).
   Qed.
 
   Lemma removeP m id x : 
@@ -1161,13 +1144,13 @@ Module CBAreg.
   Definition check_v xi1 xi2 (m:M.t) : cexec M.t :=
     let x1 := xi1.(v_var) in
     let x2 := xi2.(v_var) in    
-    if vtype x1 == vtype x2 then
+    if M.vsubtypeP x1 x2 is left h then
       match M.get m x1 with
       | None     => 
         if Sv.mem x1 (M.mset m) then cerror (Cerr_varalloc xi1 xi2 "variable already set") 
-        else cok (M.set m x1 (vname x2))
-      | Some id' => 
-        if vname x2 == id' then cok m 
+        else cok (M.set m x1 x2 h)
+      | Some x2' => 
+        if x2 == x2' then cok m 
         else cerror (Cerr_varalloc xi1 xi2 "variable mismatch")
       end
     else cerror (Cerr_varalloc xi1 xi2 "type mismatch").
@@ -1193,15 +1176,19 @@ Module CBAreg.
      | Papp2 o1 e11 e12, Papp2 o2 e21 e22 =>
       if o1 == o2 then check_e e11 e21 m >>= check_e e12 e22
       else cerror (Cerr_neqop2 o1 o2 salloc)
-    | Pif e e1 e2, Pif e' e1' e2' => 
-      check_e e e' m >>= check_e e1 e1' >>= check_e e2 e2'
+    | Pif t e e1 e2, Pif t' e' e1' e2' => 
+      if t == t' then check_e e e' m >>= check_e e1 e1' >>= check_e e2 e2'
+      else cerror (Cerr_iftype t t salloc)
     | _, _ => err tt
     end.
 
-  Definition check_var (xi1 xi2:var_i) m : cexec M.t :=
+  Definition check_var (x1 x2:var) m (h:M.vsubtype x1 x2): cexec M.t :=
+    cok (M.set m x1 x2 h).
+  
+  Definition check_varc (xi1 xi2:var_i) m : cexec M.t :=
     let x1 := xi1.(v_var) in
     let x2 := xi2.(v_var) in
-    if vtype x1 == vtype x2 then cok (M.set m x1 (vname x2))
+    if M.vsubtypeP x1 x2 is left h then check_var m h
     else cerror (Cerr_varalloc xi1 xi2 "type mismatch").
 
   Definition is_Pvar (e:option pexpr) :=
@@ -1220,29 +1207,28 @@ Module CBAreg.
       if t1 == t2 then cok m else err tt
     | Lnone  _ t1, Lvar x      => 
       if t1 == x.(v_var).(vtype) then
-        cok (M.remove m x.(v_var).(vname))
+        cok (M.remove m x.(v_var))
       else err tt
     | Lvar x1    , Lvar x2     => 
       match is_Pvar e2 with
       | Some x2' =>
-        let xi1  := x1.(v_var) in
-        let xi2  := x2.(v_var) in
-        let xi2' := x2'.(v_var) in
-        if (vtype x1 == vtype x2) && (xi2 == xi2') then
-          cok (M.add m x1 (vname x2))
-        else check_var x1 x2 m
-      | _               => check_var x1 x2 m
+        if M.vsubtypeP x1 x2 is left h then 
+          if (vtype x1 == vtype x2) && (x2.(v_var) == x2') then cok (M.add m x1 x2 h)
+          else check_var m h
+        else cerror (Cerr_varalloc x1 x2 "type mismatch")
+      | _               => check_varc x1 x2 m
       end
     | Lmem w1 x1 e1, Lmem w2 x2 e2  =>
       if w1 == w2 then check_v x1 x2 m >>= check_e e1 e2 else err tt
-    | Laset x1 e1, Laset x2 e2 => check_v x1 x2 m >>= check_e e1 e2 >>= check_var x1 x2
+    | Laset x1 e1, Laset x2 e2 => check_v x1 x2 m >>= check_e e1 e2 >>= check_varc x1 x2
     | _          , _           => err tt
     end.
-     
+
   Definition eq_alloc (r:M.t) (vm1 vm2:vmap) := 
     [/\ vm_uincl vmap0 vm2, 
-        (forall x, ~Sv.In x (M.mset r) -> vm1.[x] = undef_addr x.(vtype)) &
-        (forall x id,  M.get r x = Some id -> eval_uincl vm1.[x] vm2.[Var (vtype x) id])].
+        (forall x, ~Sv.In x (M.mset r) -> vm1.[x] = pundef_addr x.(vtype)) &
+        (forall x x', M.get r x = Some x' -> 
+                      eval_uincl vm1.[x] vm2.[x'])].
   
   Lemma eq_alloc_empty: eq_alloc M.empty vmap0 vmap0.
   Proof. done. Qed.
@@ -1254,9 +1240,12 @@ Module CBAreg.
   Proof. 
     move=> /M.inclP [Hi Hsub] [ Huincl epa eqa];split=>//.
     + by move=> x Hx;apply epa;SvD.fsetdec.
-    move=> x id.
-    case: (Sv_memP x (M.mset r1))=> [ /Hi H /H /eqa // | /epa -> _].
-    apply: (Huincl {| vtype := vtype x; vname := id |}).
+    move=> x x'; case: (Sv_memP x (M.mset r1)) => [ /Hi H /H /eqa // | /epa -> hget].
+    have := Huincl x'.
+    have [_ /(_ x') /= heq _ ]:= eq_alloc_empty.
+    rewrite heq;last by rewrite SvD.F.empty_iff.
+    apply subtype_eval_uincl;apply (subtype_trans (subtype_vundef_type (vtype x))).
+    by apply (M.svalid hget).  
   Qed.
 
   Lemma check_vP x1 x2 r re vm1 vm2 : 
@@ -1267,28 +1256,38 @@ Module CBAreg.
        get_var vm1 x1 = ok v1 ->
        exists v2 : value, get_var vm2 x2 = ok v2 /\ value_uincl v1 v2).
   Proof.
-    rewrite /check_v;case:eqP => //= Ht.
+    rewrite /check_v;case: M.vsubtypeP => // hsub.
+    have husub : subtype (vundef_type (vtype x1)) (vtype x2).
+    +  by apply (subtype_trans (subtype_vundef_type (vtype x1))).
     case Hget : M.get => [id | ].
     + case: eqP => //= ? [<-];subst id => Hea;split=>//.
       case: Hea => _ _ /(_ _ _ Hget) Hev v1 {Hget} Hget.    
-      case: x1 x2 Ht Hget Hev=> [[xt1 xn1] ii1] [[xt2 xn2] ii2] /= <-.
+      case: x1 x2 hsub husub Hget Hev=> [[xt1 xn1] ii1] [[xt2 xn2] ii2] /= hsub husub.
       rewrite /get_var;apply: on_vuP => /= [t | ] -> => [<- | [<-]] /=.
-      + case: (vm2.[_])%vmap => //= z' Hz';exists (to_val z');split => //=.
-        by rewrite -to_val_uincl.
+      + by case: (vm2.[_])%vmap => //= z' Hz';exists (pto_val z'). 
+      have /= heq := subtype_eq_vundef_type hsub.
       case: (vm2.[_])%vmap => //= [ v' _ | e <-];last by eauto.
-      by exists (to_val v');rewrite type_of_to_val.
+      exists (pto_val v');split => //;rewrite heq.
+      symmetry;apply subtype_eq_vundef_type.
+      by apply: subtype_type_of_val.
     case: ifPn => //= /Sv_memP Hnot [] <- [ Hvm0 Hset Huincl];split;first split=>//.
     + by move=> x;rewrite M.setP_mset => ?;apply Hset;SvD.fsetdec.
     + move=> x id;rewrite M.setP;case:eqP => [<- [<-]| Hne].
-      + rewrite (Hset _ Hnot) /=.
-        by apply: (Hvm0 {| vtype := vtype x1; vname := vname x2 |}).
+      + rewrite (Hset _ Hnot) /=; apply subtype_eval_uincl => //.
+        by have := Hvm0 x2;rewrite Fv.get0.
       by case:ifP => // _;apply Huincl.
     move=> v1;rewrite /get_var (Hset _ Hnot) /=.
-    case: x2 Ht (Hvm0 x2) => [[xt2 xn2] ?] /= <-.
-    case: (vtype x1) => //=;
-      try by move=> H [<-];case: (vm2.[_]) H => //= [? _ | e <-];eauto.
-    + by move => sz p H [<-]; case: (vm2.[_]) H => //= a Ha;exists (Varr a); do 2 split => //; exists erefl.
-    by move => sz H [<-]; case: (vm2.[_]) H => //= [? _ | e <-]; eauto.
+    case: x2 hsub husub (Hvm0 x2) => [[xt2 xn2] ?] /= hsub husub;rewrite Fv.get0 /= => heval.
+    have heval1:= subtype_eval_uincl husub heval.    
+    apply on_vuP => [ v heq| heq];move: heval1;rewrite heq /=;
+     case: (vm2.[_]) => //=.
+    + by move=> v' hv <-;eauto.
+    + move=> v' _ [<-];eexists;split;first by reflexivity.
+      rewrite /= (subtype_eq_vundef_type hsub) /=.
+      symmetry;apply subtype_eq_vundef_type.
+      by apply: subtype_type_of_val.
+    move=> e <- [<-];eexists;split;first by reflexivity.
+    by rewrite /=;apply subtype_eq_vundef_type.
   Qed.
 
   Lemma check_eP gd e1 e2 r re vm1 vm2 :
@@ -1299,8 +1298,8 @@ Module CBAreg.
     exists v2, sem_pexpr gd (Estate m vm2) e2 = ok v2 /\ value_uincl v1 v2.
   Proof.
     elim : e1 e2 r re vm1 =>
-      [z1 | b1 | sz1 e1 He1 | x1 | g1 | x1 e1 He1 | sz1 x1 e1 He1 | o1 e1 He1 | o1 e11 He11 e12 He12 | e He e11 He11 e12 He12 ]
-      [z2 | b2 | sz2 e2 | x2 | g2 | x2 e2 | sz2 x2 e2 | o2 e2 | o2 e21 e22 | e' e21 e22] //= r re s.
+      [z1 | b1 | sz1 e1 He1 | x1 | g1 | x1 e1 He1 | sz1 x1 e1 He1 | o1 e1 He1 | o1 e11 He11 e12 He12 | t e He e11 He11 e12 He12 ]
+      [z2 | b2 | sz2 e2 | x2 | g2 | x2 e2 | sz2 x2 e2 | o2 e2 | o2 e21 e22 | t' e' e21 e22] //= r re s.
     + by case: ifPn => // /eqP <- [->] ?;split=> // ?? [] <-; exists z1.
     + by case: ifPn => // /eqP <- [->] ?;split=> // ?? [] <-; exists b1.
     + case: eqP => // -> /He1 H /H [? {He1}He1];split=>// m v1.
@@ -1334,103 +1333,124 @@ Module CBAreg.
       apply: rbindP => v1 /Hse1 [v1' [-> U1]].
       apply: rbindP => v2 /Hse2 [v2' [-> U2]].
       by move=> /(vuincl_sem_sop2 U1 U2);exists v.
+    case:eqP => // ?;subst t'.
     apply: rbindP => r1;apply: rbindP => r' /He Hr' /He11 Hr1 /He12 Hr2 {He He11 He12}.
     move=> /Hr'{Hr'}[] /Hr1{Hr1}[] /Hr2{Hr2}[] Hre Hs2 Hs1 Hs;split=>// m v1.
-    apply:rbindP => b;apply:rbindP => w /Hs [w'] [->] /=.
-    move=> /value_uincl_bool H/H{H} [? ->] /=.
-    t_xrbindP=> v2 Hv2 v3 Hv3.
+    t_xrbindP => b w /Hs [w'] [->] /= /value_uincl_bool H/H{H} [? ->] /= v2 Hv2 v3 Hv3.
     have [v2' [-> Hv2']] := Hs1 _ _ Hv2.
     have [v3' [-> Hv3']] := Hs2 _ _ Hv3.
-    t_xrbindP=> y2 Hy2 y3 Hy3 <- /=.
-    rewrite -(type_of_val_uincl Hv2').
+    move=> y2 Hy2 y3 Hy3 <- /=.
     have [? [-> _]] /= := of_val_uincl Hv2' Hy2.
     have [? [-> _]] /= := of_val_uincl Hv3' Hy3.
     eexists; split=> //.
     by case: (b).
   Qed.
 
-  Lemma eq_alloc_set x1 (v1 v2:exec (sem_t (vtype x1))) r xn2 vm1 vm2  : 
+  Lemma vm_uincl0_set vm x (v : exec (psem_t (vtype x))) : 
+    vm_uincl vmap0 vm ->
+    ((exists v', v = ok v') \/ v = undef_error) ->  
+    vm_uincl vmap0 vm.[x <- apply_undef v].
+  Proof.
+    move=> Hvm0 H z; case (x =P z) => [<- | /eqP Hne].
+    + rewrite Fv.setP_eq /vmap0 Fv.get0 /=.
+      by case: H => [[v']|] ?;subst v => //=;apply eval_uincl_undef.
+    by rewrite Fv.setP_neq.
+  Qed.
+
+  Lemma eq_alloc_set x1 (v1 :exec (psem_t (vtype x1))) r x2 (v2 :exec (psem_t (vtype x2))) 
+            vm1 vm2 (h:M.vsubtype x1 x2) : 
     eq_alloc r vm1 vm2 ->
     eval_uincl v1 v2 ->
     ((exists v', v2 = ok v') \/ v2 = undef_error) ->  
-    eq_alloc (M.set r x1 xn2) vm1.[x1 <- apply_undef v1] 
-                              vm2.[{| vtype := vtype x1; vname := xn2 |} <- apply_undef v2].
+    eq_alloc (M.set r x1 x2 h) vm1.[x1 <- apply_undef v1] 
+                              vm2.[x2 <- apply_undef v2].
   Proof.
-    move=> [Hvm0 Hin Hget] Hu; set x2 := {|vtype := _ |};split.
-    + move=> z;case (x2 =P z) => [<- | /eqP Hne].
-      + rewrite Fv.setP_eq /vmap0 Fv.get0 /x2 /=.
-        case: H => [[v']|] ?;subst v2 => //= {x2}.
-        case: (vtype x1) (v') => //= sz p v2' i v H.
-        by have := Array.getP_empty H.
-      by rewrite Fv.setP_neq.
+    move=> [Hvm0 Hin Hget] Hu H;split.
+    + by apply vm_uincl0_set.
     + move=> z;rewrite M.setP_mset => Hnin.
       by rewrite Fv.setP_neq;[apply Hin|apply /eqP];SvD.fsetdec.
     move=> x id;rewrite M.setP;case:eqP => [<-[<-] | /eqP Hne].
     + rewrite !Fv.setP_eq.
       case: H => [[v'] | ] ?;subst v2.
-      + by case: v1 Hu => [v1 | []] //= _; apply: eval_uincl_undef.
-      by case: v1 Hu => //= -[].
+      + case: v1 Hu => [v1 | []] //= _;apply: subtype_eval_uincl.
+        + by apply: subtype_trans h;apply subtype_vundef_type.
+        apply: eval_uincl_undef.
+      by case: v1 Hu => //= -[] //= _;apply subtype_eval_uincl_pundef.
     case: ifPn => //= /Sv_memP Hid Hgetx.
     rewrite !Fv.setP_neq //;first by apply Hget.
     move: Hgetx;rewrite M.Mv.mvalid => Hgetx.
-    by apply /eqP => -[] _ ?;subst id;apply Hid.
+    by apply /eqP => -[] ?;subst id;apply Hid.
   Qed.
 
-  Lemma eq_alloc_add x1 (v1:exec (sem_t (vtype x1))) r xn2 vm1 vm2  : 
+  Lemma eq_alloc_add x1 (v1:exec (psem_t (vtype x1))) r x2  vm1 vm2 (h:M.vsubtype x1 x2) : 
     eq_alloc r vm1 vm2 ->
-    let v2 := vm2.[{| vtype := vtype x1; vname := xn2 |}] in
+    let v2 := vm2.[x2] in
     eval_uincl v1 v2 ->
     ((exists v', v2 = ok v') \/ v2 = undef_error) ->  
-    eq_alloc (M.add r x1 xn2) vm1.[x1 <- apply_undef v1] 
-                              vm2.[{| vtype := vtype x1; vname := xn2 |} <- apply_undef v2].
+    eq_alloc (M.add r x1 x2 h) vm1.[x1 <- apply_undef v1] 
+                               vm2.[x2 <- apply_undef v2].
   Proof.
-    move=> [Hvm0 Hin Hget] /= Hu; set x2 := {|vtype := _ |};split.
-    + move=> z;case (x2 =P z) => [<- | /eqP Hne].
-      + rewrite Fv.setP_eq /vmap0 Fv.get0 /x2 /=.
-        by case: H => [[v']|] -> //=;apply eval_uincl_undef.
-      by rewrite Fv.setP_neq.
+    move=> [Hvm0 Hin Hget] /= Hu H; split.
+    + by apply vm_uincl0_set.
     + move=> z;rewrite M.addP_mset => Hnin.
       by rewrite Fv.setP_neq;[apply Hin|apply /eqP];SvD.fsetdec.
     move=> x id;rewrite M.addP;case:eqP => [<-[<-] | /eqP Hne].
     + rewrite !Fv.setP_eq.
       case:H Hu => [ [w2] | ] -> /=; case: v1 => [w1 | []] //= _.
-      by case: (vtype x1) w2 => //= sz p ??? H;have := Array.getP_empty H.
-    rewrite Fv.setP_neq //.
-    case: (x2 =P {| vtype := vtype x; vname := id |}).
-    + case: (x) => xt xn /= [] <- <-;rewrite Fv.setP_eq => /Hget /=.  
-      case: H => [ [w2] | ] -> //=.
-      by case: vm1.[_] => [ w1 | []] //=; case (vtype x1).
-    move=> /eqP ?;rewrite Fv.setP_neq //;apply Hget.
+      + apply: subtype_eval_uincl.
+        + by apply: subtype_trans h;apply subtype_vundef_type.
+        by apply: eval_uincl_undef.
+      by apply: subtype_eval_uincl_pundef.
+    move=> hx;rewrite Fv.setP_neq //.
+    case: (x2 =P id) => [? | /eqP hne];last by rewrite Fv.setP_neq //;apply Hget.
+    subst;rewrite Fv.setP_eq;have := Hget _ _ hx. 
+    case: H => [ [v']| ] -> //=.
+    by case: vm1.[x] => //= -[]//;case: vtype.
   Qed.
 
-  Lemma check_varP r1 r1' vm1 vm2 vm1' x1 x2 v1 v2 :
+  Lemma check_varP r1 r1' vm1 vm2 vm1' x1 x2 v1 v2 (h:M.vsubtype x1 x2):
     eq_alloc r1 vm1 vm2 ->
-    check_var x1 x2 r1 = ok r1' ->
+    @check_var x1 x2 r1 h = ok r1' ->
     set_var vm1 x1 v1 = ok vm1' ->
     value_uincl v1 v2 ->
     exists vm2' : vmap,
       set_var vm2 x2 v2 = ok vm2' /\ eq_alloc r1' vm1' vm2'.
   Proof.
-    rewrite /check_var;case: eqP => //= Ht Hea [<-].
+    rewrite /check_var => Hea -[<-].
     apply: set_varP.
     + move=> v1' Hv1' <- Hu.
-      have [v2' [Hv2' Hu']]:= of_val_uincl Hu Hv1'.
-      case: x2 Ht => -[xt2 xn2] _ /= <-.
-      exists (vm2.[{| vtype := vtype x1; vname := xn2 |} <- ok v2']);split.
-      + by rewrite /set_var /= Hv2'.
-      apply: (@eq_alloc_set x1 (ok v1') (ok v2')) => //; by eauto.
-    rewrite /set_var;case: x1 x2 Ht => [[t1 xn1] ii1] [[t2 xn2] ii2] /= <-. 
-    move=> /negbTE -> /of_val_error -> <- /eqP -> /=.
-    set x1 := {|vname := xn1|}.
-    have [[ v'] -> | -> ] /=:= of_val_type_of v2;eexists;split;eauto.
-    + apply: (@eq_alloc_set x1 undef_error (ok v'))=> //; by eauto.
-    apply: (@eq_alloc_set x1 undef_error undef_error)=> //; by eauto.
+      have [v2' [Hv2' Hu']]:= pof_val_uincl Hu Hv1'.
+      rewrite /set_var; have [v2'' [-> hvu] /=]:= subtype_pof_val_ok h Hv2'.
+      eexists;split;first reflexivity.
+      apply: (@eq_alloc_set x1 (ok v1') _ x2 (ok v2'')) => //=;last by eauto.
+      apply: value_uincl_trans Hu' hvu.
+    rewrite /set_var.
+    have hueq: vundef_type (vtype x1) = vundef_type (vtype x2).
+    + by apply subtype_vundef_type_eq;apply: subtype_trans h;apply subtype_vundef_type.
+    have <- := vundef_type_is_sword hueq.
+    move => /negbTE -> /pof_val_error [t' [ht' ?]] ?;subst => /= hueq'.
+    have := @pof_val_type_of (vtype x2) v2.
+    have := subtype_eq_vundef_type ht';rewrite -vundef_type_idem.
+    rewrite -hueq => -> /(_ hueq') [[v2']|] -> /=;eexists;split;try reflexivity.
+    + by apply: (@eq_alloc_set x1 undef_error _ x2 (ok v2')) => //=;eauto.
+    by apply: (@eq_alloc_set x1 undef_error _ x2 undef_error) => //=;auto.
   Qed.
 
+  Lemma check_varcP r1 r1' vm1 vm2 vm1' x1 x2 v1 v2 :
+    eq_alloc r1 vm1 vm2 ->
+    check_varc x1 x2 r1 = ok r1' ->
+    set_var vm1 x1 v1 = ok vm1' ->
+    value_uincl v1 v2 ->
+    exists vm2' : vmap,
+      set_var vm2 x2 v2 = ok vm2' /\ eq_alloc r1' vm1' vm2'.
+  Proof.
+    by rewrite /check_varc; case: M.vsubtypeP => // h; apply check_varP.
+  Qed.
+     
   Lemma eq_alloc_rm r x s vm z : 
-    eval_uincl (undef_addr (vtype x)) z ->
+    eval_uincl (pundef_addr (vtype x)) z ->
     eq_alloc r (evm s) vm ->
-    eq_alloc (M.remove r (vname x)) (evm s) vm.[x <- z].
+    eq_alloc (M.remove r x) (evm s) vm.[x <- z].
   Proof.
     move=> Hz [Hmap0 Hinit Halloc];split.
     + move=> y;case:(x =P y) => [<-|/eqP ne].
@@ -1460,42 +1480,49 @@ Module CBAreg.
     + case:ifP => //= /eqP -> [] <- Heqa Hu Happ H.
       have [-> ]:= write_noneP H.
       rewrite /write_var /set_var => -[ [u]| ].
-      + move=> /(of_val_uincl Hu) [z' [-> ?]] /=.
+      + move=> /(pof_val_uincl Hu) [z' [-> ?]] /=.
         eexists; split; eauto; apply eq_alloc_rm => //.
         by apply eval_uincl_undef.
-      case: x2 {H} => [[xt2 xn2] xi] /=; set x2 := {|vtype := _ |}.
-      move=> [] /of_val_error ?;subst v1;move: Hu => /= /eqP ?;subst xt2.
-      move=> /negbTE ->.
-      have [[v' ->] | -> ] /=:= of_val_type_of v2;eexists;split;eauto;apply eq_alloc_rm => //.
-      by apply eval_uincl_undef.
+      move=> [] /pof_val_error [t' []] hsub ? hnw;subst v1.
+      have := @pof_val_type_of (vtype x2) v2.
+      move: Hu => /= <- [|[v2' ->]|->] /=.
+      + by apply subtype_vundef_type_eq.
+      + eexists;split;first reflexivity.    
+        by apply eq_alloc_rm => //;apply eval_uincl_undef.   
+      by rewrite (negbTE hnw) /=;eexists;split;first reflexivity; apply eq_alloc_rm.
     + rewrite /write_var=> Hc Hvm1 Hv Happ; apply rbindP => vm1' Hset [<-] /=.
       move: Hc;case: is_Pvar (@is_PvarP e2). 
       + move=> x /(_ _ (refl_equal _)) ?;subst e2.
-        case:ifPn=> [/andP []/eqP Ht /eqP Hx [<-]| ?].
-        + move: x1 x2 x Hx Ht Hset Happ=> [[xt1 xn1] ii1] [[xt2 xn2] ii2] [[xt xn] ii] /=.
-          move=> []???;subst xt2 xt1 xn2;apply: set_varP => /=.
-          + move=> v1' Hv1;have [v2' [Hv2 Hincl]]:= of_val_uincl Hv Hv1.
-            rewrite /set_var /= Hv2 /= => <-.
-            apply: on_vuP => [ v2'' Hxn ?| Hxn [?]];subst v2;
-              last by  elim (of_val_undef_ok Hv2).
-            move: Hv2;rewrite of_val_to_val => -[?];subst v2''.
-            eexists;split;eauto.            
-            have /= := @eq_alloc_add {| vtype := xt; vname := xn1 |} (ok v1') r1 xn (evm s1) vm1.
-            by rewrite Hxn => H;apply H => //;left;eexists;eauto.
-          move=> Hxt /of_val_error ?;subst v1;rewrite /= in Hv.
-          move=> <-;rewrite /set_var /= (negbTE Hxt) /=;apply on_vuP => /=.
-          + move=> vxn Hvxn ?;subst v2;rewrite of_val_to_val /=.
-            eexists;split;eauto.
-            have /= := @eq_alloc_add {| vtype := xt; vname := xn1 |} 
-                           (Error ErrAddrUndef) r1 xn (evm s1) vm1.
-            by rewrite Hvxn => H;apply H => //;left;eexists;eauto.
-          move=> Hxn [?];subst v2;rewrite of_val_undef eq_refl /=.
+        case: M.vsubtypeP => // ht;case:ifPn.
+        + move=> /andP[/eqP heqt /eqP].
+          move: x1 x2 x heqt ht Hset Happ=> [[xt1 xn1] ii1] [[xt2 xn2] ii2] [x ii] /=.
+          set x1 := {| vname := xn1 |}; set x2 := {| vname := xn2 |}.
+          move=> hteq ht hset Happ ? [] ?;subst => /=.
+          apply: set_varP hset => /=;rewrite /set_var.
+          + move=> v1' Hv1 ?;subst.
+            apply: on_vuP Happ. 
+            + move=> v2_ hv2_ ?;subst.
+              rewrite pof_val_pto_val /=;eexists;split;first reflexivity.
+              have /= := @eq_alloc_add x1 (ok v1') r1 x2 (evm s1) vm1 ht Hvm1.
+              rewrite hv2_ /= /pval_uincl => H;apply H;last by eauto.
+              by apply (value_uincl_pof_val Hv1 Hv).
+            move=> ? [?];subst => /=.
+            by case: v1 Hv Hv1 => //= s ? /pof_val_undef_ok.
+          move=> /= hniw hv1 ?;subst;rewrite (negbTE hniw) /=.
+          apply: on_vuP Happ.
+          + move=> v2_ heq ?;subst v2.
+            rewrite pof_val_pto_val /=;eexists;split;first reflexivity.
+            have /= := @eq_alloc_add x1 (pundef_addr xt2) r1 x2 (evm s1) vm1 ht Hvm1.
+            rewrite heq /= apply_undef_pundef_addr => H;apply H;last by eauto.
+            by apply eval_uincl_undef.
+          move=> heq [?];subst.
+          have [[? /pof_val_undef_ok //] | -> /=]:= pof_val_uincl_error hniw hv1 Hv.
           eexists;split;eauto.
-          have /= := @eq_alloc_add {| vtype := xt; vname := xn1 |} 
-                           (Error ErrAddrUndef) r1 xn (evm s1) vm1.
-          by rewrite Hxn => H;apply H => //;right.
-        by move=> Hc;have [vm2 [-> Hr1']/=]:= check_varP Hvm1 Hc Hset Hv; exists vm2.
-      by move=> _ Hc;have [vm2 [-> Hr1']/=]:= check_varP Hvm1 Hc Hset Hv; exists vm2.
+          have /= := @eq_alloc_add x1 (pundef_addr xt2) r1 x2 (evm s1) vm1 ht Hvm1.
+          rewrite heq /= apply_undef_pundef_addr => H;apply H;last by eauto.
+          by case Hvm1 => Hvm0 ??; have := Hvm0 x2;rewrite Fv.get0 heq.
+        by move=> ? hc;have [vm2' [-> /= ?]]:= check_varP Hvm1 hc Hset Hv;eauto.
+      by move=> ? hc;have [vm2' [-> /= ?]]:= check_varcP Hvm1 hc Hset Hv;eauto.
     + case: eqP => // ->; rewrite /to_pointer /=.
       apply: rbindP => r2 Hcv Hce Hvm1 Hv Happ.
       apply: rbindP => wx;apply:rbindP => vx.
@@ -1517,11 +1544,9 @@ Module CBAreg.
     move=> /(value_uincl_int Hve) [_ ->] /=.
     apply: rbindP => w /(value_uincl_word Hv) -> /=.
     apply: rbindP => t1' Ht1'.
-    have [t2' [-> Ht2']]:= Array_set_uincl Ht Ht1'. 
+    have [t2' [-> Ht2']]:= Array_set_uincl (val_uincl_array Ht) Ht1'. 
     apply: rbindP => vm2 Hvm2 [<-] /=.
-    have Ut' : value_uincl (Varr t1') (Varr t2').
-    + by split => //; exists erefl.
-    by have [vm2' [-> ?] /=]:= check_varP Hr1' Hcva Hvm2 Ut';exists vm2'.
+    by have [vm2' [-> ?] /=]:= check_varcP Hr1' Hcva Hvm2 Ht2';exists vm2'.
   Qed.
 
 End CBAreg.

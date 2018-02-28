@@ -444,6 +444,19 @@ Proof.
   by rewrite -Sv.mem_spec.
 Qed.
 
+Lemma Sv_elemsP x s : reflect (Sv.In x s) (x \in Sv.elements s).
+Proof.
+  apply: (equivP idP);rewrite SvD.F.elements_iff.
+  elim: (Sv.elements s) => /= [|v vs];split => //=.
+  + by move /SetoidList.InA_nil.
+  + by rewrite inE => /orP [ /eqP -> | /H];auto.
+  case/SetoidList.InA_cons => [ -> |]; rewrite inE ?eq_refl //.
+  by move /H => ->; rewrite orbT.
+Qed.
+
+Lemma Sv_elems_eq x s : Sv.mem x s = (x \in (Sv.elements s)).
+Proof. by apply: sameP (Sv_memP x s) (Sv_elemsP x s). Qed.
+
 Definition disjoint s1 s2 := Sv.is_empty (Sv.inter s1 s2).
 
 Instance disjoint_m :
