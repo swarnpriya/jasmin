@@ -1176,9 +1176,8 @@ Module CBAreg.
      | Papp2 o1 e11 e12, Papp2 o2 e21 e22 =>
       if o1 == o2 then check_e e11 e21 m >>= check_e e12 e22
       else cerror (Cerr_neqop2 o1 o2 salloc)
-    | Pif t e e1 e2, Pif t' e' e1' e2' => 
-      if t == t' then check_e e e' m >>= check_e e1 e1' >>= check_e e2 e2'
-      else cerror (Cerr_iftype t t salloc)
+    | Pif e e1 e2, Pif e' e1' e2' => 
+      check_e e e' m >>= check_e e1 e1' >>= check_e e2 e2'
     | _, _ => err tt
     end.
 
@@ -1298,8 +1297,8 @@ Module CBAreg.
     exists v2, sem_pexpr gd (Estate m vm2) e2 = ok v2 /\ value_uincl v1 v2.
   Proof.
     elim : e1 e2 r re vm1 =>
-      [z1 | b1 | sz1 e1 He1 | x1 | g1 | x1 e1 He1 | sz1 x1 e1 He1 | o1 e1 He1 | o1 e11 He11 e12 He12 | t e He e11 He11 e12 He12 ]
-      [z2 | b2 | sz2 e2 | x2 | g2 | x2 e2 | sz2 x2 e2 | o2 e2 | o2 e21 e22 | t' e' e21 e22] //= r re s.
+      [z1 | b1 | sz1 e1 He1 | x1 | g1 | x1 e1 He1 | sz1 x1 e1 He1 | o1 e1 He1 | o1 e11 He11 e12 He12 | e He e11 He11 e12 He12 ]
+      [z2 | b2 | sz2 e2 | x2 | g2 | x2 e2 | sz2 x2 e2 | o2 e2 | o2 e21 e22 | e' e21 e22] //= r re s.
     + by case: ifPn => // /eqP <- [->] ?;split=> // ?? [] <-; exists z1.
     + by case: ifPn => // /eqP <- [->] ?;split=> // ?? [] <-; exists b1.
     + case: eqP => // -> /He1 H /H [? {He1}He1];split=>// m v1.
@@ -1333,17 +1332,15 @@ Module CBAreg.
       apply: rbindP => v1 /Hse1 [v1' [-> U1]].
       apply: rbindP => v2 /Hse2 [v2' [-> U2]].
       by move=> /(vuincl_sem_sop2 U1 U2);exists v.
-    case:eqP => // ?;subst t'.
     apply: rbindP => r1;apply: rbindP => r' /He Hr' /He11 Hr1 /He12 Hr2 {He He11 He12}.
     move=> /Hr'{Hr'}[] /Hr1{Hr1}[] /Hr2{Hr2}[] Hre Hs2 Hs1 Hs;split=>// m v1.
     t_xrbindP => b w /Hs [w'] [->] /= /value_uincl_bool H/H{H} [? ->] /= v2 Hv2 v3 Hv3.
     have [v2' [-> Hv2']] := Hs1 _ _ Hv2.
     have [v3' [-> Hv3']] := Hs2 _ _ Hv3.
-    move=> y2 Hy2 y3 Hy3 <- /=.
-    have [? [-> _]] /= := of_val_uincl Hv2' Hy2.
-    have [? [-> _]] /= := of_val_uincl Hv3' Hy3.
-    eexists; split=> //.
-    by case: (b).
+    case: ifP => //=.
+    rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => -> [<-].
+    eexists;split;first by eauto.
+    by case b.
   Qed.
 
   Lemma vm_uincl0_set vm x (v : exec (psem_t (vtype x))) : 

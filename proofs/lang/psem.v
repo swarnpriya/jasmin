@@ -184,13 +184,13 @@ Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
     Let v1 := sem_pexpr s e1 in
     Let v2 := sem_pexpr s e2 in
     sem_sop2 o v1 v2
-  | Pif t e e1 e2 =>
+  | Pif e e1 e2 =>
     Let b := sem_pexpr s e >>= to_bool in
     Let v1 := sem_pexpr s e1 in
     Let v2 := sem_pexpr s e2 in
-    Let _  := of_val t v1 in
-    Let _  := of_val t v2 in
-    ok (if b then v1 else v2)
+    if vundef_type (type_of_val v1) == vundef_type (type_of_val v2) then
+      ok (if b then v1 else v2)
+    else type_error
   end.
 
 Definition sem_pexprs s := mapM (sem_pexpr s).
@@ -875,7 +875,7 @@ Lemma read_e_eq_on gd s vm' vm m e:
   vm =[read_e_rec s e] vm'->
   sem_pexpr gd (Estate m vm) e = sem_pexpr gd (Estate m vm') e.
 Proof.
-  elim:e s => //= [sz e He|v|v e He|sz v e He|o e He|o e1 He1 e2 He2|t e He e1 He1 e2 He2] s.
+  elim:e s => //= [sz e He|v|v e He|sz v e He|o e He|o e1 He1 e2 He2| e He e1 He1 e2 He2] s.
   + by move=> /He ->.
   + by move=> /get_var_eq_on -> //;SvD.fsetdec.
   + move=> Heq;rewrite (He _ Heq)=> {He}.
@@ -1333,12 +1333,17 @@ Proof.
   by have [z' [/= -> /val_uincl_sword ->]] := of_val_uincl Hu Hz.
 Qed.
 
+Lemma value_uincl_vundef_type_eq v1 v2 : 
+  value_uincl v1 v2 -> 
+  vundef_type (type_of_val v1) = vundef_type (type_of_val v2).
+Proof. by case: v1;case: v2 => //= ?????? [-> [h _]];rewrite h. Qed.
+
 Lemma sem_pexpr_uincl gd s1 vm2 e v1:
   vm_uincl s1.(evm) vm2 ->
   sem_pexpr gd s1 e = ok v1 ->
   exists v2, sem_pexpr gd (Estate s1.(emem) vm2) e = ok v2 /\ value_uincl v1 v2.
 Proof.
-  move=> Hu; elim: e v1=>//=[z|b|sz e He|x|g|x p Hp|sz x p Hp|o e He|o e1 He1 e2 He2|t e He e1 He1 e2 He2 ] v1.
+  move=> Hu; elim: e v1=>//=[z|b|sz e He|x|g|x p Hp|sz x p Hp|o e He|o e1 He1 e2 He2| e He e1 He1 e2 He2 ] v1.
   + by move=> [] <-;exists z.
   + by move=> [] <-;exists b.
   + apply: rbindP => z;apply: rbindP => ve /He [] ve' [] -> Hvu Hto [] <-.
@@ -1364,7 +1369,8 @@ Proof.
   apply: rbindP => b;apply:rbindP => wb /He [] ve' [] -> Hue'.
   move=> /value_uincl_bool -/(_ _ Hue') [??];subst wb ve' => /=.
   t_xrbindP => v2 /He1 [] v2' [] -> Hv2' v3 /He2 [] v3' [] -> Hv3'.
-  move=> ? /(of_val_uincl Hv2') /= [? [-> ?]] ? /(of_val_uincl Hv3') /= [? [-> ?]] <- /=.
+  case: ifP => //=.
+  rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => -> [<-].
   eexists;split;first by eauto.
   by case b.
 Qed.
@@ -1950,8 +1956,8 @@ End UNDEFINCL.
 
 Lemma eq_exprP gd s e1 e2 : eq_expr e1 e2 -> sem_pexpr gd s e1 = sem_pexpr gd s e2.
 Proof.
-  elim: e1 e2=> [z  | b  | sz e He | x | g | x e He | sz x e He | o e  He | o e1 He1 e2 He2 | t e He e1 He1 e2 He2]
-                [z' | b' | sz' e'   | x' | g' | x' e'  | sz' x' e'  | o' e' | o' e1' e2' | t' e' e1' e2'] //=.
+  elim: e1 e2=> [z  | b  | sz e He | x | g | x e He | sz x e He | o e  He | o e1 He1 e2 He2 | e He e1 He1 e2 He2]
+                [z' | b' | sz' e'   | x' | g' | x' e'  | sz' x' e'  | o' e' | o' e1' e2' | e' e1' e2'] //=.
   + by move=> /eqP ->.   + by move=> /eqP ->.
   + by move=> /andP [] /eqP -> /He ->.
   + by move=> /eqP ->.
@@ -1960,7 +1966,7 @@ Proof.
   + by case/andP => /andP [] /eqP -> /eqP -> /He ->.
   + by move=> /andP[]/eqP -> /He ->.
   + by move=> /andP[]/andP[] /eqP -> /He1 -> /He2 ->.
-  by move=> /andP[]/andP[]/andP[] /eqP -> /He -> /He1 -> /He2 ->.
+  by move=> /andP[]/andP[] /He -> /He1 -> /He2 ->.
 Qed.
 
 Lemma eq_exprsP gd m es1 es2:

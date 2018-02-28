@@ -432,13 +432,13 @@ Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
     Let v1 := sem_pexpr s e1 in
     Let v2 := sem_pexpr s e2 in
     sem_sop2 o v1 v2
-  | Pif t e e1 e2 =>
+  | Pif e e1 e2 =>
     Let b := sem_pexpr s e >>= to_bool in
     Let v1 := sem_pexpr s e1 in
     Let v2 := sem_pexpr s e2 in
-    Let _ := of_val t v1 in
-    Let _ := of_val t v2 in
-    ok (if b then v1 else v2)
+    if (type_of_val v1) == (type_of_val v2) then
+      ok (if b then v1 else v2)
+    else type_error
   end.
 
 Definition sem_pexprs s := mapM (sem_pexpr s).
