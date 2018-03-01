@@ -338,11 +338,8 @@ Fixpoint mk_lea e :=
   | _ => None
   end.
 
-Definition small_size sz :=
-  if wsize_cmp Uptr sz is Lt then false else true.
-
 Definition is_lea sz x e :=
-  if small_size sz && ~~ is_lval_in_memory x then
+  if (sz == Uptr) && ~~ is_lval_in_memory x then
     match mk_lea e with 
     | Some (MkLea d b sc o) => 
       let check o := match o with Some x => ~~(is_var_in_memory x) | None => true end in
@@ -411,7 +408,7 @@ Definition lower_cassgn_classify e x : lower_cassgn_t :=
     | _ => LowerAssgn
     end
 
-  | Pif e e1 e2 => 
+  | Pif e e1 e2 =>
     if stype_of_lval x is sword _ then
       LowerIf (wsize_of_lval x) e e1 e2
     else
