@@ -70,21 +70,6 @@ Definition to_pword (s: wsize) (v: value) : exec (pword s).
   exact (truncate_word s w >>= fun w => ok (pword_of_word w)).      
 Defined.
 
-Definition vundef_type (t:stype) := 
-  match t with
-  | sword _ => sword8
-  | _       => t
-  end.
-
-Definition type_of_val (v:value) : stype :=
-  match v with
-  | Vbool _     => sbool
-  | Vint  _     => sint
-  | Varr s n _  => sarr s n
-  | Vword s _   => sword s
-  | Vundef t    => t
-  end.
-
 Definition pof_val t : value -> exec (psem_t t) :=
   match t return value -> exec (psem_t t) with
   | sbool    => to_bool
@@ -1022,7 +1007,10 @@ Lemma vundef_type_idem v : vundef_type v = vundef_type (vundef_type v).
 Proof. by case: v. Qed.
 
 Lemma value_uincl_refl v: @value_uincl v v.
-Proof. by case v => //= sz n a;split => //; exists erefl. Qed.
+Proof.
+case: v => //=; last exact: vundef_type_idem.
+by move => sz n a;split => //; exists erefl.
+Qed.
 
 Hint Resolve value_uincl_refl.
 
@@ -1031,7 +1019,8 @@ Lemma value_uincl_trans v2 v1 v3 :
   value_uincl v2 v3 ->
   value_uincl v1 v3.
 Proof.
-  case: v1;case:v2 => //=;last (by move=> ?? ->);case: v3 => //=.
+case: v1; case: v2 => //=; last (by move => s s'; rewrite -vundef_type_idem => ->);
+  case: v3 => //=.
   + by move=> ??? ->.
   + by move=> ??? ->.
   + move=> ????????? [?] [? H1] [?] [? H2];subst;split => //.
@@ -1333,10 +1322,20 @@ Proof.
   by have [z' [/= -> /val_uincl_sword ->]] := of_val_uincl Hu Hz.
 Qed.
 
+Lemma value_uincl_subtype v1 v2 :
+  value_uincl v1 v2 ->
+  subtype (type_of_val v1) (type_of_val v2).
+Proof.
+case: v1 v2 => [ b | i | s n t | s w | ty ]; try by case.
++ by case => //= s' n' t' [?] [? _]; subst.
++ by case => //= s' w' /andP[].
+move => /= v2 ->; exact: subtype_vundef_type.
+Qed.
+
 Lemma value_uincl_vundef_type_eq v1 v2 : 
   value_uincl v1 v2 -> 
   vundef_type (type_of_val v1) = vundef_type (type_of_val v2).
-Proof. by case: v1;case: v2 => //= ?????? [-> [h _]];rewrite h. Qed.
+Proof. move /value_uincl_subtype; exact: subtype_eq_vundef_type. Qed.
 
 Lemma sem_pexpr_uincl gd s1 vm2 e v1:
   vm_uincl s1.(evm) vm2 ->

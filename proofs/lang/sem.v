@@ -172,13 +172,19 @@ Definition to_arr s n v : exec (sem_t (sarr s n)) :=
   | _                => type_error
   end.
 
+Definition vundef_type (t:stype) :=
+  match t with
+  | sword _ => sword8
+  | _       => t
+  end.
+
 Definition type_of_val (v:value) : stype :=
   match v with
   | Vbool _     => sbool
   | Vint  _     => sint
   | Varr s n _  => sarr s n
   | Vword s _   => sword s
-  | Vundef t    => t
+  | Vundef t    => vundef_type t
   end.
 
 Definition of_val t : value -> exec (sem_t t) :=

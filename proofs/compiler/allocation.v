@@ -1265,7 +1265,8 @@ Module CBAreg.
       rewrite /get_var;apply: on_vuP => /= [t | ] -> => [<- | [<-]] /=.
       + by case: (vm2.[_])%vmap => //= z' Hz';exists (pto_val z'). 
       have /= heq := subtype_eq_vundef_type hsub.
-      case: (vm2.[_])%vmap => //= [ v' _ | e <-];last by eauto.
+      case: (vm2.[_])%vmap => //= [ v' _ | e <-];
+        last by eexists; split; first reflexivity; rewrite heq /= -vundef_type_idem.
       exists (pto_val v');split => //;rewrite heq.
       symmetry;apply subtype_eq_vundef_type.
       by apply: subtype_type_of_val.
@@ -1286,7 +1287,8 @@ Module CBAreg.
       symmetry;apply subtype_eq_vundef_type.
       by apply: subtype_type_of_val.
     move=> e <- [<-];eexists;split;first by reflexivity.
-    by rewrite /=;apply subtype_eq_vundef_type.
+    rewrite /= -vundef_type_idem.
+    exact: subtype_vundef_type_eq husub.
   Qed.
 
   Lemma check_eP gd e1 e2 r re vm1 vm2 :
