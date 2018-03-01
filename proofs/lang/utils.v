@@ -352,6 +352,17 @@ Lemma List_Forall2_inv_r A B (R: A → B → Prop) m n :
   end.
 Proof. case; eauto. Qed.
 
+Lemma Forall2_trans (A B C:Type) l2 (R1:A->B->Prop) (R2:B->C->Prop) 
+                    l1 l3 (R3:A->C->Prop)  : 
+   (forall b a c, R1 a b -> R2 b c -> R3 a c) ->
+   List.Forall2 R1 l1 l2 ->
+   List.Forall2 R2 l2 l3 ->
+   List.Forall2 R3 l1 l3.
+Proof.
+  move=> H hr1;elim: hr1 l3 => {l1 l2} [ | a b l1 l2 hr1 _ hrec] l3 h;
+    inversion h;constructor;eauto.
+Qed.
+
 (* -------------------------------------------------------------------------- *)
 (* Operators to build comparison                                              *)
 (* ---------------------------------------------------------------------------*)

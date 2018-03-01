@@ -1094,6 +1094,15 @@ Lemma eval_uincl_refl t v: @eval_uincl t t v v.
 Proof. by case: v=> //= -[]. Qed.
 Hint Resolve eval_uincl_refl.
 
+Lemma eval_uincl_trans t (v2 v1 v3: exec (psem_t t)) : 
+   eval_uincl v1 v2 -> eval_uincl v2 v3 -> eval_uincl v1 v3.
+Proof.
+  case: v1 => /= [v1 | ].
+  + by case: v2 => //= v2; case: v3 => // v3;apply: value_uincl_trans.
+  case: v2 => [v2 [] // _| ];first by case: v3.
+  by move=> e1 e2 he;have <- : e2 = e1 by case: e2 he.
+Qed.
+
 Lemma vm_uincl_refl vm: @vm_uincl vm vm.
 Proof. by done. Qed.
 Hint Resolve vm_uincl_refl.
