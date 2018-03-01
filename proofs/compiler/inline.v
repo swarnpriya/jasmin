@@ -49,9 +49,18 @@ Definition get_flag (x:lval) flag :=
   | Lvar x => if inline_var x then AT_inline else flag
   | _      => flag
   end.
- 
+
+Definition stype_of_lval (lv: lval) : stype :=
+  match lv with
+  | Lnone _ ty
+  | Lvar {| v_var := {| vtype := ty |} |}
+  | Laset {| v_var := {| vtype := ty |} |} _
+    => ty
+  | Lmem sz _ _ => sword sz
+  end.
+
 Definition assgn_tuple iinfo (xs:lvals) flag (es:pexprs) :=
-  let assgn xe := MkI iinfo (Cassgn xe.1 (get_flag xe.1 flag) xe.2) in
+  let assgn xe := MkI iinfo (Cassgn xe.1 (get_flag xe.1 flag) (stype_of_lval xe.1) xe.2) in
   map assgn (zip xs es).
 
 Definition inline_c (inline_i: instr -> Sv.t -> ciexec (Sv.t * cmd)) c s := 
@@ -98,7 +107,7 @@ Definition array_init iinfo (X: Sv.t) :=
   let assgn x c := 
     match x.(vtype) with
     | sarr sz p =>
-      MkI iinfo (Cassgn (Lvar (mkdV x)) AT_rename (arr_init sz p)) :: c
+      MkI iinfo (Cassgn (Lvar (mkdV x)) AT_rename x.(vtype) (arr_init sz p)) :: c
     | _      => c
     end in
   Sv.fold assgn X [::].
@@ -107,7 +116,7 @@ Fixpoint inline_i (p:prog) (i:instr) (X:Sv.t) : ciexec (Sv.t * cmd) :=
   match i with
   | MkI iinfo ir =>
     match ir with 
-    | Cassgn x _ e => ciok (Sv.union (read_i ir) X, [::i])
+    | Cassgn x _ _ e => ciok (Sv.union (read_i ir) X, [::i])
     | Copn xs _ o es => ciok (Sv.union (read_i ir) X, [::i])
     | Cif e c1 c2  =>
       Let c1 := inline_c (inline_i p) c1 X in
@@ -169,7 +178,7 @@ Fixpoint remove_init_i i :=
   match i with
   | MkI ii ir =>
     match ir with
-    | Cassgn x t e => if is_array_init e then [::] else [::i]
+    | Cassgn x _ _ e => if is_array_init e then [::] else [::i]
     | Copn _ _ _ _   => [::i]
     | Cif e c1 c2  => 
       let c1 := foldr (fun i c => remove_init_i i ++ c) [::] c1 in

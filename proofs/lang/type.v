@@ -295,4 +295,18 @@ Definition is_sword t :=
   | _       => false
   end.
 
+(* -------------------------------------------------------------------- *)
+Definition subtype t t' :=
+  match t, t' with
+  | sword w , sword w' => (w <= w')%CMP
+  | _ , _ => t == t'
+  end.
 
+Lemma subtype_refl x : subtype x x.
+Proof. by case: x => /=. Qed.
+
+Lemma subtype_trans y x z : subtype x y -> subtype y z -> subtype x z.
+Proof.
+  case: x => //= [/eqP<-|/eqP<-|??/eqP<-|sx] //.
+  case: y => //= sy hle;case: z => //= sz;apply: cmp_le_trans hle.
+Qed.

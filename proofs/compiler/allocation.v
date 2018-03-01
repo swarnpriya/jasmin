@@ -130,8 +130,10 @@ Definition check_vars xs1 xs2 r := check_lvals (map Lvar xs1) (map Lvar xs2) r.
 
 Fixpoint check_i iinfo i1 i2 r := 
   match i1, i2 with
-  | Cassgn x1 _ e1, Cassgn x2 _ e2 => 
-    add_iinfo iinfo (check_e e1 e2 r >>= check_lval (Some e2) x1 x2)
+  | Cassgn x1 _ ty1 e1, Cassgn x2 _ ty2 e2 =>
+    if ty1 == ty2 then
+      add_iinfo iinfo (check_e e1 e2 r >>= check_lval (Some e2) x1 x2)
+    else cierror iinfo (Cerr_neqty ty1 ty2 salloc)
   | Copn xs1 _ o1 es1, Copn xs2 _ o2 es2 =>
     if o1 == o2 then
       add_iinfo iinfo (check_es es1 es2 r >>= check_lvals xs1 xs2)
@@ -277,16 +279,20 @@ Section PROOF.
     by exists vm2;split=>//;constructor.
   Qed.
 
-  Local Lemma Hassgn s1 s2 x tag e :
-    Let v := sem_pexpr gd s1 e in write_lval gd x v s1 = Ok error s2 ->
-    Pi_r s1 (Cassgn x tag e) s2.
+  Local Lemma Hassgn s1 s2 x tag ty e :
+    (Let v := sem_pexpr gd s1 e in
+      Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
+      write_lval gd x v s1) = Ok error s2 ->
+    Pi_r s1 (Cassgn x tag ty e) s2.
   Proof.
     case: s1 => sm1 svm1. 
-    apply: rbindP => v He Hw ii r1 [] //= x2 tag2 e2 r2 vm1 Hvm1.
+    apply: rbindP => v He.
+    case: ifP => // hty Hw ii r1 [] //= x2 tag2 ty2 e2 r2 vm1 Hvm1.
+    case: eqP => // <- {ty2}.
     apply: add_iinfoP.
     apply: rbindP => r1' /check_eP -/(_ gd _ _ Hvm1) [Hr1'] /(_ _ _ He) [v2 [He2 Hu2]] Hcx.
     have  /(_ _ Hr1') [ // | vm2 [Hwv Hvm2]] := check_lvalP Hcx _ Hu2 _ Hw.
-    by exists vm2;split=>//;constructor;rewrite He2.
+    by exists vm2;split=>//;constructor;rewrite He2 /= (subtype_trans hty (value_uincl_subtype Hu2)).
   Qed.
 
   Lemma check_esP e1 e2 r re s vm: 

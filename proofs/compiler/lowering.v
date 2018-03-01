@@ -454,7 +454,7 @@ Definition opn_5flags (immed_bound: Z) (vi: var_info)
   | Opn5f_other => fopn o a
   end.
 
-Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (e: pexpr) : cmd :=
+Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e: pexpr) : cmd :=
   let vi := var_info_of_lval x in
   let f := Lnone_b vi in
   let copn o a := [:: MkI ii (Copn [:: x ] tg o [:: a]) ] in
@@ -504,7 +504,7 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (e: pexpr) : c
   | LowerIf sz e e1 e2 =>
      let (l, e) := lower_condition vi e in
      map (MkI ii) (l ++ [:: Copn [:: x] tg (Ox86_CMOVcc sz) [:: e; e1; e2]])
-  | LowerAssgn => [::  MkI ii (Cassgn x tg e)]    
+  | LowerAssgn => [::  MkI ii (Cassgn x tg ty e)]
   end.
 
 (* Lowering of Oaddcarry
@@ -565,7 +565,7 @@ Definition lower_cmd (lower_i: instr -> cmd) (c:cmd) : cmd :=
 Fixpoint lower_i (i:instr) : cmd :=
   let (ii, ir) := i in
   match ir with
-  | Cassgn l t e => lower_cassgn ii l t e
+  | Cassgn l tg ty e => lower_cassgn ii l tg ty e
   | Copn l t o e =>   map (MkI ii) (lower_copn l t o e)
   | Cif e c1 c2  =>
      let '(pre, e) := lower_condition xH e in

@@ -246,9 +246,11 @@ with sem_I : estate -> instr -> estate -> Prop :=
     sem_I s1 (MkI ii i) s2
 
 with sem_i : estate -> instr_r -> estate -> Prop :=
-| Eassgn s1 s2 (x:lval) tag e:
-    (Let v := sem_pexpr gd s1 e in write_lval gd x v s1) = ok s2 ->
-    sem_i s1 (Cassgn x tag e) s2
+| Eassgn s1 s2 (x:lval) tag ty e:
+    (Let v := sem_pexpr gd s1 e in
+     Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
+     write_lval gd x v s1) = ok s2 ->
+    sem_i s1 (Cassgn x tag ty e) s2
 
 | Eopn s1 s2 t o xs es:
     sem_sopn o s1 xs es = ok s2 ->
@@ -301,8 +303,10 @@ with sem_for : var_i -> seq Z -> estate -> cmd -> estate -> Prop :=
 with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
 | EcallRun m1 m2 fn f vargs s1 vm2 vres:
     get_fundef P fn = Some f ->
+    (* TODO: check type of arguments *)
     write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1 ->
     sem s1 f.(f_body) (Estate m2 vm2) ->
+    (* TODO: check type of return value *)
     mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres ->
     sem_call m1 fn vargs m2 vres.
 
@@ -332,9 +336,11 @@ Section SEM_IND.
   Hypothesis HmkI : forall (ii : instr_info) (i : instr_r) (s1 s2 : estate),
     sem_i s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 
-  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) (e : pexpr),
-    Let v := sem_pexpr gd s1 e in write_lval gd x v s1 = Ok error s2 ->
-    Pi_r s1 (Cassgn x tag e) s2.
+  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr),
+    (Let v := sem_pexpr gd s1 e in
+      Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
+      write_lval gd x v s1) = Ok error s2 ->
+    Pi_r s1 (Cassgn x tag ty e) s2.
 
   Hypothesis Hopn : forall (s1 s2 : estate) t (o : sopn) (xs : lvals) (es : pexprs),
     sem_sopn o s1 xs es = Ok error s2 ->
@@ -403,7 +409,7 @@ Section SEM_IND.
   with sem_i_Ind (e : estate) (i : instr_r) (e0 : estate) (s : sem_i e i e0) {struct s} :
     Pi_r e i e0 :=
     match s in (sem_i e1 i0 e2) return (Pi_r e1 i0 e2) with
-    | @Eassgn s1 s2 x tag e1 e2 => @Hasgn s1 s2 x tag e1 e2
+    | @Eassgn s1 s2 x tag ty e1 e2 => @Hasgn s1 s2 x tag ty e1 e2
     | @Eopn s1 s2 t o xs es e1 => @Hopn s1 s2 t o xs es e1
     | @Eif_true s1 s2 e1 c1 c2 e2 s0 =>
       @Hif_true s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c1 s2 s0)
@@ -799,7 +805,7 @@ Proof.
                   (fun _ _ _ _ _ => True)) => {c s1 s2} //.
   + move=> s1 s2 s3 i c _ Hi _ Hc z;rewrite write_c_cons => Hnin.
     by rewrite Hi ?Hc //;SvD.fsetdec.
-  + move=> s1 s2 x tag e; case: sem_pexpr => //= v Hw z.
+  + move=> s1 s2 x tag ty e; case: sem_pexpr => //= v; case: ifP => //= hty Hw z.
     by rewrite write_i_assgn;apply (vrvP Hw).
   + move=> s1 s2 t o xs es; rewrite /sem_sopn.
     case: (Let _ := sem_pexprs _ _ _ in _) => //= vs Hw z.
@@ -1030,12 +1036,6 @@ case: v1; case: v2 => //=; last (by move => s s'; rewrite -vundef_type_idem => -
   by move=> ??????? -> [->] [??];subst.
 Qed.
 
-Definition subtype t t' := 
-  match t, t' with
-  | sword w , sword w' => (w <= w')%CMP
-  | _ , _ => t == t'
-  end.
-
 Lemma of_val_undef t t':
   of_val t (Vundef t') = Error (if subtype t t' then ErrAddrUndef else ErrType).
 Proof.
@@ -1179,16 +1179,6 @@ Lemma value_uincl_bool ve ve' b :
 Proof.
   case:ve ve' => //=;last by move=>[].
   by move=> z0 [] //= z1 -> [] ->.
-Qed.
-
-(* TODO: MOVE *)
-Lemma type_of_to_val t (s: sem_t t) : type_of_val (to_val s) = t.
-Proof. by case: t s. Qed.
-
-Lemma subtype_trans y x z : subtype x y -> subtype y z -> subtype x z.
-Proof.
-  case: x => //= [/eqP<-|/eqP<-|??/eqP<-|sx] //.
-  case: y => //= sy hle;case: z => //= sz;apply: cmp_le_trans hle.
 Qed.
 
 Lemma subtype_vundef_type_eq t1 t2:
@@ -1771,13 +1761,16 @@ Qed.
 Local Lemma HmkI ii i s1 s2 : sem_i p gd s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 Proof. by move=> _ Hi vm1 /Hi [vm2 []] Hsi ?;exists vm2. Qed.
 
-Local Lemma Hasgn s1 s2 x tag e :
-  Let v := sem_pexpr gd s1 e in write_lval gd x v s1 = ok s2 ->
-  Pi_r s1 (Cassgn x tag e) s2.
+Local Lemma Hasgn s1 s2 x tag ty e :
+  (Let v := sem_pexpr gd s1 e in
+    Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
+    write_lval gd x v s1) = ok s2 ->
+  Pi_r s1 (Cassgn x tag ty e) s2.
 Proof.
   move=> Hs2 vm1 Hvm1;apply:rbindP Hs2 => z /(sem_pexpr_uincl Hvm1) [] z' [] Hz' Hz.
+  case: ifP => //= hty.
   move=> /(write_uincl Hvm1 Hz) [vm2 []] Hw ?;exists vm2;split=> //.
-  by constructor;rewrite Hz' /= Hw.
+  by constructor;rewrite Hz' /= Hw (subtype_trans hty (value_uincl_subtype Hz)).
 Qed.
 
 Local Lemma Hopn s1 s2 t o xs es:
