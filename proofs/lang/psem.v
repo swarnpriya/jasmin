@@ -609,6 +609,7 @@ Lemma sem_op2_wb_dec gd sz v e1 e2 s f:
   Let v1 := sem_pexpr gd s e1 in (Let v2 := sem_pexpr gd s e2 in sem_op2_wb f v1 v2) = ok v ->
   ∃ sz1 (z1: word sz1) sz2 (z2: word sz2),
     Vbool (f (zero_extend sz z1) (zero_extend sz z2)) = v
+    ∧ (sz ≤ sz1)%CMP ∧ (sz ≤ sz2)%CMP
     ∧ sem_pexprs gd s [:: e1; e2] = ok [:: Vword z1; Vword z2].
 Proof.
   rewrite /sem_op2_wb /mk_sem_sop2.

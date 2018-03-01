@@ -480,6 +480,7 @@ End CMP.
 
 Notation "m < n" := (cmp_lt m n) : cmp_scope.
 Notation "m <= n" := (cmp_le m n) : cmp_scope.
+Notation "m ≤ n" := (cmp_le m n) : cmp_scope.
 Delimit Scope cmp_scope with CMP.
 
 Hint Resolve cmp_le_refl.
