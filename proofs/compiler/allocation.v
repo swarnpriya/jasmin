@@ -281,20 +281,19 @@ Section PROOF.
     by exists vm2;split=>//;constructor.
   Qed.
 
-  Local Lemma Hassgn s1 s2 x tag ty e :
-    (Let v := sem_pexpr gd s1 e in
-      Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
-      write_lval gd x v s1) = Ok error s2 ->
+  Local Lemma Hassgn s1 s2 x tag ty e v :
+    sem_pexpr gd s1 e = ok v ->
+    check_ty_val ty v ->
+    write_lval gd x v s1 = Ok error s2 ->
     Pi_r s1 (Cassgn x tag ty e) s2.
   Proof.
-    case: s1 => sm1 svm1. 
-    apply: rbindP => v He.
-    case: ifP => // hty Hw ii r1 [] //= x2 tag2 ty2 e2 r2 vm1 Hvm1.
+    case: s1 => sm1 svm1 He hty Hw ii r1 [] //= x2 tag2 ty2 e2 r2 vm1 Hvm1.
     case: eqP => // <- {ty2}.
     apply: add_iinfoP.
     apply: rbindP => r1' /check_eP -/(_ gd _ _ Hvm1) [Hr1'] /(_ _ _ He) [v2 [He2 Hu2]] Hcx.
     have  /(_ _ Hr1') [ // | vm2 [Hwv Hvm2]] := check_lvalP Hcx _ Hu2 _ Hw.
-    by exists vm2;split=>//;constructor;rewrite He2 /= (subtype_trans hty (value_uincl_subtype Hu2)).
+    (exists vm2;split=>//;econstructor;first exact He2) => //.
+    by apply (subtype_trans hty (value_uincl_subtype Hu2)).
   Qed.
 
   Lemma check_esP e1 e2 r re s vm: 
@@ -330,13 +329,12 @@ Section PROOF.
   Qed.
 
   Local Lemma Hif_true s1 s2 e c1 c2 :
-    Let x := sem_pexpr gd s1 e in to_bool x = Ok error true ->
+    sem_pexpr gd s1 e = ok (Vbool true) ->
     sem p1 gd s1 c1 s2 -> Pc s1 c1 s2 -> Pi_r s1 (Cif e c1 c2) s2.
   Proof.
-    case: s1 => sm1 svm1.
-    apply: rbindP => ve Hve Hto _ Hc1 ii r1 [] //= e' c1' c2' r2 vm1 Hvm1.
+    case: s1 => sm1 svm1 Hve _ Hc1 ii r1 [] //= e' c1' c2' r2 vm1 Hvm1.
     apply: rbindP => r1';apply: add_iinfoP => /check_eP -/(_ gd _ _ Hvm1) [] Hr1'.
-    move=> /(_ _ _ Hve) [ve' [Hve' /value_uincl_bool -/(_ _ Hto)]] [??];subst ve ve'.
+    move=> /(_ _ _ Hve) [ve' [Hve' /value_uincl_bool1 ?]];subst ve'.
     apply: rbindP => r3 Hr3;apply: rbindP => r4 Hr4 [] <-.
     have [vm2 [Hvm2 Hsem]]:= Hc1 ii _ _ _ _ Hr1' Hr3;exists vm2;split.
     + by eapply eq_alloc_incl;eauto;apply M.merge_incl_l.
@@ -344,13 +342,12 @@ Section PROOF.
   Qed.
 
   Local Lemma Hif_false s1 s2 e c1 c2 :
-    Let x := sem_pexpr gd s1 e in to_bool x = Ok error false ->
+    sem_pexpr gd s1 e = ok (Vbool false) ->
     sem p1 gd s1 c2 s2 -> Pc s1 c2 s2 -> Pi_r s1 (Cif e c1 c2) s2.
   Proof.
-    case: s1 => sm1 svm1.
-    apply: rbindP => ve Hve Hto _ Hc1 ii r1 [] //= e' c1' c2' r2 vm1 Hvm1.
+    case: s1 => sm1 svm1 Hve _ Hc1 ii r1 [] //= e' c1' c2' r2 vm1 Hvm1.
     apply: rbindP => r1';apply: add_iinfoP => /check_eP -/(_ gd _ _ Hvm1) [] Hr1'.
-    move=> /(_ _ _ Hve) [ve' [Hve' /value_uincl_bool -/(_ _ Hto)]] [??];subst ve ve'.
+    move=> /(_ _ _ Hve) [ve' [Hve' /value_uincl_bool1 ?]];subst ve'.
     apply: rbindP => r3 Hr3;apply: rbindP => r4 Hr4 [] <-.
     have [vm2 [Hvm2 Hsem]]:= Hc1 ii _ _ _ _ Hr1' Hr4;exists vm2;split.
     + by eapply eq_alloc_incl;eauto;apply M.merge_incl_r.
@@ -371,7 +368,7 @@ Section PROOF.
     
   Local Lemma Hwhile_true s1 s2 s3 s4 c e c':
     sem p1 gd s1 c s2 -> Pc s1 c s2 ->
-    Let x := sem_pexpr gd s2 e in to_bool x = Ok error true ->
+    sem_pexpr gd s2 e = ok (Vbool true) ->
     sem p1 gd s2 c' s3 -> Pc s2 c' s3 ->
     sem_i p1 gd s3 (Cwhile c e c') s4 -> Pi_r s3 (Cwhile c e c') s4 ->
     Pi_r s1 (Cwhile c e c') s4.
@@ -381,9 +378,8 @@ Section PROOF.
     have Hvmr2' := eq_alloc_incl Hir1 Hvm1.
     apply: rbindP H=> r0 Cc2; move /Hc: (Hvmr2') (Cc2) => H /H {H} [vm2 [Hvm2 /= Hc2]]. 
     apply: rbindP => re Hadd; apply: add_iinfoP (Hadd)=> Hre.
-    apply: rbindP Hse => vb Hse Hvb.
     have /= [Hrevm2 /(_ _ _ Hse) [vb' [Hse2]]]:= check_eP gd Hre Hvm2.
-    move=> /value_uincl_bool -/(_ _ Hvb) [??];subst vb vb'.
+    move=> /value_uincl_bool1?;subst vb'.
     apply: rbindP => r' Cc2' [??];subst r2 r3.
     move /Hc': (Hrevm2) (Cc2')=> H /H {H} [vm3 [Hvm3 /= Hc2']]. 
     have /(Hw ii) {Hw} Hw:= eq_alloc_incl Hir3 Hvm3.
@@ -395,7 +391,7 @@ Section PROOF.
 
   Local Lemma Hwhile_false s1 s2 c e c':
     sem p1 gd s1 c s2 -> Pc s1 c s2 ->
-    Let x := sem_pexpr gd s2 e in to_bool x = Ok error false ->
+    sem_pexpr gd s2 e = ok (Vbool false) ->
     Pi_r s1 (Cwhile c e c') s2.
   Proof. 
     case: s2 => sm2 svm2 _ Hc Hse ii r1 [] //= c2 e2 c2' r2 vm1 Hvm1.
@@ -403,9 +399,8 @@ Section PROOF.
     have Hvmr2' := eq_alloc_incl Hir1 Hvm1.
     apply: rbindP H=> r0 Cc2; move /Hc: (Hvmr2') (Cc2) => H /H {H} [vm2 [Hvm2 /= Hc2]]. 
     apply: rbindP => re Hadd; apply: add_iinfoP (Hadd)=> Hre.
-    apply: rbindP Hse => vb Hse Hvb.
     have /= [Hrevm2 /(_ _ _ Hse) [vb' [Hse2]]]:= check_eP gd Hre Hvm2.
-    move=> /value_uincl_bool -/(_ _ Hvb) [??];subst vb vb'.
+    move=> /value_uincl_bool1 ?;subst vb'.
     apply: rbindP => r' Cc2' [??];subst r2 r3.
     exists vm2;split => //.
     by apply: Ewhile_false;rewrite // Hse2.
@@ -424,8 +419,8 @@ Section PROOF.
   Qed.
 
   Local Lemma Hfor s1 s2 (i:var_i) d lo hi c vlo vhi :
-    Let x := sem_pexpr gd s1 lo in to_int x = Ok error vlo ->
-    Let x := sem_pexpr gd s1 hi in to_int x = Ok error vhi ->
+    sem_pexpr gd s1 lo = ok (Vint vlo) ->
+    sem_pexpr gd s1 hi = ok (Vint vhi) ->
     sem_for p1 gd i (wrange d vlo vhi) s1 c s2 ->
     Pfor i (wrange d vlo vhi) s1 c s2 -> Pi_r s1 (Cfor i (d, lo, hi) c) s2.
   Proof.
@@ -434,11 +429,9 @@ Section PROOF.
     case: eqP => //= ?;subst d2.
     apply: rbindP => r1'; apply: add_iinfoP.
     apply: rbindP => r1'' /check_eP -/(_ gd _ _ Hvm1) [Hr1'' Heqlo].
-    apply: rbindP Hlo => vlo' /Heqlo{Heqlo} [vlo''] [Hlo2] Hvlo'.
-    move=> /(value_uincl_int Hvlo') [] ??;subst vlo' vlo''.
+    have [vlo'' [Hlo2 /value_uincl_int1 Hvlo']] := Heqlo _ _ Hlo;subst vlo''.
     move=>  /check_eP -/(_ gd _ _ Hr1'') [Hr1' Heqhi].
-    apply: rbindP Hhi => vhi' /Heqhi{Heqhi} [vhi''] [Hhi2] Hvhi'.
-    move=> /(value_uincl_int Hvhi') [] ??;subst vhi' vhi''.
+    have [vhi'' [Hhi2 /value_uincl_int1 Hhi']] := Heqhi _ _ Hhi;subst vhi''.
     move=> /loopP [r2'] [];apply: rbindP => r2'';apply:add_iinfoP.
     move=> Hcv Hcc Hr2r1 Hr2r2.
     have := Hfor _ _ _ _ _ _ _ (eq_alloc_incl Hr2r1 Hr1') Hcv Hcc Hr2r2.
@@ -486,12 +479,12 @@ Section PROOF.
 
     Local Lemma Hproc_eq m1 m2 fn f vargs s1 vm2 vres: 
       get_fundef p1 fn = Some f ->
-      List.Forall2 check_ty_val f.(f_tyin) vargs ->
+      all2 check_ty_val f.(f_tyin) vargs ->
       write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
       sem p1 gd s1 (f_body f) {| emem := m2; evm := vm2 |} ->
       Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
       mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-      List.Forall2 check_ty_val f.(f_tyout) vres ->
+      all2 check_ty_val f.(f_tyout) vres ->
       Pfun m1 fn vargs m2 vres.
     Proof.
       move=> Hget Hca Hw Hsem _ Hres Hcr vargs2 Hvargs2;rewrite -eq_prog.
@@ -501,18 +494,18 @@ Section PROOF.
 
     Lemma alloc_funP_eq_aux fn f f' m1 vargs vres s1 s2: 
       check_fundef (fn, f) (fn, f') tt = ok tt ->
-      List.Forall2 check_ty_val f.(f_tyin) vargs ->
+      all2 check_ty_val f.(f_tyin) vargs ->
       write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
       sem p1 gd s1 (f_body f) s2 ->
       mapM (fun x : var_i => get_var (evm s2) x) (f_res f) = ok vres ->
-      List.Forall2 check_ty_val f.(f_tyout) vres ->
+      all2 check_ty_val f.(f_tyout) vres ->
       exists s1' vm2 vres',
-       [ /\ List.Forall2 check_ty_val f'.(f_tyin) vargs,
+       [ /\ all2 check_ty_val f'.(f_tyin) vargs,
         write_vars (f_params f') vargs {| emem := m1; evm := vmap0 |} = ok s1', 
         sem p2 gd s1' (f_body f') (Estate (emem s2) vm2),
         mapM (fun x : var_i => get_var vm2 x) (f_res f') = ok vres' &
         List.Forall2 value_uincl vres vres' /\
-        List.Forall2 check_ty_val f'.(f_tyout) vres'].
+        all2 check_ty_val f'.(f_tyout) vres'].
     Proof.
       rewrite /check_fundef eq_refl => /=.
       case: ifP => // /andP[]/eqP htyin /eqP htyout;apply: add_finfoP.
@@ -530,19 +523,19 @@ Section PROOF.
       do 3 eexists;split;eauto.
       + by rewrite -htyin.
       + by rewrite (write_vars_lvals gd).
-      by rewrite -htyout;split=>//;apply: (Forall2_trans check_ty_val_uincl Hcr). 
+      by rewrite -htyout;split=>//;apply: (all2_check_ty_val Hcr). 
     Qed.
 
   End REFL.
    
   Local Lemma Hproc m1 m2 fn f vargs s1 vm2 vres: 
     get_fundef p1 fn = Some f ->
-    List.Forall2 check_ty_val f.(f_tyin) vargs ->
+    all2 check_ty_val f.(f_tyin) vargs ->
     write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
     sem p1 gd s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-    List.Forall2 check_ty_val f.(f_tyout) vres ->
+    all2 check_ty_val f.(f_tyout) vres ->
     Pfun m1 fn vargs m2 vres.
   Proof.
     move=> Hget Hca Hw _ Hc Hres Hcr.
@@ -559,9 +552,9 @@ Section PROOF.
     rewrite sem_pexprs_get_var => ??.
     econstructor;split;eauto.
     econstructor;eauto.
-    + by rewrite -htyin; apply: (Forall2_trans check_ty_val_uincl Hca).
+    + by rewrite -htyin; apply: (all2_check_ty_val Hca).
     + by rewrite (write_vars_lvals gd).
-    by rewrite -htyout; apply: (Forall2_trans check_ty_val_uincl Hcr).
+    by rewrite -htyout; apply: (all2_check_ty_val Hcr).
   Qed.
 
   Lemma alloc_callP f mem mem' va vr:
@@ -579,18 +572,18 @@ End PROOF.
 
 Lemma alloc_funP_eq p gd fn f f' m1 vargs vres s1 s2:
   check_fundef (fn, f) (fn, f') tt = ok tt ->
-  List.Forall2 check_ty_val f.(f_tyin) vargs ->
+  all2 check_ty_val f.(f_tyin) vargs ->
   write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
   sem p gd s1 (f_body f) s2 ->
   mapM (fun x : var_i => get_var (evm s2) x) (f_res f) = ok vres ->
-  List.Forall2 check_ty_val f.(f_tyout) vres ->
+  all2 check_ty_val f.(f_tyout) vres ->
   exists s1' vm2 vres',
-   [ /\ List.Forall2 check_ty_val f'.(f_tyin) vargs,
+   [ /\ all2 check_ty_val f'.(f_tyin) vargs,
     write_vars (f_params f') vargs {| emem := m1; evm := vmap0 |} = ok s1', 
     sem p gd s1' (f_body f') (Estate (emem s2) vm2),
     mapM (fun x : var_i => get_var vm2 x) (f_res f') = ok vres' &
     List.Forall2 value_uincl vres vres' /\
-    List.Forall2 check_ty_val f'.(f_tyout) vres'
+    all2 check_ty_val f'.(f_tyout) vres'
     ].
 Proof. by apply alloc_funP_eq_aux. Qed.
 
