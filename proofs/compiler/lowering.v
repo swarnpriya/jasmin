@@ -580,8 +580,10 @@ Fixpoint lower_i (i:instr) : cmd :=
 
 Definition lower_fd (fd: fundef) : fundef :=
   {| f_iinfo := f_iinfo fd;
+     f_tyin := f_tyin fd;
      f_params := f_params fd;
      f_body := lower_cmd lower_i (f_body fd);
+     f_tyout := f_tyout fd;
      f_res := f_res fd
   |}.
 
