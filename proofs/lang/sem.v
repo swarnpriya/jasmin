@@ -187,6 +187,9 @@ Definition type_of_val (v:value) : stype :=
   | Vundef t    => vundef_type t
   end.
 
+Definition check_ty_val (ty:stype) (v:value) : Prop := 
+  subtype ty (type_of_val v).
+
 Definition of_val t : value -> exec (sem_t t) :=
   match t return value -> exec (sem_t t) with
   | sbool    => to_bool
@@ -941,12 +944,11 @@ with sem_for : var_i -> seq Z -> estate -> cmd -> estate -> Prop :=
 with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
 | EcallRun m1 m2 fn f vargs s1 vm2 vres:
     get_fundef P fn = Some f ->
-    (* TODO: check type of arguments *)
+    List.Forall2 check_ty_val f.(f_tyin) vargs ->
     write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1 ->
     sem s1 f.(f_body) (Estate m2 vm2) ->
-    (* TODO: check type of return value *)
     mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres ->
-(*    List.Forall is_full_array vres -> (* TODO: is this still needed? *) *)
+    List.Forall2 check_ty_val f.(f_tyout) vres ->
     sem_call m1 fn vargs m2 vres.
 
 (* -------------------------------------------------------------------- *)
@@ -1030,11 +1032,12 @@ Section SEM_IND.
   Hypothesis Hproc : forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs : seq value)
          (s1 : estate) (vm2 : vmap) (vres : seq value),
     get_fundef P fn = Some f ->
+    List.Forall2 check_ty_val f.(f_tyin) vargs ->
     write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
     sem s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-(*    List.Forall is_full_array vres -> *)
+    List.Forall2 check_ty_val f.(f_tyout) vres ->
     Pfun m1 fn vargs m2 vres.
 
   Fixpoint sem_Ind (e : estate) (l : cmd) (e0 : estate) (s : sem e l e0) {struct s} :
@@ -1085,8 +1088,8 @@ Section SEM_IND.
   with sem_call_Ind (m : mem) (f13 : funname) (l : seq value) (m0 : mem)
          (l0 : seq value) (s : sem_call m f13 l m0 l0) {struct s} : Pfun m f13 l m0 l0 :=
     match s with
-    | @EcallRun m1 m2 fn f vargs s1 vm2 vres Hget Hw Hsem (*Hmap*) Hvres =>
-       @Hproc m1 m2 fn f vargs s1 vm2 vres Hget Hw Hsem (sem_Ind Hsem) (*Hmap*) Hvres
+    | @EcallRun m1 m2 fn f vargs s1 vm2 vres Hget Hctin Hw Hsem Hvres Hctout =>
+       @Hproc m1 m2 fn f vargs s1 vm2 vres Hget Hctin Hw Hsem (sem_Ind Hsem) Hvres Hctout
     end.
 
 End SEM_IND.

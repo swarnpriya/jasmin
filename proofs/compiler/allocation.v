@@ -177,7 +177,7 @@ Definition check_cmd iinfo := fold2 (iinfo,cmd2_error) check_I.
 Definition check_fundef (f1 f2: funname * fundef) (_:unit) := 
   let (f1,fd1) := f1 in
   let (f2,fd2) := f2 in
-  if f1 == f2 then
+  if (f1 == f2) && (fd1.(f_tyin) == fd2.(f_tyin)) && (fd1.(f_tyout) == fd2.(f_tyout)) then
     add_finfo f1 f2 (
     Let r := add_iinfo fd1.(f_iinfo) (check_vars fd1.(f_params) fd2.(f_params) M.empty) in
     Let r := check_cmd fd1.(f_iinfo) fd1.(f_body) fd2.(f_body) r in
@@ -222,8 +222,10 @@ Section PROOF.
     move: p1 p2 Hcheck;rewrite /check_prog;clear p1 p2 Hcheck.
     elim => [ | [fn1' fd1'] p1 Hrec] [ | [fn2 fd2] p2] //. 
     apply: rbindP => -[] Hc /Hrec {Hrec} Hrec.
-    have ? : fn1' = fn2 by move: Hc;rewrite /check_fundef;case:ifP => /eqP.
-    subst=> fn fd1;rewrite !get_fundef_cons;case:ifPn => [/eqP -> [] <-| _ /Hrec //].
+    have ? : fn1' = fn2.
+    + by move: Hc;rewrite /check_fundef; case:ifP => // /andP[]/andP[]/eqP.
+    subst=> fn fd1;rewrite !get_fundef_cons. 
+    case:ifPn => [/eqP -> [] <-| _ /Hrec //].
     by exists fd2.
   Qed.
 
@@ -484,56 +486,69 @@ Section PROOF.
 
     Local Lemma Hproc_eq m1 m2 fn f vargs s1 vm2 vres: 
       get_fundef p1 fn = Some f ->
+      List.Forall2 check_ty_val f.(f_tyin) vargs ->
       write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
       sem p1 gd s1 (f_body f) {| emem := m2; evm := vm2 |} ->
       Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
       mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
+      List.Forall2 check_ty_val f.(f_tyout) vres ->
       Pfun m1 fn vargs m2 vres.
     Proof.
-      move=> Hget Hw Hsem _ Hres vargs2 Hvargs2;rewrite -eq_prog.
+      move=> Hget Hca Hw Hsem _ Hres Hcr vargs2 Hvargs2;rewrite -eq_prog.
       have: sem_call p1 gd m1 fn vargs m2 vres by econstructor;eauto.
       by apply: sem_call_uincl.
     Qed.
 
     Lemma alloc_funP_eq_aux fn f f' m1 vargs vres s1 s2: 
       check_fundef (fn, f) (fn, f') tt = ok tt ->
+      List.Forall2 check_ty_val f.(f_tyin) vargs ->
       write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
       sem p1 gd s1 (f_body f) s2 ->
       mapM (fun x : var_i => get_var (evm s2) x) (f_res f) = ok vres ->
+      List.Forall2 check_ty_val f.(f_tyout) vres ->
       exists s1' vm2 vres',
-       [ /\ write_vars (f_params f') vargs {| emem := m1; evm := vmap0 |} = ok s1', 
+       [ /\ List.Forall2 check_ty_val f'.(f_tyin) vargs,
+        write_vars (f_params f') vargs {| emem := m1; evm := vmap0 |} = ok s1', 
         sem p2 gd s1' (f_body f') (Estate (emem s2) vm2),
         mapM (fun x : var_i => get_var vm2 x) (f_res f') = ok vres' &
-        List.Forall2 value_uincl vres vres'].
+        List.Forall2 value_uincl vres vres' /\
+        List.Forall2 check_ty_val f'.(f_tyout) vres'].
     Proof.
-      rewrite /check_fundef eq_refl;apply: add_finfoP.
+      rewrite /check_fundef eq_refl => /=.
+      case: ifP => // /andP[]/eqP htyin /eqP htyout;apply: add_finfoP.
       apply:rbindP => r1;apply:add_iinfoP => Hcparams.
-      apply:rbindP => r2 Hcc;apply: rbindP => r3;apply: add_iinfoP => Hcres _.
+      apply:rbindP => r2 Hcc;apply: rbindP => r3;apply: add_iinfoP => Hcres _ Hca.
       rewrite (write_vars_lvals gd)=> /(check_lvalsP Hcparams).
       move=> /(_ vargs _ eq_alloc_empty) [ | vm3 /= [Hw2 Hvm3]].
       + by apply: List_Forall2_refl.
       move=> /(sem_Ind Hskip Hcons HmkI Hassgn Hopn Hif_true Hif_false 
                 Hwhile_true Hwhile_false Hfor Hfor_nil Hfor_cons Hcall Hproc_eq) Hc.
-      have [vm4 /= [Hvm4 Hsc2] Hres]:= Hc _ _ _ _ _ Hvm3 Hcc.
+      have [vm4 /= [Hvm4 Hsc2] Hres Hcr]:= Hc _ _ _ _ _ Hvm3 Hcc.
       have := check_esP Hcres Hvm4.
       move=> [Hr3];rewrite sem_pexprs_get_var => /(_ _ Hres) [vres' /= []].
       rewrite sem_pexprs_get_var => ??.
-      do 3 eexists;split;eauto;first by rewrite (write_vars_lvals gd).
+      do 3 eexists;split;eauto.
+      + by rewrite -htyin.
+      + by rewrite (write_vars_lvals gd).
+      by rewrite -htyout;split=>//;apply: (Forall2_trans check_ty_val_uincl Hcr). 
     Qed.
 
   End REFL.
    
   Local Lemma Hproc m1 m2 fn f vargs s1 vm2 vres: 
     get_fundef p1 fn = Some f ->
+    List.Forall2 check_ty_val f.(f_tyin) vargs ->
     write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
     sem p1 gd s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
+    List.Forall2 check_ty_val f.(f_tyout) vres ->
     Pfun m1 fn vargs m2 vres.
   Proof.
-    move=> Hget Hw _ Hc Hres.
+    move=> Hget Hca Hw _ Hc Hres Hcr.
     have [fd2 [Hget2 /=]]:= all_checked Hget.
-    rewrite eq_refl; apply:add_finfoP;apply:rbindP => r1;apply:add_iinfoP => Hcparams.
+    rewrite eq_refl /=;case: ifP => // /andP[]/eqP htyin /eqP htyout.
+    apply:add_finfoP;apply:rbindP => r1;apply:add_iinfoP => Hcparams.
     apply:rbindP => r2 Hcc;apply: rbindP => r3;apply: add_iinfoP => Hcres _.
     move=> vargs2 Hvargs2.
     move: Hw;rewrite (write_vars_lvals gd)=> /(check_lvalsP Hcparams).
@@ -544,7 +559,9 @@ Section PROOF.
     rewrite sem_pexprs_get_var => ??.
     econstructor;split;eauto.
     econstructor;eauto.
-    by rewrite (write_vars_lvals gd).
+    + by rewrite -htyin; apply: (Forall2_trans check_ty_val_uincl Hca).
+    + by rewrite (write_vars_lvals gd).
+    by rewrite -htyout; apply: (Forall2_trans check_ty_val_uincl Hcr).
   Qed.
 
   Lemma alloc_callP f mem mem' va vr:
@@ -562,14 +579,18 @@ End PROOF.
 
 Lemma alloc_funP_eq p gd fn f f' m1 vargs vres s1 s2:
   check_fundef (fn, f) (fn, f') tt = ok tt ->
+  List.Forall2 check_ty_val f.(f_tyin) vargs ->
   write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
   sem p gd s1 (f_body f) s2 ->
   mapM (fun x : var_i => get_var (evm s2) x) (f_res f) = ok vres ->
+  List.Forall2 check_ty_val f.(f_tyout) vres ->
   exists s1' vm2 vres',
-   [ /\ write_vars (f_params f') vargs {| emem := m1; evm := vmap0 |} = ok s1', 
+   [ /\ List.Forall2 check_ty_val f'.(f_tyin) vargs,
+    write_vars (f_params f') vargs {| emem := m1; evm := vmap0 |} = ok s1', 
     sem p gd s1' (f_body f') (Estate (emem s2) vm2),
     mapM (fun x : var_i => get_var vm2 x) (f_res f') = ok vres' &
-    List.Forall2 value_uincl vres vres'
+    List.Forall2 value_uincl vres vres' /\
+    List.Forall2 check_ty_val f'.(f_tyout) vres'
     ].
 Proof. by apply alloc_funP_eq_aux. Qed.
 

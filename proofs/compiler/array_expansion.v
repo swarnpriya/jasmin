@@ -213,9 +213,11 @@ Module CBEA.
     move=> [Hee _] /andP[]/eqP <- /Sv_memP /Hee Hin Hget;move: Hin;rewrite /get_var.
     apply: on_vuP Hget => [z ->|->[]] ?;subst v1.
     + by case: vm2.[x1] => //= a Ha; exists (pto_val a).
-    case: vm2.[x1] => [a Ha | e <-] /=;last by eauto.
-    exists (pto_val a);split=> //.
-    by symmetry;apply subtype_eq_vundef_type;apply subtype_type_of_val.
+    case: vm2.[x1] => [a Ha | e <-] /=.
+    + exists (pto_val a);split=> //.
+      by symmetry;apply subtype_eq_vundef_type;apply subtype_type_of_val.
+    eexists;split;first reflexivity.
+    by rewrite /type_of_val -vundef_type_idem.    
   Qed.
 
   Lemma check_ebP gd e1 e2 r m1 v1 vm1 vm2:
@@ -280,15 +282,6 @@ Module CBEA.
     by rewrite /check_e;case:ifP => //= /check_ebP H [<-] Hea;split=>// m v1;apply: H.
   Qed.
 
-  (* TODO: MOVE *)
-  Lemma eval_uincl_apply_undef t (v1 v2 : exec (psem_t t)): 
-    eval_uincl v1 v2 -> 
-    eval_uincl (apply_undef v1) (apply_undef v2).
-  Proof.
-    case:v1 v2=> [v1 | []] [v2 | e2] //=; try by move=> <-.
-    by move=> _; apply eval_uincl_undef.
-  Qed.
-
   Lemma eq_alloc_set x1 (v1 v2:exec (psem_t (vtype x1))) r vm1 vm2  : 
     ~ Sv.In x1 (M.allocated r) ->
     eq_alloc r vm1 vm2 ->
@@ -322,22 +315,11 @@ Module CBEA.
       by eexists;split;eauto; apply: (@eq_alloc_set x1 (ok v1') (ok v2')).
     move=> /negbTE -> /pof_val_error [t [ht ?]];subst v1 => <- [] <-.
     have /= := value_uincl_vundef_type_eq Huv.
-    rewrite -(subtype_vundef_type_eq ht) => /pof_val_type_of [[v'] | ] -> /=;
+    rewrite -(subtype_vundef_type_eq ht) -vundef_type_idem.
+    move=> /pof_val_type_of [[v'] | ] -> /=;
       eexists;split;eauto.
     + by apply (@eq_alloc_set x1 undef_error (ok v')).
     by apply (@eq_alloc_set x1 undef_error undef_error).
-  Qed.
-
-  (* TODO: move *)
-  Lemma to_word_to_pword s v w: to_word s v = ok w -> to_pword s v = ok (pword_of_word w).
-  Proof.
-    case: v => //= [ s' w'| []//?];last by case: ifP.
-    move=> /truncate_wordP [hle] ?;subst w.
-    move: (erefl (s' <=s)%CMP); pattern (s' <=s)%CMP at 2 3; case (s' <=s)%CMP => /=.
-    + move=> e;move: (e);rewrite cmp_le_eq_lt in e => e'.
-      case /orP: e => [hlt | /eqP ?];first by rewrite -cmp_nlt_le hlt in hle.
-      by subst; rewrite /pword_of_word zero_extend_u;do 2 f_equal;apply eq_irrelevance.
-    by move=> /negbT;rewrite cmp_nle_lt /truncate_word => h;rewrite (cmp_lt_le h) /=.
   Qed.
 
   Lemma check_lvalP gd r1 r1' x1 x2 oe2 s1 s1' vm1 v1 v2 :

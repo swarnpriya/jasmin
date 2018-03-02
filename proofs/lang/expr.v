@@ -440,8 +440,10 @@ Notation cmd := (seq instr).
 
 Record fundef := MkFun {
   f_iinfo  : instr_info;
+  f_tyin  : seq stype;
   f_params : seq var_i;
   f_body   : cmd;
+  f_tyout : seq stype;
   f_res    : seq var_i;
 }.
 
@@ -539,15 +541,16 @@ Canonical  instr_eqType      := Eval hnf in EqType instr instr_eqMixin.
 
 Definition fundef_beq fd1 fd2 :=
   match fd1, fd2 with
-  | MkFun ii1 x1 c1 r1, MkFun ii2 x2 c2 r2 =>
-    (ii1 == ii2) && (x1 == x2) && (c1 == c2) && (r1 == r2)
+  | MkFun ii1 tin1 x1 c1 tout1 r1, MkFun ii2 tin2 x2 c2 tout2 r2 =>
+    (ii1 == ii2) && (tin1 == tin2) && (x1 == x2) && (c1 == c2) && (tout1 == tout2) && (r1 == r2)
   end.
 
 Lemma fundef_eq_axiom : Equality.axiom fundef_beq.
 Proof.
-  move=> [i1 p1 c1 r1] [i2 p2 c2 r2] /=.
-  apply (@equivP ((i1 == i2) && (p1 == p2) && (c1 == c2) && (r1 == r2)));first by apply idP.
-  by split=> [/andP[]/andP[]/andP[] | []] /eqP->/eqP->/eqP->/eqP->.
+  move=> [i1 tin1 p1 c1 tout1 r1] [i2 tin2 p2 c2 tout2 r2] /=.
+  apply (@equivP ((i1 == i2) && (tin1 == tin2) && (p1 == p2) && 
+           (c1 == c2) && (tout1 == tout2) &&(r1 == r2)));first by apply idP.
+  by split=> [/andP[]/andP[]/andP[]/andP[]/andP[] | []] /eqP->/eqP->/eqP->/eqP->/eqP->/eqP->.
 Qed.
 
 Definition fundef_eqMixin     := Equality.Mixin fundef_eq_axiom.

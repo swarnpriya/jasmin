@@ -303,11 +303,11 @@ with sem_for : var_i -> seq Z -> estate -> cmd -> estate -> Prop :=
 with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
 | EcallRun m1 m2 fn f vargs s1 vm2 vres:
     get_fundef P fn = Some f ->
-    (* TODO: check type of arguments *)
+    List.Forall2 check_ty_val f.(f_tyin) vargs ->
     write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1 ->
     sem s1 f.(f_body) (Estate m2 vm2) ->
-    (* TODO: check type of return value *)
     mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres ->
+    List.Forall2 check_ty_val f.(f_tyout) vres ->
     sem_call m1 fn vargs m2 vres.
 
 (* -------------------------------------------------------------------- *)
@@ -391,11 +391,12 @@ Section SEM_IND.
   Hypothesis Hproc : forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs : seq value)
          (s1 : estate) (vm2 : vmap) (vres : seq value),
     get_fundef P fn = Some f ->
+    List.Forall2 check_ty_val f.(f_tyin) vargs ->
     write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
     sem s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-(*    List.Forall is_full_array vres -> *)
+    List.Forall2 check_ty_val f.(f_tyout) vres ->
     Pfun m1 fn vargs m2 vres.
 
   Fixpoint sem_Ind (e : estate) (l : cmd) (e0 : estate) (s : sem e l e0) {struct s} :
@@ -446,8 +447,8 @@ Section SEM_IND.
   with sem_call_Ind (m : mem) (f13 : funname) (l : seq value) (m0 : mem)
          (l0 : seq value) (s : sem_call m f13 l m0 l0) {struct s} : Pfun m f13 l m0 l0 :=
     match s with
-    | @EcallRun m1 m2 fn f vargs s1 vm2 vres Hget Hw Hsem Hvres =>
-       @Hproc m1 m2 fn f vargs s1 vm2 vres Hget Hw Hsem (sem_Ind Hsem) Hvres
+    | @EcallRun m1 m2 fn f vargs s1 vm2 vres Hget Hca Hw Hsem Hvres Hcr =>
+       @Hproc m1 m2 fn f vargs s1 vm2 vres Hget Hca Hw Hsem (sem_Ind Hsem) Hvres Hcr
     end.
 
 End SEM_IND.
@@ -1537,6 +1538,15 @@ Proof.
   by exists erefl => i w H; have := Array.getP_empty H.
 Qed.
 
+
+Lemma eval_uincl_apply_undef t (v1 v2 : exec (psem_t t)): 
+  eval_uincl v1 v2 -> 
+  eval_uincl (apply_undef v1) (apply_undef v2).
+Proof.
+  case:v1 v2=> [v1 | []] [v2 | e2] //=; try by move=> <-.
+  by move=> _; apply eval_uincl_undef.
+Qed.
+
 Lemma subtype_eval_uincl t t' (v:exec (psem_t t)):
   subtype (vundef_type t') t ->
   eval_uincl (pundef_addr t) v -> eval_uincl (pundef_addr t') v.
@@ -1887,20 +1897,31 @@ Proof.
   econstructor;eauto.
 Qed.
 
+Lemma check_ty_val_uincl v1 x v2 : 
+  check_ty_val x v1 → value_uincl v1 v2 → check_ty_val x v2.
+Proof.
+  rewrite /check_ty_val => h /value_uincl_subtype.
+  by apply: subtype_trans.
+Qed.
+
 Local Lemma Hproc m1 m2 fn fd vargs s1 vm2 vres:
   get_fundef p fn = Some fd ->
+  List.Forall2 check_ty_val fd.(f_tyin) vargs ->
   write_vars (f_params fd) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
   sem p gd s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
   Pc s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
   mapM (fun x : var_i => get_var vm2 x) (f_res fd) = ok vres ->
+  List.Forall2 check_ty_val fd.(f_tyout) vres ->
   Pfun m1 fn vargs m2 vres.
 Proof.
-  move=> Hget Hargs Hsem Hrec Hmap vargs' Uargs.
+  move=> Hget Hca Hargs Hsem Hrec Hmap Hcr vargs' Uargs.
   have [vm1 [Hargs' Hvm1]] := write_vars_uincl (vm_uincl_refl _) Uargs Hargs.
   have [vm2' /= [] Hsem' Uvm2]:= Hrec _ Hvm1.
   have [vs2 [Hvs2 Hsub]] := get_vars_uincl Uvm2 Hmap.
   exists vs2;split=>//.
   econstructor;eauto.
+  apply: (Forall2_trans check_ty_val_uincl) Hca Uargs.
+  apply: (Forall2_trans check_ty_val_uincl) Hcr Hsub.
 Qed.
 
 Lemma sem_call_uincl vargs m1 f m2 vres vargs':
@@ -2029,5 +2050,14 @@ Proof.
    by move=> H; have {H}  /pto_val_undef := ok_inj (Logic.eq_sym H). 
 Qed.
 
-
-
+(* TODO: move *)
+Lemma to_word_to_pword s v w: to_word s v = ok w -> to_pword s v = ok (pword_of_word w).
+Proof.
+  case: v => //= [ s' w'| []//?];last by case: ifP.
+  move=> /truncate_wordP [hle] ?;subst w.
+  move: (erefl (s' <=s)%CMP); pattern (s' <=s)%CMP at 2 3; case (s' <=s)%CMP => /=.
+  + move=> e;move: (e);rewrite cmp_le_eq_lt in e => e'.
+    case /orP: e => [hlt | /eqP ?];first by rewrite -cmp_nlt_le hlt in hle.
+    by subst; rewrite /pword_of_word zero_extend_u;do 2 f_equal;apply eq_irrelevance.
+  by move=> /negbT;rewrite cmp_nle_lt /truncate_word => h;rewrite (cmp_lt_le h) /=.
+Qed.

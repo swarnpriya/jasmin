@@ -59,9 +59,9 @@ Definition stype_of_lval (lv: lval) : stype :=
   | Lmem sz _ _ => sword sz
   end.
 
-Definition assgn_tuple iinfo (xs:lvals) flag (es:pexprs) :=
-  let assgn xe := MkI iinfo (Cassgn xe.1 (get_flag xe.1 flag) (stype_of_lval xe.1) xe.2) in
-  map assgn (zip xs es).
+Definition assgn_tuple iinfo (xs:lvals) flag (tys:seq stype) (es:pexprs) :=
+  let assgn xe := MkI iinfo (Cassgn xe.1 (get_flag xe.1 flag) xe.2.1 xe.2.2) in
+  map assgn (zip xs (zip tys es)).
 
 Definition inline_c (inline_i: instr -> Sv.t -> ciexec (Sv.t * cmd)) c s := 
   foldr (fun i r =>
@@ -139,20 +139,20 @@ Fixpoint inline_i (p:prog) (i:instr) (X:Sv.t) : ciexec (Sv.t * cmd) :=
         (* FIXME : locals is computed 2 times (one in check_rename) *)
         Let _ := check_rename iinfo f fd fd' (Sv.union (vrvs xs) X) in
         let init_array := array_init iinfo (locals fd') in                
-        ciok (X,  assgn_tuple iinfo (map Lvar fd'.(f_params)) AT_rename es ++
+        ciok (X,  assgn_tuple iinfo (map Lvar fd'.(f_params)) AT_rename fd'.(f_tyin) es ++
                   init_array ++ 
                   (fd'.(f_body) ++ 
-                  assgn_tuple iinfo xs AT_rename (map Pvar fd'.(f_res))))
+                  assgn_tuple iinfo xs AT_rename fd'.(f_tyout) (map Pvar fd'.(f_res))))
       else ciok (X, [::i])        
     end
   end.
 
 Definition inline_fd (p:prog) (fd:fundef) :=
   match fd with 
-  | MkFun ii params c res =>
+  | MkFun ii tyin params c tyout res =>
     let s := read_es (map Pvar res) in
     Let c := inline_c (inline_i p) c s in
-    ok (MkFun ii params c.2 res)
+    ok (MkFun ii tyin params c.2 tyout res)
   end.
 
 Definition inline_fd_cons (ffd:funname * fundef) (p:cfexec prog) :=
@@ -199,8 +199,10 @@ Definition remove_init_c c :=  foldr (fun i c => remove_init_i i ++ c) [::] c.
 
 Definition remove_init_fd fd := 
   {| f_iinfo  := fd.(f_iinfo);
+     f_tyin   := fd.(f_tyin);
      f_params := fd.(f_params);  
      f_body   := remove_init_c fd.(f_body);
+     f_tyout   := fd.(f_tyout);
      f_res    := fd.(f_res); |}.
 
 Definition remove_init_prog (p:prog) := map_prog remove_init_fd p.
