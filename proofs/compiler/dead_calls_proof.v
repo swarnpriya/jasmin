@@ -1,6 +1,6 @@
 (* -------------------------------------------------------------------- *)
 From mathcomp Require Import all_ssreflect.
-(* ------- *) Require Import expr compiler_util sem gen_map dead_calls.
+(* ------- *) Require Import expr compiler_util psem gen_map dead_calls.
 (* ------- *) (* - *) Import PosSet.
 Import Utf8 xseq.
 
@@ -18,7 +18,7 @@ with i_Calls_r (i : instr_r) {struct i} : Sp.t :=
   in
 
   match i with
-  | Cassgn _  _  _    => Sp.empty
+  | Cassgn _  _  _ _ => Sp.empty
   | Copn   _  _  _  _ => Sp.empty
   | Cif    _  c1 c2   => Sp.union (c_Calls c1) (c_Calls c2)
   | Cfor   _  _  c1   => c_Calls c1
@@ -34,8 +34,8 @@ Lemma i_Calls_MkI ii i :
   i_Calls (MkI ii i) = i_Calls_r i.
 Proof. by []. Qed.
 
-Lemma i_Calls_asgn lv tg e :
-  i_Calls_r (Cassgn lv tg e) = Sp.empty.
+Lemma i_Calls_asgn lv tg ty e :
+  i_Calls_r (Cassgn lv tg ty e) = Sp.empty.
 Proof. by []. Qed.
 
 Lemma i_Calls_opn lv t op es :
@@ -203,9 +203,11 @@ Section PROOF.
     exact: (Hi Hincl Hs).
   Qed.
 
-  Local Lemma Hassgn s1 s2 l tag e :
-    Let v := sem_pexpr gd s1 e in write_lval gd l v s1 = Ok error s2 ->
-    Pi_r s1 (Cassgn l tag e) s2.
+  Local Lemma Hassgn s1 s2 l tag ty e :
+    (Let v := sem_pexpr gd s1 e in
+     Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
+     write_lval gd l v s1) = Ok error s2 ->
+    Pi_r s1 (Cassgn l tag ty e) s2.
   Proof.
     move=> H _ _; exact: (Eassgn _ _ H).
   Qed.
@@ -307,13 +309,14 @@ Section PROOF.
     sem p gd s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res fd) = ok vres ->
-    List.Forall is_full_array vres ->
+    (* List.Forall is_full_array vres -> *)
     Pfun m1 fn vargs m2 vres.
   Proof.
-    move=> Hget Hvargs Hsem Hc Hvres Hfull Hin Hcall.
+    move=> Hget Hvargs Hsem Hc Hvres Hin Hcall.
     have Hin' := Hin _ (SpD.F.singleton_2 erefl).
     have Hfd := get_dead_calls Hin' Hget.
-    apply: (EcallRun _ Hvargs _ Hvres Hfull)=> //.
+    have := EcallRun _ Hvargs _ Hvres.
+    apply => //.
     apply: Hc=> //.
     move=> n hn.
     apply: pfxp.
@@ -330,7 +333,7 @@ Section PROOF.
     apply: (@sem_call_Ind p gd Pc Pi_r Pi Pfor Pfun Hskip Hcons HmkI Hassgn Hopn
              Hif_true Hif_false Hwhile_true Hwhile_false Hfor Hfor_nil Hfor_cons Hcall Hproc)=> //.
     sinversion H.
-    move=> {H1 H2 H3 H4} x Hx.
+    move=> {H1 H2 H3} x Hx.
     SpD.fsetdec.
   Qed.
 
