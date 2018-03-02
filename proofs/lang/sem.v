@@ -187,7 +187,7 @@ Definition type_of_val (v:value) : stype :=
   | Vundef t    => vundef_type t
   end.
 
-Definition check_ty_val (ty:stype) (v:value) : Prop := 
+Definition check_ty_val (ty:stype) (v:value) := 
   subtype ty (type_of_val v).
 
 Definition of_val t : value -> exec (sem_t t) :=
@@ -887,10 +887,10 @@ with sem_I : estate -> instr -> estate -> Prop :=
     sem_I s1 (MkI ii i) s2
 
 with sem_i : estate -> instr_r -> estate -> Prop :=
-| Eassgn s1 s2 (x:lval) tag ty e:
-    (Let v := sem_pexpr gd s1 e in
-     Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
-     write_lval gd x v s1) = ok s2 ->
+| Eassgn s1 s2 (x:lval) tag ty e v:
+    sem_pexpr gd s1 e = ok v ->
+    check_ty_val ty v ->
+    write_lval gd x v s1 = ok s2 ->
     sem_i s1 (Cassgn x tag ty e) s2
 
 | Eopn s1 s2 t o xs es:
@@ -898,30 +898,30 @@ with sem_i : estate -> instr_r -> estate -> Prop :=
     sem_i s1 (Copn xs t o es) s2
 
 | Eif_true s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e >>= to_bool = ok true ->
+    sem_pexpr gd s1 e = ok (Vbool true) ->
     sem s1 c1 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
 | Eif_false s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e >>= to_bool = ok false ->
+    sem_pexpr gd s1 e = ok (Vbool false) ->
     sem s1 c2 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
 | Ewhile_true s1 s2 s3 s4 c e c' :
     sem s1 c s2 ->
-    sem_pexpr gd s2 e >>= to_bool = ok true ->
+    sem_pexpr gd s2 e = ok (Vbool true) ->
     sem s2 c' s3 ->
     sem_i s3 (Cwhile c e c') s4 ->
     sem_i s1 (Cwhile c e c') s4
 
 | Ewhile_false s1 s2 c e c' :
     sem s1 c s2 ->
-    sem_pexpr gd s2 e >>= to_bool = ok false ->
+    sem_pexpr gd s2 e = ok (Vbool false) ->
     sem_i s1 (Cwhile c e c') s2
 
 | Efor s1 s2 (i:var_i) d lo hi c vlo vhi :
-    sem_pexpr gd s1 lo >>= to_int = ok vlo ->
-    sem_pexpr gd s1 hi >>= to_int = ok vhi ->
+    sem_pexpr gd s1 lo = ok (Vint vlo) ->
+    sem_pexpr gd s1 hi = ok (Vint vhi) ->
     sem_for i (wrange d vlo vhi) s1 c s2 ->
     sem_i s1 (Cfor i (d, lo, hi) c) s2
 
@@ -944,11 +944,11 @@ with sem_for : var_i -> seq Z -> estate -> cmd -> estate -> Prop :=
 with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
 | EcallRun m1 m2 fn f vargs s1 vm2 vres:
     get_fundef P fn = Some f ->
-    List.Forall2 check_ty_val f.(f_tyin) vargs ->
+    all2 check_ty_val f.(f_tyin) vargs ->
     write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1 ->
     sem s1 f.(f_body) (Estate m2 vm2) ->
     mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres ->
-    List.Forall2 check_ty_val f.(f_tyout) vres ->
+    all2 check_ty_val f.(f_tyout) vres ->
     sem_call m1 fn vargs m2 vres.
 
 (* -------------------------------------------------------------------- *)
@@ -977,10 +977,10 @@ Section SEM_IND.
   Hypothesis HmkI : forall (ii : instr_info) (i : instr_r) (s1 s2 : estate),
     sem_i s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 
-  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr),
-    (Let v := sem_pexpr gd s1 e in
-    Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
-    write_lval gd x v s1) = Ok error s2 ->
+  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v,
+    sem_pexpr gd s1 e = ok v ->
+    check_ty_val ty v ->
+    write_lval gd x v s1 = Ok error s2 ->
     Pi_r s1 (Cassgn x tag ty e) s2.
 
   Hypothesis Hopn : forall (s1 s2 : estate) t (o : sopn) (xs : lvals) (es : pexprs),
@@ -988,28 +988,28 @@ Section SEM_IND.
     Pi_r s1 (Copn xs t o es) s2.
 
   Hypothesis Hif_true : forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
-    Let x := sem_pexpr gd s1 e in to_bool x = Ok error true ->
+    sem_pexpr gd s1 e = ok (Vbool true) ->
     sem s1 c1 s2 -> Pc s1 c1 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
   Hypothesis Hif_false : forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
-    Let x := sem_pexpr gd s1 e in to_bool x = Ok error false ->
+    sem_pexpr gd s1 e = ok (Vbool false) ->
     sem s1 c2 s2 -> Pc s1 c2 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
   Hypothesis Hwhile_true : forall (s1 s2 s3 s4 : estate) (c : cmd) (e : pexpr) (c' : cmd),
     sem s1 c s2 -> Pc s1 c s2 ->
-    Let x := sem_pexpr gd s2 e in to_bool x = Ok error true ->
+    sem_pexpr gd s2 e = ok (Vbool true) ->
     sem s2 c' s3 -> Pc s2 c' s3 ->
     sem_i s3 (Cwhile c e c') s4 -> Pi_r s3 (Cwhile c e c') s4 -> Pi_r s1 (Cwhile c e c') s4.
 
   Hypothesis Hwhile_false : forall (s1 s2 : estate) (c : cmd) (e : pexpr) (c' : cmd),
     sem s1 c s2 -> Pc s1 c s2 ->
-    Let x := sem_pexpr gd s2 e in to_bool x = Ok error false ->
+    sem_pexpr gd s2 e = ok (Vbool false) ->
     Pi_r s1 (Cwhile c e c') s2.
 
   Hypothesis Hfor : forall (s1 s2 : estate) (i : var_i) (d : dir)
          (lo hi : pexpr) (c : cmd) (vlo vhi : Z),
-    Let x := sem_pexpr gd s1 lo in to_int x = Ok error vlo ->
-    Let x := sem_pexpr gd s1 hi in to_int x = Ok error vhi ->
+    sem_pexpr gd s1 lo = ok (Vint vlo) ->
+    sem_pexpr gd s1 hi = ok (Vint vhi) ->
     sem_for i (wrange d vlo vhi) s1 c s2 ->
     Pfor i (wrange d vlo vhi) s1 c s2 -> Pi_r s1 (Cfor i (d, lo, hi) c) s2.
 
@@ -1032,12 +1032,12 @@ Section SEM_IND.
   Hypothesis Hproc : forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs : seq value)
          (s1 : estate) (vm2 : vmap) (vres : seq value),
     get_fundef P fn = Some f ->
-    List.Forall2 check_ty_val f.(f_tyin) vargs ->
+    all2 check_ty_val f.(f_tyin) vargs ->
     write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
     sem s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-    List.Forall2 check_ty_val f.(f_tyout) vres ->
+    all2 check_ty_val f.(f_tyout) vres ->
     Pfun m1 fn vargs m2 vres.
 
   Fixpoint sem_Ind (e : estate) (l : cmd) (e0 : estate) (s : sem e l e0) {struct s} :
@@ -1051,15 +1051,15 @@ Section SEM_IND.
   with sem_i_Ind (e : estate) (i : instr_r) (e0 : estate) (s : sem_i e i e0) {struct s} :
     Pi_r e i e0 :=
     match s in (sem_i e1 i0 e2) return (Pi_r e1 i0 e2) with
-    | @Eassgn s1 s2 x tag ty e1 e2 => @Hasgn s1 s2 x tag ty e1 e2
+    | @Eassgn s1 s2 x tag ty e1 v h1 h2 h3 => @Hasgn s1 s2 x tag ty e1 v h1 h2 h3
     | @Eopn s1 s2 t o xs es e1 => @Hopn s1 s2 t o xs es e1
     | @Eif_true s1 s2 e1 c1 c2 e2 s0 =>
       @Hif_true s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c1 s2 s0)
     | @Eif_false s1 s2 e1 c1 c2 e2 s0 =>
       @Hif_false s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c2 s2 s0)
-    | @Ewhile_true s1 s2 s3 s4 c e1 c' s0 e2 s5 s6 =>
-      @Hwhile_true s1 s2 s3 s4 c e1 c' s0 (@sem_Ind s1 c s2 s0) e2 s5 (@sem_Ind s2 c' s3 s5) s6
-          (@sem_i_Ind s3 (Cwhile c e1 c') s4 s6)
+    | @Ewhile_true s1 s2 s3 s4 c e1 c' h1 h2 h3 h4 =>
+      @Hwhile_true s1 s2 s3 s4 c e1 c' h1 (@sem_Ind s1 c s2 h1) h2 h3 (@sem_Ind s2 c' s3 h3) 
+          h4 (@sem_i_Ind s3 (Cwhile c e1 c') s4 h4)
     | @Ewhile_false s1 s2 c e1 c' s0 e2 =>
       @Hwhile_false s1 s2 c e1 c' s0 (@sem_Ind s1 c s2 s0) e2
     | @Efor s1 s2 i0 d lo hi c vlo vhi e1 e2 s0 =>

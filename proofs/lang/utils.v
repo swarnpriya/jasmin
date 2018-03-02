@@ -292,6 +292,15 @@ Section All2.
     | _     , _      => false
     end.
 
+  Lemma all2P l1 l2 : reflect (List.Forall2 f l1 l2) (all2 l1 l2).
+  Proof.
+    elim: l1 l2 => [ | a l1 hrec] [ | b l2] /=;try constructor.
+    + by constructor. + by move=> h;inversion h. + by move=> h;inversion h.
+    apply: equivP;first apply /andP.
+    split => [[]h1 /hrec h2 | h];first by constructor.
+    by inversion_clear h;split=>//; apply /hrec.
+  Qed.
+
 End All2.
 
 (* ** Misc functions

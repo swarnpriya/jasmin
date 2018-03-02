@@ -343,13 +343,14 @@ Definition addr_of_pexpr ii s (e: pexpr) :=
     cierror ii (Cerr_assembler (AsmErr_string "Invalid address expression"))
   end.
 
-Definition oprd_of_pexpr ii sz (e: pexpr) :=
+Definition oprd_of_pexpr ii (e: pexpr) :=
   match e with
-  | Pcast sz (Pconst z) =>
-    Let _ := 
+  | Pcast U64 (Pconst z) =>
+(*    Let _ := 
       if check_size_8_64 sz is Ok _ then ok tt 
-      else cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: invalid cast")) in
-    let w := zero_extend Uptr (wrepr sz z) in
+      else cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: invalid cast")) in 
+    let w := zero_extend Uptr (wrepr sz z) in *)
+    let w := wrepr U64 z in
     ciok (Imm_op w)
   | Pvar v =>
     Let s := reg_of_var ii v in
@@ -357,9 +358,9 @@ Definition oprd_of_pexpr ii sz (e: pexpr) :=
   | Pglobal g =>
     ciok (Glo_op g)
   | Pload sz' v e => (* FIXME: can we recognize more expression for e ? *)
-    Let _ := 
+(*    Let _ := 
       if sz == sz' then ok tt 
-      else cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: bad load cast")) in
+      else cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: bad load cast")) in *)
      Let s := reg_of_var ii v in
      Let w := addr_of_pexpr ii s e in
      ciok (Adr_op w)
@@ -476,10 +477,10 @@ by case: op => // - [] //;
 rewrite /addr_of_pexpr /= (addr_ofs_eq_expr h1) (addr_ofs_eq_expr h2).
 Qed.
 
-Lemma oprd_of_pexpr_eq_expr ii ws pe pe' o :
+Lemma oprd_of_pexpr_eq_expr ii pe pe' o :
   eq_expr pe pe' →
-  oprd_of_pexpr ii ws pe = ok o →
-  oprd_of_pexpr ii ws pe = oprd_of_pexpr ii ws pe'.
+  oprd_of_pexpr ii pe = ok o →
+  oprd_of_pexpr ii pe = oprd_of_pexpr ii pe'.
 Proof.
 elim: pe pe' o => [ z | b | sz pe ih | x | g | x pe ih | sz x pe ih | op pe ih | op pe1 ih1 pe2 ih2 | pe1 ih1 pe2 ih2 pe3 ih3 ]
   [ z' | b' | sz' pe' | x' | g' | x' pe' | sz' x' pe' | op' pe' | op' pe1' pe2' | pe1' pe2' pe3' ] // o;
@@ -488,10 +489,10 @@ elim: pe pe' o => [ z | b | sz pe ih | x | g | x pe ih | sz x pe ih | op pe ih |
   move => h; move: (h) => /ih {ih} ih.
   by case: pe h ih => // z; case: pe' => // z' /eqP ->.
 - by case: x => x xi /eqP /= ->.
-move=> /= /andP [] /andP [] /eqP <- /eqP hx h; rewrite -/eq_expr in h.
+move=> /= /andP [] /andP [] /eqP ? /eqP hx h; rewrite -/eq_expr in h.
 case: x hx => x xi /= -> {x}.
 move: (h) => /ih {ih}.
 case: (reg_of_var _ _) => //= r ih. 
-case:eqP => // ? /=;t_xrbindP => a ha _.
+t_xrbindP => a ha _.
 by rewrite (addr_of_pexpr_eq_expr h ha).
 Qed.

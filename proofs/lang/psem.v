@@ -252,10 +252,10 @@ with sem_I : estate -> instr -> estate -> Prop :=
     sem_I s1 (MkI ii i) s2
 
 with sem_i : estate -> instr_r -> estate -> Prop :=
-| Eassgn s1 s2 (x:lval) tag ty e:
-    (Let v := sem_pexpr gd s1 e in
-     Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
-     write_lval gd x v s1) = ok s2 ->
+| Eassgn s1 s2 (x:lval) tag ty e v:
+    sem_pexpr gd s1 e = ok v ->
+    check_ty_val ty v ->
+    write_lval gd x v s1 = ok s2 ->
     sem_i s1 (Cassgn x tag ty e) s2
 
 | Eopn s1 s2 t o xs es:
@@ -263,30 +263,30 @@ with sem_i : estate -> instr_r -> estate -> Prop :=
     sem_i s1 (Copn xs t o es) s2
 
 | Eif_true s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e >>= to_bool = ok true ->
+    sem_pexpr gd s1 e = ok (Vbool true) ->
     sem s1 c1 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
 | Eif_false s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e >>= to_bool = ok false ->
+    sem_pexpr gd s1 e = ok (Vbool false) ->
     sem s1 c2 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
 | Ewhile_true s1 s2 s3 s4 c e c' :
     sem s1 c s2 ->
-    sem_pexpr gd s2 e >>= to_bool = ok true ->
+    sem_pexpr gd s2 e = ok (Vbool true) ->
     sem s2 c' s3 ->
     sem_i s3 (Cwhile c e c') s4 ->
     sem_i s1 (Cwhile c e c') s4
 
 | Ewhile_false s1 s2 c e c' :
     sem s1 c s2 ->
-    sem_pexpr gd s2 e >>= to_bool = ok false ->
+    sem_pexpr gd s2 e = ok (Vbool false) ->
     sem_i s1 (Cwhile c e c') s2
 
 | Efor s1 s2 (i:var_i) d lo hi c vlo vhi :
-    sem_pexpr gd s1 lo >>= to_int = ok vlo ->
-    sem_pexpr gd s1 hi >>= to_int = ok vhi ->
+    sem_pexpr gd s1 lo = ok (Vint vlo) ->
+    sem_pexpr gd s1 hi = ok (Vint vhi) ->
     sem_for i (wrange d vlo vhi) s1 c s2 ->
     sem_i s1 (Cfor i (d, lo, hi) c) s2
 
@@ -309,11 +309,11 @@ with sem_for : var_i -> seq Z -> estate -> cmd -> estate -> Prop :=
 with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
 | EcallRun m1 m2 fn f vargs s1 vm2 vres:
     get_fundef P fn = Some f ->
-    List.Forall2 check_ty_val f.(f_tyin) vargs ->
+    all2 check_ty_val f.(f_tyin) vargs ->
     write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1 ->
     sem s1 f.(f_body) (Estate m2 vm2) ->
     mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres ->
-    List.Forall2 check_ty_val f.(f_tyout) vres ->
+    all2 check_ty_val f.(f_tyout) vres ->
     sem_call m1 fn vargs m2 vres.
 
 (* -------------------------------------------------------------------- *)
@@ -342,10 +342,10 @@ Section SEM_IND.
   Hypothesis HmkI : forall (ii : instr_info) (i : instr_r) (s1 s2 : estate),
     sem_i s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 
-  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr),
-    (Let v := sem_pexpr gd s1 e in
-      Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
-      write_lval gd x v s1) = Ok error s2 ->
+  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v,
+    sem_pexpr gd s1 e = ok v ->
+    check_ty_val ty v ->
+    write_lval gd x v s1 = ok s2 ->
     Pi_r s1 (Cassgn x tag ty e) s2.
 
   Hypothesis Hopn : forall (s1 s2 : estate) t (o : sopn) (xs : lvals) (es : pexprs),
@@ -353,28 +353,28 @@ Section SEM_IND.
     Pi_r s1 (Copn xs t o es) s2.
 
   Hypothesis Hif_true : forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
-    Let x := sem_pexpr gd s1 e in to_bool x = Ok error true ->
+    sem_pexpr gd s1 e = ok (Vbool true) ->
     sem s1 c1 s2 -> Pc s1 c1 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
   Hypothesis Hif_false : forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
-    Let x := sem_pexpr gd s1 e in to_bool x = Ok error false ->
+    sem_pexpr gd s1 e = ok (Vbool false) ->
     sem s1 c2 s2 -> Pc s1 c2 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
   Hypothesis Hwhile_true : forall (s1 s2 s3 s4 : estate) (c : cmd) (e : pexpr) (c' : cmd),
     sem s1 c s2 -> Pc s1 c s2 ->
-    Let x := sem_pexpr gd s2 e in to_bool x = Ok error true ->
+    sem_pexpr gd s2 e = ok (Vbool true) ->
     sem s2 c' s3 -> Pc s2 c' s3 ->
     sem_i s3 (Cwhile c e c') s4 -> Pi_r s3 (Cwhile c e c') s4 -> Pi_r s1 (Cwhile c e c') s4.
 
   Hypothesis Hwhile_false : forall (s1 s2 : estate) (c : cmd) (e : pexpr) (c' : cmd),
     sem s1 c s2 -> Pc s1 c s2 ->
-    Let x := sem_pexpr gd s2 e in to_bool x = Ok error false ->
+    sem_pexpr gd s2 e = ok (Vbool false) ->
     Pi_r s1 (Cwhile c e c') s2.
 
   Hypothesis Hfor : forall (s1 s2 : estate) (i : var_i) (d : dir)
          (lo hi : pexpr) (c : cmd) (vlo vhi : Z),
-    Let x := sem_pexpr gd s1 lo in to_int x = Ok error vlo ->
-    Let x := sem_pexpr gd s1 hi in to_int x = Ok error vhi ->
+    sem_pexpr gd s1 lo = ok (Vint vlo) ->
+    sem_pexpr gd s1 hi = ok (Vint vhi) ->
     sem_for i (wrange d vlo vhi) s1 c s2 ->
     Pfor i (wrange d vlo vhi) s1 c s2 -> Pi_r s1 (Cfor i (d, lo, hi) c) s2.
 
@@ -397,12 +397,12 @@ Section SEM_IND.
   Hypothesis Hproc : forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs : seq value)
          (s1 : estate) (vm2 : vmap) (vres : seq value),
     get_fundef P fn = Some f ->
-    List.Forall2 check_ty_val f.(f_tyin) vargs ->
+    all2 check_ty_val f.(f_tyin) vargs ->
     write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
     sem s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-    List.Forall2 check_ty_val f.(f_tyout) vres ->
+    all2 check_ty_val f.(f_tyout) vres ->
     Pfun m1 fn vargs m2 vres.
 
   Fixpoint sem_Ind (e : estate) (l : cmd) (e0 : estate) (s : sem e l e0) {struct s} :
@@ -416,7 +416,7 @@ Section SEM_IND.
   with sem_i_Ind (e : estate) (i : instr_r) (e0 : estate) (s : sem_i e i e0) {struct s} :
     Pi_r e i e0 :=
     match s in (sem_i e1 i0 e2) return (Pi_r e1 i0 e2) with
-    | @Eassgn s1 s2 x tag ty e1 e2 => @Hasgn s1 s2 x tag ty e1 e2
+    | @Eassgn s1 s2 x tag ty e1 v h1 h2 h3 => @Hasgn s1 s2 x tag ty e1 v h1 h2 h3
     | @Eopn s1 s2 t o xs es e1 => @Hopn s1 s2 t o xs es e1
     | @Eif_true s1 s2 e1 c1 c2 e2 s0 =>
       @Hif_true s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c1 s2 s0)
@@ -812,7 +812,7 @@ Proof.
                   (fun _ _ _ _ _ => True)) => {c s1 s2} //.
   + move=> s1 s2 s3 i c _ Hi _ Hc z;rewrite write_c_cons => Hnin.
     by rewrite Hi ?Hc //;SvD.fsetdec.
-  + move=> s1 s2 x tag ty e; case: sem_pexpr => //= v; case: ifP => //= hty Hw z.
+  + move=> s1 s2 x tag ty e v ? hty Hw z.
     by rewrite write_i_assgn;apply (vrvP Hw).
   + move=> s1 s2 t o xs es; rewrite /sem_sopn.
     case: (Let _ := sem_pexprs _ _ _ in _) => //= vs Hw z.
@@ -820,14 +820,14 @@ Proof.
   + by move=> s1 s2 e c1 c2 _ _ Hrec z;rewrite write_i_if => Hnin;apply Hrec;SvD.fsetdec.
   + by move=> s1 s2 e c1 c2 _ _ Hrec z;rewrite write_i_if => Hnin;apply Hrec;SvD.fsetdec.
   + by move=> s1 s2 s3 s4 c e c' _ Hc _ _ Hc' _ Hw z Hnin; rewrite Hc ?Hc' ?Hw //;
-    move: Hnin; rewrite write_i_while; SvD.fsetdec.
+     move: Hnin; rewrite write_i_while; SvD.fsetdec.
   + move=> s1 s2 c e c' _ Hc _ z Hnin; rewrite Hc //.
     by move: Hnin; rewrite write_i_while; SvD.fsetdec.
   + by move=> s1 s2 i d lo hi c vlo vhi _ _ _ Hrec z;rewrite write_i_for;apply Hrec.
   + move=> s1 s1' s2 s3 i w ws c Hw _ Hc _ Hf z Hnin.
     by rewrite (vrvP_var Hw) ?Hc ?Hf //;SvD.fsetdec.
-  + move=> s1 m2 s2 ii xs fn args vargs vs _ _ _ Hw z.
-    by rewrite write_i_call;apply (vrvsP Hw).
+  move=> s1 m2 s2 ii xs fn args vargs vs _ _ _ Hw z.
+  by rewrite write_i_call;apply (vrvsP Hw).
 Qed.
 
 Lemma write_IP P gd i s1 s2 :
@@ -1169,12 +1169,12 @@ Proof.
   by eexists;split;first reflexivity.
 Qed.
 
+Lemma value_uincl_int1 z v : value_uincl (Vint z) v -> v = Vint z.
+Proof. by case: v => //= ? ->. Qed.
+
 Lemma value_uincl_int ve ve' z :
   value_uincl ve ve' -> to_int ve = ok z -> ve = z /\ ve' = z.
-Proof.
-  case:ve ve' => //=;last by move=> [].
-  by move=> z0 [] //= z1 -> [] ->.
-Qed.
+Proof. by case: ve => // [ b' /value_uincl_int1 -> [->]| []//]. Qed.
 
 Lemma value_uincl_word ve ve' sz (w: word sz) :
   value_uincl ve ve' →
@@ -1187,12 +1187,12 @@ case: ve ve' => //=.
 by case => // sz' ve' _; case: ifP.
 Qed.
 
+Lemma value_uincl_bool1 b v : value_uincl (Vbool b) v -> v = Vbool b.
+Proof. by case: v => //= ? ->. Qed.
+
 Lemma value_uincl_bool ve ve' b :
   value_uincl ve ve' -> to_bool ve = ok b -> ve = b /\ ve' = b.
-Proof.
-  case:ve ve' => //=;last by move=>[].
-  by move=> z0 [] //= z1 -> [] ->.
-Qed.
+Proof. by case: ve => // [ b' /value_uincl_bool1 -> [->]| []//]. Qed.
 
 Lemma subtype_vundef_type_eq t1 t2:
   subtype (vundef_type t1) t2 ->
@@ -1781,16 +1781,17 @@ Qed.
 Local Lemma HmkI ii i s1 s2 : sem_i p gd s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 Proof. by move=> _ Hi vm1 /Hi [vm2 []] Hsi ?;exists vm2. Qed.
 
-Local Lemma Hasgn s1 s2 x tag ty e :
-  (Let v := sem_pexpr gd s1 e in
-    Let _ := if subtype ty (type_of_val v) then ok tt else type_error in
-    write_lval gd x v s1) = ok s2 ->
+Local Lemma Hasgn s1 s2 x tag ty e v :
+  sem_pexpr gd s1 e = ok v ->
+  check_ty_val ty v ->
+  write_lval gd x v s1 = ok s2 ->
   Pi_r s1 (Cassgn x tag ty e) s2.
 Proof.
-  move=> Hs2 vm1 Hvm1;apply:rbindP Hs2 => z /(sem_pexpr_uincl Hvm1) [] z' [] Hz' Hz.
-  case: ifP => //= hty.
-  move=> /(write_uincl Hvm1 Hz) [vm2 []] Hw ?;exists vm2;split=> //.
-  by constructor;rewrite Hz' /= Hw (subtype_trans hty (value_uincl_subtype Hz)).
+  move=> hsem hty hwr vm1 Hvm1.
+  have [v' [hsem' hle]]:= sem_pexpr_uincl Hvm1 hsem.
+  have  [vm2 [Hw ?]]:= write_uincl Hvm1 hle hwr;exists vm2;split=> //.
+  (econstructor;first exact hsem') => //.
+  apply: (subtype_trans hty (value_uincl_subtype hle)).
 Qed.
 
 Local Lemma Hopn s1 s2 t o xs es:
@@ -1806,66 +1807,59 @@ Proof.
 Qed.
 
 Local Lemma Hif_true s1 s2 e c1 c2 :
-  Let x := sem_pexpr gd s1 e in to_bool x = ok true ->
+  sem_pexpr gd s1 e = ok (Vbool true) ->
   sem p gd s1 c1 s2 -> Pc s1 c1 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 Proof.
-  move=> H _ Hc vm1 Hvm1;apply: rbindP H => v.
-  move=> /(sem_pexpr_uincl Hvm1) [] v' [] H1 H2.
-  move=> /(value_uincl_bool H2) [] ??;subst.
+  move=> H _ Hc vm1 Hvm1.
+  have [v' [H1 /value_uincl_bool1 ?]]:= sem_pexpr_uincl Hvm1 H;subst v'.
   have [vm2 [??]]:= Hc _ Hvm1;exists vm2;split=>//.
   by apply Eif_true;rewrite // H1.
 Qed.
 
 Local Lemma Hif_false s1 s2 e c1 c2 :
-  Let x := sem_pexpr gd s1 e in to_bool x = ok false ->
+  sem_pexpr gd s1 e = ok (Vbool false) ->
   sem p gd s1 c2 s2 -> Pc s1 c2 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 Proof.
-  move=> H _ Hc vm1 Hvm1;apply: rbindP H => v.
-  move=> /(sem_pexpr_uincl Hvm1) [] v' [] H1 H2.
-  move=> /(value_uincl_bool H2) [] ??;subst.
+  move=> H _ Hc vm1 Hvm1.
+  have [v' [H1 /value_uincl_bool1 ?]]:= sem_pexpr_uincl Hvm1 H;subst v'.
   have [vm2 [??]]:= Hc _ Hvm1;exists vm2;split=>//.
   by apply Eif_false;rewrite // H1.
 Qed.
 
 Local Lemma Hwhile_true s1 s2 s3 s4 c e c' :
   sem p gd s1 c s2 -> Pc s1 c s2 ->
-  Let x := sem_pexpr gd s2 e in to_bool x = ok true ->
+  sem_pexpr gd s2 e = ok (Vbool true) ->
   sem p gd s2 c' s3 -> Pc s2 c' s3 ->
   sem_i p gd s3 (Cwhile c e c') s4 -> Pi_r s3 (Cwhile c e c') s4 -> Pi_r s1 (Cwhile c e c') s4.
 Proof.
-  move=> _ Hc H _ Hc' _ Hw vm1 Hvm1;apply: rbindP H => v.
+  move=> _ Hc H _ Hc' _ Hw vm1 Hvm1. 
   have [vm2 [Hs2 Hvm2]] := Hc _ Hvm1.
-  move=> /(sem_pexpr_uincl Hvm2) [] v' [] H1 H2.
-  move=> /(value_uincl_bool H2) [] ??;subst.
+  have [v' [H1 /value_uincl_bool1 ?]]:= sem_pexpr_uincl Hvm2 H;subst.
   have [vm3 [H4 /Hw [vm4] [??]]]:= Hc' _ Hvm2;exists vm4;split => //.
   by eapply Ewhile_true;eauto;rewrite H1.
 Qed.
 
 Local Lemma Hwhile_false s1 s2 c e c' :
   sem p gd s1 c s2 -> Pc s1 c s2 ->
-  Let x := sem_pexpr gd s2 e in to_bool x = ok false ->
+  sem_pexpr gd s2 e = ok (Vbool false) ->
   Pi_r s1 (Cwhile c e c') s2.
 Proof.
-  move=> _ Hc H vm1 Hvm1; apply: rbindP H => v.
+  move=> _ Hc H vm1 Hvm1.
   have [vm2 [Hs2 Hvm2]] := Hc _ Hvm1.
-  move=> /(sem_pexpr_uincl Hvm2) [] v' [] H1 H2.
-  move=> /(value_uincl_bool H2) [] ??;subst.
+  have [v' [H1 /value_uincl_bool1 ?]]:= sem_pexpr_uincl Hvm2 H;subst.
   by exists vm2;split=> //;apply: Ewhile_false=> //;rewrite H1.
 Qed.
 
 Local Lemma Hfor s1 s2 (i : var_i) d lo hi c (vlo vhi : Z) :
-  Let x := sem_pexpr gd s1 lo in to_int x = ok vlo ->
-  Let x := sem_pexpr gd s1 hi in to_int x = ok vhi ->
+  sem_pexpr gd s1 lo = ok (Vint vlo) ->
+  sem_pexpr gd s1 hi = ok (Vint vhi) ->
   sem_for p gd i (wrange d vlo vhi) s1 c s2 ->
   Pfor i (wrange d vlo vhi) s1 c s2 ->
   Pi_r s1 (Cfor i (d, lo, hi) c) s2.
 Proof.
-  move=> H H' _ Hfor vm1 Hvm1;apply: rbindP H => ?.
-  move=> /(sem_pexpr_uincl Hvm1) [] ? [] H1 H2.
-  move=> /(value_uincl_int H2) [] ??;subst.
-  apply: rbindP H' => ?.
-  move=> /(sem_pexpr_uincl Hvm1) [] ? [] H3 H4.
-  move=> /(value_uincl_int H4) [] ??;subst.
+  move=> H H' _ Hfor vm1 Hvm1. 
+  have [? [H1 /value_uincl_int1 ?]]:= sem_pexpr_uincl Hvm1 H;subst.
+  have [? [H3 /value_uincl_int1 ?]]:= sem_pexpr_uincl Hvm1 H';subst.
   have [vm2 []??]:= Hfor _ Hvm1; exists vm2;split=>//.
   by econstructor;eauto;rewrite ?H1 ?H3.
 Qed.
@@ -1906,14 +1900,20 @@ Proof.
   by apply: subtype_trans.
 Qed.
 
+Lemma all2_check_ty_val v1 x v2 : 
+  all2 check_ty_val x v1 → List.Forall2 value_uincl v1 v2 → all2 check_ty_val x v2.
+Proof.
+  move=> /all2P H1 H2;apply /all2P;apply: Forall2_trans H1 H2;apply check_ty_val_uincl.
+Qed.
+   
 Local Lemma Hproc m1 m2 fn fd vargs s1 vm2 vres:
   get_fundef p fn = Some fd ->
-  List.Forall2 check_ty_val fd.(f_tyin) vargs ->
+  all2 check_ty_val fd.(f_tyin) vargs ->
   write_vars (f_params fd) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
   sem p gd s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
   Pc s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
   mapM (fun x : var_i => get_var vm2 x) (f_res fd) = ok vres ->
-  List.Forall2 check_ty_val fd.(f_tyout) vres ->
+  all2 check_ty_val fd.(f_tyout) vres ->
   Pfun m1 fn vargs m2 vres.
 Proof.
   move=> Hget Hca Hargs Hsem Hrec Hmap Hcr vargs' Uargs.
@@ -1922,8 +1922,8 @@ Proof.
   have [vs2 [Hvs2 Hsub]] := get_vars_uincl Uvm2 Hmap.
   exists vs2;split=>//.
   econstructor;eauto.
-  apply: (Forall2_trans check_ty_val_uincl) Hca Uargs.
-  apply: (Forall2_trans check_ty_val_uincl) Hcr Hsub.
+  apply: all2_check_ty_val Hca Uargs.
+  apply: all2_check_ty_val Hcr Hsub.
 Qed.
 
 Lemma sem_call_uincl vargs m1 f m2 vres vargs':

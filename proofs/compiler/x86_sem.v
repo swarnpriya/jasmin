@@ -305,15 +305,6 @@ Context (gd: glob_defs).
 
 (* -------------------------------------------------------------------- *)
 
-Definition mask_word (sz:wsize) : u64 := 
-  match sz with
-  | U8 | U16 => wshl (wrepr _ (-1)) (wsize_bits sz)
-  | _ => 0%R
-  end.
-
-Definition merge_word (wr: u64) (sz:wsize) (w:word sz) := 
-   wxor (wand (mask_word sz) wr) (zero_extend U64 w).
-
 Definition word_extend_reg (r: register) sz (w: word sz) (m: x86_mem) := 
   merge_word (m.(xreg) r) w.
     
