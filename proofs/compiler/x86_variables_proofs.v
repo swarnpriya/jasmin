@@ -1,8 +1,7 @@
 From mathcomp Require Import all_ssreflect all_algebra.
 Require Import x86_variables.
 Import Utf8.
-Import all_ssreflect.
-Import compiler_util sem x86_sem.
+Import compiler_util psem x86_sem.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -164,15 +163,15 @@ move=> eqv; case: e => //.
       case: ifP => //; rewrite -!andbA => /and4P[].
       do 4! move/eqP=> ?; subst rx ry rz rt => -[<-].
       move=> vNx vx ok_vx ok_vNx res vby vy ok_vy ok_vby.
-      move=> vz ok_vz vNt vt ok_vt ok_vNt vbz ok_vbz vbNz ok_vbNz.
-      move=> /esym resE ok_v.
+      move=> vz ok_vz vNt vt ok_vt ok_vNt.
+      case: eqP => // hty [<-] {res} ok_v.
       have [vbx ok_vbx ?] := ok_sem_op1_b ok_vNx; subst vNx.
       have [vbt ok_vbt ?] := ok_sem_op1_b ok_vNt; subst vNt.
       have := xgetflag eqv ok_rx ok_vx ok_vbx => ZFE.
       have := xgetflag eqv ok_ry ok_vy ok_vby => SFE.
       have := xgetflag eqv ok_rt ok_vt ok_vbt => OFE.
       rewrite /= ZFE SFE OFE /=; move: ok_v.
-      rewrite /sem_op2_b /mk_sem_sop2 /= resE.
+      rewrite /sem_op2_b /mk_sem_sop2 /=.
       t_xrbindP=> vres; case: (boolP vby) => hvby //=; last first.
       + by case=> <- <-; rewrite [false == _]eq_sym /= eqbF_neg; eexists.
       have := inj_rflag_of_var ok_rz ok_rt => eq_zt.
@@ -191,15 +190,15 @@ move=> eqv; case: e => //.
       t_xrbindP=> rx ok_rx ry ok_ry rz ok_rz rt ok_rt.
       case: ifP=> //; rewrite -!andbA => /and4P[].
       do 4! move/eqP=> ?; subst rx ry rz rt => -[<-].
-      move=> vx ok_vx res vby vy ok_vy ok_vby vNz vz ok_vz ok_vNz.
-      move=> vt ok_vt vbNz ok_vbNz vbt ok_vbt /esym resE ok_v.
+      move=> vx ok_vx res vby vy ok_vy ok_vby vNz vz ok_vz ok_vNz vt ok_vt.
+      case: eqP => // hty [<-] {res} ok_v.
       have [[vbx vbres]] := ok_sem_op2_b ok_v.
       rewrite /fst /snd => -[ok_vbx ok_vbres] ?; subst v.
       have [vbz ok_vbz ?] := ok_sem_op1_b ok_vNz; subst vNz.
       have := xgetflag eqv ok_rx ok_vx ok_vbx => ZFE.
       have := xgetflag eqv ok_ry ok_vy ok_vby => SFE.
       have := xgetflag eqv ok_rz ok_vz ok_vbz => OFE.
-      rewrite /= ZFE SFE OFE /=; move: ok_vbres; rewrite resE.
+      rewrite /= ZFE SFE OFE /=; move: ok_vbres.
       case: (boolP vby) => hvby /= => [[<-]|].
       + by rewrite eq_sym eqb_id; eexists.
       have := inj_rflag_of_var ok_rz ok_rt => eq_zt.
@@ -213,23 +212,23 @@ move=> eqv; case: e => //.
     do 3! move/eqP=> ?; subst rx ry rz.
     have eq_xy: v_var y = v_var z.
     - by apply/(inj_rflag_of_var ok_ry ok_rz).
-    case=> <- vbx vx ok_vx ok_vbx vy ok_vy.
-    move=> rvz vz ok_vz ok_rvz vby ok_vby rbz ok_rbz ok_v.
+    case=> <- vbx vx ok_vx ok_vbx vy ok_vy rvz vz ok_vz ok_rvz.
+    case: eqP => // hty [<-] {v}.
     have /ok_sem_op1_b[vbz ok_vbz ?] := ok_rvz; subst rvz.
     have := xgetflag eqv ok_rx ok_vx ok_vbx => SFE.
     have := xgetflag eqv ok_rz ok_vz ok_vbz => OFE.
     rewrite /= SFE OFE /=; have := inj_rflag_of_var ok_ry ok_rz.
     move=> eq_yz; have {eq_yz} ?: vy = vz; [have := ok_vy|subst vy].
     - by rewrite eq_yz ok_vz => -[].
-    eexists; split; first by eauto. rewrite -ok_v.
-    case: vz {ok_vy ok_rvz rbz ok_rbz ok_v vby ok_vby ok_vz} ok_vbz => //; last by case.
+    eexists; split; first by eauto.
+    case: vz {ok_vy ok_rvz ok_vz hty} ok_vbz => //; last by case.
     move => b [->] {b}.
     by case: vbx {SFE} ok_vbx.
   * case=> // z /=; t_xrbindP => vx ok_x vy ok_y vz ok_z.
     case: ifPn => //; rewrite -!andbA => /and3P[].
     do 3! move/eqP=> ?; subst vx vy vz; case=> <-.
-    move=> vbx vx ok_vx ok_vbx vNy vy ok_vy ok_vNy.
-    move=> vz ok_vz vbNy ok_vbNy vbNz ok_vbNz ok_v.
+    move=> vbx vx ok_vx ok_vbx vNy vy ok_vy ok_vNy vz ok_vz.
+    case: eqP => // hty [<-] {v}.
     have /ok_sem_op1_b[vby ok_vby ?] := ok_vNy; subst vNy.
     have := xgetflag eqv ok_x ok_vx ok_vbx => SFE.
     have := xgetflag eqv ok_y ok_vy ok_vby => OFE.
@@ -237,10 +236,7 @@ move=> eqv; case: e => //.
     case: z {ok_z} => /= z _ -> {z}.
     rewrite ok_vy => -[] ?; subst vz.
     rewrite /= SFE {SFE} /= OFE {OFE} /=; eexists; split; first by eauto.
-    rewrite -ok_v {ok_v}.
-    case: ok_vbNy => ?; subst vbNy.
-    move: ok_vbNz; rewrite /= ok_vby => -[] ?; subst vbNz.
-    case: vy {ok_vy} ok_vNy ok_vby => //; last by case.
+    case: vy {ok_vy hty} ok_vNy ok_vby => //; last by case.
     move => b [<-] [->] {b}.
     case: vbx {ok_vbx} => //.
     by case: vby.
