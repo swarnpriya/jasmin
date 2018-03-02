@@ -57,18 +57,24 @@ Definition psem_t (t : stype) : Type :=
 
 Definition pword_of_word (s:wsize) (w:word s) : pword s :=
   {|pw_word := w; pw_proof := cmp_le_refl s|}.
-  
-Definition to_pword (s: wsize) (v: value) : exec (pword s).
-  refine 
-   (match v with
-   | Vword s' w => _
+
+Definition to_pword (s: wsize) (v: value) : exec (pword s) :=
+   match v with
+   | Vword s' w =>
+     if Sumbool.sumbool_of_bool (s' ≤ s)%CMP is left heq
+     then ok {| pw_word := w ; pw_proof := heq |}
+     else truncate_word s w >>= λ w, ok (pword_of_word w)
    | Vundef (sword _) => undef_error
    | _                => type_error
-   end).
-  case (s' <= s)%CMP eqn:heq.
-  + exact (ok {| pw_word := w; pw_proof := heq |}).
-  exact (truncate_word s w >>= fun w => ok (pword_of_word w)).      
-Defined.
+   end.
+
+Lemma sumbool_of_boolET (b: bool) (h: b) :
+  Sumbool.sumbool_of_bool b = left h.
+Proof. by move: h; rewrite /is_true => ?; subst. Qed.
+
+Lemma sumbool_of_boolEF (b: bool) (h: b = false) :
+  Sumbool.sumbool_of_bool b = right h.
+Proof. by move: h; rewrite /is_true => ?; subst. Qed.
 
 Definition pof_val t : value -> exec (psem_t t) :=
   match t return value -> exec (psem_t t) with
@@ -1147,11 +1153,10 @@ Proof.
     case: CEDecStype.pos_dec => //= Heq;subst=> /= -[] <-;exists a'.
     by split => //;apply val_uincl_array.
   move=> /andP []hsz /eqP ->;rewrite /pof_val /pval_uincl /=.
-  case: t z => //= s z. 
-  move: (erefl (sz <=s)%CMP); pattern (sz <=s)%CMP at 2 3; case (sz <=s)%CMP => /=.
+  case: t z => //= s z.
+  case: (Sumbool.sumbool_of_bool (sz ≤ s)%CMP).
   + move=> e [<-].
-    move: (erefl (sz' <=s)%CMP).
-    pattern (sz' <=s)%CMP at 2 3; case (sz' <=s)%CMP => /=.
+    case: (Sumbool.sumbool_of_bool (sz' ≤ s)%CMP).
     + move=> ?; eexists;split;first reflexivity => /=.
       by rewrite /word_uincl /= hsz eqxx.
     move=> /negbT hle;rewrite /truncate_word (cmp_le_antisym hle) /=;eexists;split;first reflexivity.
@@ -1160,8 +1165,7 @@ Proof.
   have hnle: (sz' <= s)%CMP = false.
   + apply negbTE;rewrite cmp_nle_lt.
     by apply: cmp_lt_le_trans hsz;rewrite -cmp_nle_lt.
-  move:(erefl (sz' <=s)%CMP);rewrite {2 3}hnle.
-  rewrite (cmp_le_trans hle hsz) /= => _.
+  rewrite (sumbool_of_boolEF hnle) (cmp_le_trans hle hsz) /=.
   by eexists;split;first reflexivity.
 Qed.
 
@@ -1454,8 +1458,8 @@ case: t v => [||sz p|sz] [] //=.
 + move => sz' n a; case: wsize_eq_dec => // ?; subst.
   by case: CEDecStype.pos_dec.
 + by case => // ??;case:ifP => // /andP [] /eqP <- /eqP <-;eauto.
-+ move=> s w;move: (erefl (s <= sz)%CMP).
-  pattern (s <=sz)%CMP at 2 3; case (s <= sz)%CMP => //=.
++ move=> s w.
+  case: Sumbool.sumbool_of_bool => //=.
   by rewrite /truncate_word;case:ifP.
 case => // s _;eexists;split;last reflexivity.
 by apply wsize_le_U8.
@@ -1470,8 +1474,7 @@ Proof.
   + by case: tv => //=;eauto.
   + by move=> [] ??;subst s2 p2;rewrite eq_dec_refl pos_dec_n_n /=;eauto.
   + by case: tv => //= s2 p2 [] ??;subst;rewrite !eqxx /=;eauto.
-  + move=> _; move: (erefl (s2 <= s1)%CMP).
-    pattern (s2 <=s1)%CMP at 2 3 7; case (s2 <=s1)%CMP => [e | /negbT];first by eauto.
+  + move => _; case: Sumbool.sumbool_of_bool => [ e | /negbT ]; first by eauto.
     by rewrite /truncate_word => h; rewrite (cmp_le_antisym h) /=;eauto.
   by case: tv => //= s2 _;eauto.
 Qed.
@@ -1487,13 +1490,13 @@ Proof.
     by move=> /=;split=>//;exists erefl.
   case: t2 => //= s2 hle;case: v => //=;last by case.
   move=> s' w.
-  move: (erefl (s' <= s1)%CMP);pattern (s' <= s1)%CMP at 2 3;case (s' <= s1)%CMP => e.
-  + move: (erefl (s' <= s2)%CMP);pattern (s' <= s2)%CMP at 2 3;case (s' <= s2)%CMP => e'.
+  case: Sumbool.sumbool_of_bool => e.
+  + case: Sumbool.sumbool_of_bool => e'.
     + move=> [<-];eauto.
     by rewrite (cmp_le_trans e hle) in e'.
   move: e => /negbT ;rewrite cmp_nle_lt => e.
   t_xrbindP => w' /truncate_wordP [hle1 ?] ?;subst w' v1.
-  move: (erefl (s' <= s2)%CMP);pattern (s' <= s2)%CMP at 2 3;case (s' <= s2)%CMP => e'.
+  case: Sumbool.sumbool_of_bool => e'.
   + eexists;split;first reflexivity.
     by rewrite /pword_of_word /= /word_uincl hle1 eqxx.
   move: e' => /negbT ;rewrite cmp_nle_lt => e'.
@@ -1506,8 +1509,7 @@ Lemma pof_val_pto_val t (v:psem_t t): pof_val t (pto_val v) = ok v.
 Proof. 
   case: t v => [b | z | s n a | s w] //=.
   + by rewrite eq_dec_refl pos_dec_n_n.
-  move: (erefl (pw_size w <= s)%CMP);pattern (pw_size w <= s)%CMP at 2 3;
-   case (pw_size w <= s)%CMP => e.
+  case: Sumbool.sumbool_of_bool => e.
   f_equal;case: w e => /= ????;f_equal; apply eq_irrelevance.
   by have := pw_proof w;rewrite e. 
 Qed.
@@ -1522,9 +1524,9 @@ Proof.
   + by move=> h1 h2;have [? [<-]]:= value_uincl_int h2 h1.
   + by move=> /to_arr_ok ->.
   case: v1 => //= [ s' w| [] //].
-  move: (erefl (s' <= s)%CMP);pattern (s' <= s)%CMP at 2 3;case (s' <= s)%CMP => e.
+  case: Sumbool.sumbool_of_bool => [ e | /negbT ].
   + by move=> [<-].
-  move: e => /negbT;rewrite cmp_nle_lt /truncate_word => hlt.
+  rewrite cmp_nle_lt /truncate_word => hlt.
   have hle := cmp_lt_le hlt.
   by rewrite hle /= => -[<-] /=; apply word_uincl_trans;rewrite /word_uincl hle eqxx.
 Qed.
@@ -2055,7 +2057,7 @@ Lemma to_word_to_pword s v w: to_word s v = ok w -> to_pword s v = ok (pword_of_
 Proof.
   case: v => //= [ s' w'| []//?];last by case: ifP.
   move=> /truncate_wordP [hle] ?;subst w.
-  move: (erefl (s' <=s)%CMP); pattern (s' <=s)%CMP at 2 3; case (s' <=s)%CMP => /=.
+  case: Sumbool.sumbool_of_bool => /=.
   + move=> e;move: (e);rewrite cmp_le_eq_lt in e => e'.
     case /orP: e => [hlt | /eqP ?];first by rewrite -cmp_nlt_le hlt in hle.
     by subst; rewrite /pword_of_word zero_extend_u;do 2 f_equal;apply eq_irrelevance.
