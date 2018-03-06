@@ -252,10 +252,10 @@ with sem_I : estate -> instr -> estate -> Prop :=
     sem_I s1 (MkI ii i) s2
 
 with sem_i : estate -> instr_r -> estate -> Prop :=
-| Eassgn s1 s2 (x:lval) tag ty e v:
+| Eassgn s1 s2 (x:lval) tag ty e v v' :
     sem_pexpr gd s1 e = ok v ->
-    check_ty_val ty v ->
-    write_lval gd x v s1 = ok s2 ->
+    truncate_val ty v = ok v' →
+    write_lval gd x v' s1 = ok s2 ->
     sem_i s1 (Cassgn x tag ty e) s2
 
 | Eopn s1 s2 t o xs es:
@@ -342,10 +342,10 @@ Section SEM_IND.
   Hypothesis HmkI : forall (ii : instr_info) (i : instr_r) (s1 s2 : estate),
     sem_i s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 
-  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v,
+  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v v',
     sem_pexpr gd s1 e = ok v ->
-    check_ty_val ty v ->
-    write_lval gd x v s1 = ok s2 ->
+    truncate_val ty v = ok v' →
+    write_lval gd x v' s1 = ok s2 ->
     Pi_r s1 (Cassgn x tag ty e) s2.
 
   Hypothesis Hopn : forall (s1 s2 : estate) t (o : sopn) (xs : lvals) (es : pexprs),
@@ -416,7 +416,7 @@ Section SEM_IND.
   with sem_i_Ind (e : estate) (i : instr_r) (e0 : estate) (s : sem_i e i e0) {struct s} :
     Pi_r e i e0 :=
     match s in (sem_i e1 i0 e2) return (Pi_r e1 i0 e2) with
-    | @Eassgn s1 s2 x tag ty e1 v h1 h2 h3 => @Hasgn s1 s2 x tag ty e1 v h1 h2 h3
+    | @Eassgn s1 s2 x tag ty e1 v v' h1 h2 h3 => @Hasgn s1 s2 x tag ty e1 v v' h1 h2 h3
     | @Eopn s1 s2 t o xs es e1 => @Hopn s1 s2 t o xs es e1
     | @Eif_true s1 s2 e1 c1 c2 e2 s0 =>
       @Hif_true s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c1 s2 s0)
@@ -812,7 +812,7 @@ Proof.
                   (fun _ _ _ _ _ => True)) => {c s1 s2} //.
   + move=> s1 s2 s3 i c _ Hi _ Hc z;rewrite write_c_cons => Hnin.
     by rewrite Hi ?Hc //;SvD.fsetdec.
-  + move=> s1 s2 x tag ty e v ? hty Hw z.
+  + move=> s1 s2 x tag ty e v v' ? hty Hw z.
     by rewrite write_i_assgn;apply (vrvP Hw).
   + move=> s1 s2 t o xs es; rewrite /sem_sopn.
     case: (Let _ := sem_pexprs _ _ _ in _) => //= vs Hw z.
@@ -1070,6 +1070,35 @@ Lemma of_val_Vword t s1 (w1:word s1) w2 : of_val t (Vword w1) = ok w2 ->
 Proof.
   case: t w2 => //= s2 w2 /truncate_wordP [] hle ->.
   by exists s2, erefl.
+Qed.
+
+Lemma truncate_value_uincl ty x y x' :
+  value_uincl x y →
+  truncate_val ty x = ok x' →
+  ∃ y', truncate_val ty y = ok y' ∧ value_uincl x' y'.
+Proof.
+case: ty x y => //.
+- by case => // [ b | [] ] // [] //= ? <- [<-]; exists (Vbool b).
+- by case => // [ z | [] ] // [] //= ? <- [<-]; exists (Vint z).
+- move => sz n; case => // [ sz' n' t' | [] // sz' n' ] [] //=.
+  + move => sz'' n'' t [?] [?]; subst => h /=.
+    rewrite /truncate_val /=.
+    case: wsize_eq_dec => // ?; subst.
+    case: (CEDecStype.pos_dec _ _) => // ?; subst => - [<-] /=.
+    eexists; split; first reflexivity.
+    by split => //; exists erefl.
+  + move => sz'' n'' a [? ?]; subst.
+    by rewrite /truncate_val /=; case: ifP.
+  case => //= sz'' n'' [? ?]; subst.
+  by rewrite /truncate_val /=; case: ifP.
+(move => sz; case => // [ sz' w | [] // sz' ];
+case) => // [ sz'' w' | sz'' w' | [] // sz'' ] /=.
++ case/andP => hsz' /eqP -> {w}; rewrite /truncate_val /= /truncate_word.
+  case: ifP => // hsz [<-].
+  rewrite (cmp_le_trans hsz hsz') /=; eexists; split; first reflexivity.
+  by rewrite/= zero_extend_idem.
++ by rewrite /truncate_val /=; case: ifP.
+by rewrite /truncate_val /=; case: ifP.
 Qed.
 
 Definition val_uincl (t1 t2:stype) (v1:sem_t t1) (v2:sem_t t2) :=
@@ -1781,17 +1810,17 @@ Qed.
 Local Lemma HmkI ii i s1 s2 : sem_i p gd s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 Proof. by move=> _ Hi vm1 /Hi [vm2 []] Hsi ?;exists vm2. Qed.
 
-Local Lemma Hasgn s1 s2 x tag ty e v :
+Local Lemma Hasgn s1 s2 x tag ty e v v' :
   sem_pexpr gd s1 e = ok v ->
-  check_ty_val ty v ->
-  write_lval gd x v s1 = ok s2 ->
+  truncate_val ty v = ok v' →
+  write_lval gd x v' s1 = ok s2 ->
   Pi_r s1 (Cassgn x tag ty e) s2.
 Proof.
   move=> hsem hty hwr vm1 Hvm1.
-  have [v' [hsem' hle]]:= sem_pexpr_uincl Hvm1 hsem.
-  have  [vm2 [Hw ?]]:= write_uincl Hvm1 hle hwr;exists vm2;split=> //.
-  (econstructor;first exact hsem') => //.
-  apply: (subtype_trans hty (value_uincl_subtype hle)).
+  have [w [hsem' hle]]:= sem_pexpr_uincl Hvm1 hsem.
+  have [w'' [hty' hle']] := truncate_value_uincl hle hty.
+  have  [vm2 [Hw ?]]:= write_uincl Hvm1 hle' hwr;exists vm2;split=> //.
+  by econstructor;first exact hsem'; eauto.
 Qed.
 
 Local Lemma Hopn s1 s2 t o xs es:

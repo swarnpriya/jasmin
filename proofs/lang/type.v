@@ -28,6 +28,7 @@
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
 Require Import ZArith gen_map utils.
+Import Utf8.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -296,11 +297,22 @@ Definition is_sword t :=
   end.
 
 (* -------------------------------------------------------------------- *)
-Definition subtype t t' :=
-  match t, t' with
-  | sword w , sword w' => (w <= w')%CMP
-  | _ , _ => t == t'
+Definition subtype (t t': stype) :=
+  match t with
+  | sword w => if t' is sword w' then (w ≤ w')%CMP else false
+  | _ => t == t'
   end.
+
+Lemma subtypeE ty ty' :
+  subtype ty ty' →
+  match ty' with
+  | sword sz => ∃ sz', ty = sword sz' ∧ (sz' ≤ sz)%CMP
+  | _ => ty = ty'
+end.
+Proof.
+  destruct ty; try by move/eqP => <-.
+  case: ty' => //; eauto.
+Qed.
 
 Lemma subtype_refl x : subtype x x.
 Proof. by case: x => /=. Qed.

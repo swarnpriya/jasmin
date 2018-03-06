@@ -187,9 +187,6 @@ Definition type_of_val (v:value) : stype :=
   | Vundef t    => vundef_type t
   end.
 
-Definition check_ty_val (ty:stype) (v:value) := 
-  subtype ty (type_of_val v).
-
 Definition of_val t : value -> exec (sem_t t) :=
   match t return value -> exec (sem_t t) with
   | sbool    => to_bool
@@ -206,8 +203,14 @@ Definition to_val t : sem_t t -> value :=
   | sword s  => @Vword s
   end.
 
+Definition truncate_val (ty: stype) (v: value) : exec value :=
+  of_val ty v >>= λ x, ok (to_val x).
+
 Lemma type_of_to_val t (s: sem_t t) : type_of_val (to_val s) = t.
 Proof. by case: t s. Qed.
+
+Definition check_ty_val (ty:stype) (v:value) :=
+  subtype ty (type_of_val v).
 
 (* ** Variable map
  * -------------------------------------------------------------------- *)
@@ -887,10 +890,10 @@ with sem_I : estate -> instr -> estate -> Prop :=
     sem_I s1 (MkI ii i) s2
 
 with sem_i : estate -> instr_r -> estate -> Prop :=
-| Eassgn s1 s2 (x:lval) tag ty e v:
+| Eassgn s1 s2 (x:lval) tag ty e v v':
     sem_pexpr gd s1 e = ok v ->
-    check_ty_val ty v ->
-    write_lval gd x v s1 = ok s2 ->
+    truncate_val ty v = ok v' →
+    write_lval gd x v' s1 = ok s2 ->
     sem_i s1 (Cassgn x tag ty e) s2
 
 | Eopn s1 s2 t o xs es:
@@ -977,10 +980,10 @@ Section SEM_IND.
   Hypothesis HmkI : forall (ii : instr_info) (i : instr_r) (s1 s2 : estate),
     sem_i s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 
-  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v,
+  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v v',
     sem_pexpr gd s1 e = ok v ->
-    check_ty_val ty v ->
-    write_lval gd x v s1 = Ok error s2 ->
+    truncate_val ty v = ok v' →
+    write_lval gd x v' s1 = Ok error s2 ->
     Pi_r s1 (Cassgn x tag ty e) s2.
 
   Hypothesis Hopn : forall (s1 s2 : estate) t (o : sopn) (xs : lvals) (es : pexprs),
@@ -1051,7 +1054,7 @@ Section SEM_IND.
   with sem_i_Ind (e : estate) (i : instr_r) (e0 : estate) (s : sem_i e i e0) {struct s} :
     Pi_r e i e0 :=
     match s in (sem_i e1 i0 e2) return (Pi_r e1 i0 e2) with
-    | @Eassgn s1 s2 x tag ty e1 v h1 h2 h3 => @Hasgn s1 s2 x tag ty e1 v h1 h2 h3
+    | @Eassgn s1 s2 x tag ty e1 v v' h1 h2 h3 => @Hasgn s1 s2 x tag ty e1 v v' h1 h2 h3
     | @Eopn s1 s2 t o xs es e1 => @Hopn s1 s2 t o xs es e1
     | @Eif_true s1 s2 e1 c1 c2 e2 s0 =>
       @Hif_true s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c1 s2 s0)
