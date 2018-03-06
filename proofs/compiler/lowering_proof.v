@@ -396,6 +396,7 @@ Section PROOF.
   by case: o => // -[] // => [ | | [] | [] | [] | [] ] sz [] _ <- <-.
   Qed.
 
+  (*
   Lemma weq_sub z1 z2: weq z1 z2 = I64.eq (I64.sub z1 z2) I64.zero.
   Proof.
   case: z1 z2 => [z1 h1] [z2 h2]; rewrite /weq /I64.eq /I64.sub /=.
@@ -510,6 +511,7 @@ Ltac elim_div :=
   Proof.
   by rewrite -weq_sub -wslt_sub /wsle /wslt weq_signed Z_leb_eqVlt.
   Qed.
+*)
 
   Lemma setP_comm {to} (m: Fv.t to) x1 v1 x2 v2:
     x1 != x2 ->
@@ -532,6 +534,35 @@ Ltac elim_div :=
       rewrite eq_sym in Heq1; rewrite eq_sym in Heq2.
       by rewrite !Fv.setP_neq.
   Qed.
+
+  Lemma wsub_signed_overflow sz (α β: word sz) :
+    (wunsigned (α - β) != (wunsigned α - wunsigned β)%Z) =
+    (msb (α - β) != (wsigned (α - β) != (wsigned α - wsigned β)%Z)).
+  Proof.
+  Admitted.
+
+  Lemma wunsigned0 sz : @wunsigned sz 0%R = 0%Z.
+  Admitted.
+
+  Lemma wsigned0 sz : @wsigned sz 0%R = 0%Z.
+  Admitted.
+
+  Lemma msb0 sz : @msb sz 0%R = false.
+  Admitted.
+
+  Lemma wles_msb sz (α β: word sz) :
+  α ≠ β
+  → (msb (β - α) == (wsigned (β - α) != (wsigned β - wsigned α)%Z)) =
+    (msb (α - β) != (wsigned (α - β) != (wsigned α - wsigned β)%Z)).
+  Proof.
+  Admitted.
+
+  Lemma wlts_msb sz (α β: word sz) :
+  α ≠ β
+  → (wunsigned (β - α) != (wunsigned β - wunsigned α)%Z) =
+    (msb (α - β) == (wsigned (α - β) != (wsigned α - wsigned β)%Z)).
+  Proof.
+  Admitted.
 
   Lemma lower_cond_classifyP ii e cond s1':
     sem_pexpr gd s1' e = ok cond ->
@@ -631,8 +662,7 @@ Ltac elim_div :=
       set vsf := SF_of_word (zero_extend sz z1 - zero_extend sz z2).
       exists vsf, vof, fv.(fresh_SF), fv.(fresh_OF); repeat split=> //=.
       + by rewrite setP_comm.
-      + rewrite -Hz1z2 /vsf /SF_of_word /vof.
-        admit.
+      + by rewrite -Hz1z2 /vsf /SF_of_word /vof wltE wsub_signed_overflow.
     (* Cond2 CondOr *)
     + case: o He => // [] // [] // [] sz' // He []??????; subst.
       case/sem_op2_wb_dec: He => w1 [z1] [w2] [z2] [Hz1z2] [Hw1] [Hw2 ->].
@@ -668,8 +698,10 @@ Ltac elim_div :=
         by apply/eqP=> -[]Habs; have := of_neq_sf; rewrite Habs eq_refl.
       + rewrite eq_sym; exact: sf_neq_zf.
       + rewrite eq_sym; exact: of_neq_zf.
-      + rewrite -Hz1z2 /vzf /ZF_of_word /vsf /SF_of_word /vof.
-        admit.
+      + rewrite -Hz1z2 /vzf /ZF_of_word /vsf /SF_of_word /vof wlesE GRing.subr_eq0; f_equal.
+        case: (zero_extend _ z1 =P _) => /=.
+        * by move => ->; rewrite GRing.subrr Z.sub_diag wsigned0 msb0.
+        exact: wles_msb.
     (* Cond3 CondAndNotEq *)
     + case: o He => // [] // [] // [] sz' // He []???????; subst.
       case/sem_op2_wb_dec: He => w1 [z1] [w2] [z2] [Hz1z2] [Hw1] [Hw2 ->].
@@ -686,9 +718,12 @@ Ltac elim_div :=
         by apply/eqP=> -[]Habs; have := of_neq_sf; rewrite Habs eq_refl.
       + rewrite eq_sym; exact: sf_neq_zf.
       + rewrite eq_sym; exact: of_neq_zf.
-      + rewrite -Hz1z2 /vzf /vsf /vof /ZF_of_word /SF_of_word.
-        admit.
-  Admitted.
+      + rewrite -Hz1z2 /vzf /vsf /vof /ZF_of_word /SF_of_word wltE GRing.subr_eq0; f_equal.
+        set α := zero_extend _ z1; set β := zero_extend _ z2.
+        case: (α =P _) => /=.
+        * by move => ->; rewrite GRing.subrr Z.sub_diag wunsigned0.
+        exact: wlts_msb.
+  Qed.
 
   Lemma lower_condition_corr ii ii' i e e' s1 cond:
     (i, e') = lower_condition fv ii' e ->
@@ -985,7 +1020,7 @@ Qed.
     | LowerLea sz l =>
       sz = Uptr ∧ check_scale (wunsigned (lea_scale l)) ∧
       exists w: word sz,
-      v = Vword w /\ sem_lea (evm s) l = ok (zero_extend Uptr w)
+      v' = Vword w /\ sem_lea (evm s) l = ok (zero_extend Uptr w)
     | LowerAssgn => True
     end.
   Proof.
@@ -1247,15 +1282,11 @@ Qed.
     + exists s'. repeat econstructor. by rewrite /sem_sopn hx /= hr.
   Qed.
 
-  Lemma write_lval_zero_extend lv sz (w: word sz) e e' :
-    write_lval gd lv (Vword w) e = ok e' →
-    write_lval gd lv (Vword (zero_extend (wsize_of_lval lv) w)) e = ok e'.
-  Proof.
-  case: lv => /= [ _ [] // | [[[] // sz' xn] xi] | sz' [x xi] n | [[xt xn] xi] n ];
-    rewrite ?/write_var /= ?zero_extend_u //.
-  apply: on_arr_varP => sz' n' t /= -> {xt}.
-  by rewrite /on_arr_var => -> /= ; rewrite zero_extend_u.
-  Qed.
+  Lemma between_ZR (a b c: ssrZ.Z_numType) :
+    (a <= b < c)%R →
+    (a <= b < c)%Z.
+  Proof using.
+  Admitted.
 
   Local Lemma Hassgn s1 s2 l tag ty e v v' :
     sem_pexpr gd s1 e = ok v →
@@ -1276,7 +1307,7 @@ Qed.
       case: b.
       * set ℓ := {|
                   emem := emem s1';
-                  evm := (evm s1').[{| vtype := sword sz; vname := fresh_multiplicand fv sz |} <- ok vw] |}.
+                  evm := (evm s1').[{| vtype := sword tw; vname := fresh_multiplicand fv tw |} <- ok (pword_of_word (zero_extend tw vw)) ] |}.
         assert (eq_exc_fresh ℓ s1') as dℓ.
         by subst ℓ; apply (conj (erefl _)); apply vmap_eq_except_set, multiplicand_in_fv.
         case: (write_lval_same Hdisjl dℓ Hw') => ℓ' [ hℓ' dℓ' ].
@@ -1302,38 +1333,55 @@ Qed.
       exists s2'; split=> //; apply: sem_seq1; apply: EmkI; apply: Eopn.
       by rewrite /sem_sopn H /= Hw'.
     (* LowerLea *)
-    + move=> [d b sc o] /= [w [? [Hslea Hsc]]];subst v;exists s2';split => //.
-      set ob := oapp Pvar (wconst 0) b; set oo := oapp Pvar (wconst 0) o.
-      have [wb [wo [Hwb Hwo Ew ]]]: exists wb wo, [/\ sem_pexpr gd s1' ob = ok (Vword wb),
-                               sem_pexpr gd s1' oo = ok (Vword wo) & 
-                               w = I64.add d (I64.add wb (I64.mul sc wo))].
-      + apply: rbindP Hslea => /= wb Hwb.
-        apply: rbindP => /= wo Hwo [?];exists wb, wo;split=>//.
-        + rewrite /ob;case: (b) Hwb => /= [x | [<-]] //.
-          by apply:rbindP => ? -> /to_wordP <-.
-        rewrite /oo;case: (o) Hwo => /= [x | [<-]] //.
-        by apply:rbindP => ? -> /to_wordP <-.
-      have Hlea : 
-        (Let x := sem_pexprs gd s1' [:: wconst d; oapp Pvar (wconst 0) b; wconst sc; oapp Pvar (wconst 0) o] in exec_sopn Ox86_LEA x) = ok [::Vword w].
-      + by rewrite /sem_pexprs /= Hwb Hwo /= /x86_lea !I64.repr_unsigned Hsc Ew.
+    + move=> sz [d b sc o] /= [hsz] [Hsc] [w [? Hslea]]; subst v'; exists s2';split => //.
+      set ob := oapp Pvar _ b; set oo := oapp Pvar _ o.
+      have [wb [wo [Hwb Hwo Ew ]]]:
+        exists (wb wo: pointer),
+          [/\ sem_pexpr gd s1' ob >>= to_pointer = ok wb,
+           sem_pexpr gd s1' oo >>= to_pointer = ok wo &
+           w = zero_extend sz (d + (wb + (sc * wo)))%R].
+      + move: Hslea; rewrite /sem_lea /=; t_xrbindP => wb Hwb wo Hwo H.
+        exists wb, wo; split.
+        - subst ob; case: b Hwb => [ b | ] /=; t_xrbindP.
+          * by move => vb -> /of_val_word [sz'] [w'] [h -> ->]; rewrite /= /truncate_word h.
+          by subst sz; move => <-; rewrite /truncate_word /=; f_equal; apply: word_ext.
+        - subst oo; case: o Hwo => [ o | ] /=; t_xrbindP.
+          * by move => vb -> /of_val_word [sz'] [w'] [h -> ->]; rewrite /= /truncate_word h.
+          by subst sz; move => <-; rewrite /truncate_word /=; f_equal; apply: word_ext.
+        subst; rewrite zero_extend_u.
+        move: (_ + _)%R H; clear => - [] /= z hw' hz. subst.
+        case: w hw' => w h h'; apply: word_ext.
+        rewrite /wunsigned /xword.urepr /=; symmetry; apply: Z.mod_small.
+        exact: between_ZR.
+      move: Hwb; apply: rbindP => vb Hvb Hwb.
+      move: Hwo; apply: rbindP => vo Hvo Hwo.
+      have Hlea :
+        sem_pexprs gd s1' [:: wconst d; ob; wconst sc; oo] >>= exec_sopn (Ox86_LEA sz) = ok [::Vword w].
+      + by rewrite /sem_pexprs /= Hvb Hvo /= /truncate_word; subst; rewrite /= -/to_pointer Hwb Hwo /= /x86_lea -/(zero_extend U64 sc) -/(zero_extend U64 d) !zero_extend_u Hsc GRing.addrA.
       have Hlea' : sem p' gd s1'
-                    [:: MkI (warning ii Use_lea) (Copn [:: l] tag Ox86_LEA [:: wconst d; oapp Pvar (wconst 0) b; wconst sc; oapp Pvar (wconst 0) o])] s2'.
-      + by apply: sem_seq1; apply: EmkI; apply: Eopn;rewrite /sem_sopn Hlea /= Hw'.
+                    [:: MkI (warning ii Use_lea) (Copn [:: l] tag (Ox86_LEA sz) [:: wconst d; ob; wconst sc; oo])] s2'.
+      + by apply: sem_seq1; apply: EmkI; apply: Eopn; rewrite /sem_sopn Hlea /= Hw'.
       case use_lea => //;subst w.
       case: eqP => [ ? | _ ].
       + subst d; case: eqP => [ ? | _].
         + subst sc;apply sem_seq1;constructor;constructor.
-          by move: Hw';rewrite /sem_sopn /sem_pexprs /= Hwb Hwo /= !I64_simpl => ->.
+          by move: Hw'; rewrite /sem_sopn /sem_pexprs /= Hvb Hvo /= hsz -/to_pointer Hwb Hwo /= zero_extend_u GRing.add0r GRing.mul1r => ->.
         case: eqP => [ Eob | //].
         apply sem_seq1;constructor;constructor.
-        move: Hwb Hw';rewrite /sem_sopn /sem_pexprs /= Eob Hwo /= => -[?];subst wb.
-        by rewrite !I64_simpl I64.mul_commut !I64.repr_unsigned => ->.
-      case: eqP => [ Eoo | //]. 
+        move: Hvb Hwb Hw';rewrite Eob /sem_sopn /sem_pexprs /= hsz GRing.add0r Hvo /= -/to_pointer Hwo /= -!/(zero_extend Uptr _) !zero_extend_u => -[<-] [<-].
+        by rewrite zero_extend_u GRing.add0r GRing.mulrC => ->.
+      case: eqP => [ Eoo | //].
       case: eqP => [ Ed | _ ].
       + subst d;apply sem_seq1;constructor;constructor.
-        by move: Hwo Hw';rewrite /sem_sopn /sem_pexprs /= Hwb Eoo /= => -[<-];rewrite !I64_simpl I64.add_commut => ->.
+        move: Hvo Hwo Hw'; rewrite Eoo => - [<-].
+        rewrite hsz -!/(zero_extend _ _) !zero_extend_u => - [<-].
+        rewrite zero_extend_u GRing.mulr0 GRing.addr0 GRing.addrC.
+        by rewrite /sem_sopn /sem_pexprs /= Hvb -/to_pointer /= Hwb /= => ->.
       apply sem_seq1;constructor;constructor.
-      by move: Hwo Hw';rewrite /sem_sopn /sem_pexprs /= Hwb Eoo /= => -[<-];rewrite !I64_simpl I64.add_commut !I64.repr_unsigned => ->.
+      move: Hvo Hwo Hw'; rewrite Eoo => - [<-].
+      rewrite hsz -!/(zero_extend _ _) !zero_extend_u => - [<-].
+      rewrite /sem_sopn /sem_pexprs /= Hvb -/to_pointer /= Hwb /=.
+      by rewrite -!/(zero_extend _ _) !zero_extend_u GRing.mulr0 GRing.addr0 GRing.addrC => ->.
     (* LowerFopn *)
     + set vi := var_info_of_lval _.
       move=> o a m [] LE. t_xrbindP => ys xs hxs hys hs2.
@@ -1387,7 +1435,7 @@ Qed.
       * by rewrite Hv'.
       * exact: hty.
       exact: Hw'.
-  Admitted.
+  Qed.
 
   Lemma vars_I_opn ii xs t o es:
     Sv.Equal (vars_I (MkI ii (Copn xs t o es))) (Sv.union (vars_lvals xs) (read_es es)).

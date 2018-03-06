@@ -497,13 +497,21 @@ intuition (try nia).
 suff : p * z1 + z = z2; nia.
 Qed.
 
+Lemma word_ext n x y h h' :
+  x = y →
+  @mkWord n x h = @mkWord n y h'.
+Proof. by move => e; apply/val_eqP/eqP. Qed.
+
+Lemma wunsigned_inj sz : injective (@wunsigned sz).
+Proof. by move => x y /eqP /val_eqP. Qed.
+
 Lemma zero_extend_wrepr sz sz' z :
   (sz <= sz')%CMP →
   zero_extend sz (wrepr sz' z) = wrepr sz z.
 Proof.
 move=> /eqP; rewrite /cmp_le /gcmp wsize_cmpP Nat.compare_ge_iff => hle.
-rewrite /zero_extend /wrepr /wunsigned /urepr.
-apply/val_eqP/eqP => /=.
+apply: word_ext.
+rewrite /wunsigned /urepr /wrepr /=.
 move: hle. set a := wsize_size_minus_1 sz; set b := wsize_size_minus_1 sz' => hle.
 have : ∃ n, modulus b.+1 = modulus n * modulus a.+1.
 - exists (b - a)%nat; rewrite /modulus !two_power_nat_equiv -Z.pow_add_r; try lia.

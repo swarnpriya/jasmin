@@ -355,10 +355,11 @@ Definition is_lea sz x e :=
 Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
   let k sz r := if sz == sz' then r else LowerAssgn in
   match e with
-  | Pcast sz (Pconst _) => LowerMov sz false
+  | Pcast _ (Pconst _) => LowerMov false
   | Pget ({| v_var := {| vtype := sword sz |} |} as v) _
-  | Pvar ({| v_var := {| vtype := sword sz |} |} as v) => LowerMov sz (if is_var_in_memory v then is_lval_in_memory x else false)
-  | Pload sz _ _ => LowerMov sz (is_lval_in_memory x)
+  | Pvar ({| v_var := {| vtype := sword sz |} |} as v) =>
+    LowerMov (if is_var_in_memory v then is_lval_in_memory x else false)
+  | Pload sz _ _ => LowerMov (is_lval_in_memory x)
 
   | Papp1 (Olnot sz) a => k sz (LowerCopn (Ox86_NOT sz) a)
   | Papp1 (Oneg (Op_w sz)) a => k sz (LowerFopn (Ox86_NEG sz) [:: a] 0)
