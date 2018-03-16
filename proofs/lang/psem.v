@@ -614,6 +614,17 @@ case: ty v => [ | | s n | s ] [] //; try by case.
 by case => // sz'; rewrite /truncate_val /=; case: ifP.
 Qed.
 
+Lemma truncate_pto_val ty v v':
+  truncate_val ty (@pto_val ty v) = ok v' →
+  v' = pto_val v.
+Proof.
+case: ty v.
++ by move=> ? [<-]. + by move=> ? [<-].
++ by move=> s p a;rewrite /truncate_val /= eq_dec_refl pos_dec_n_n /= => -[<-].
+move => w [] // s v /= hle; apply: rbindP => w' /truncate_wordP [hle'] -> [<-].
+by rewrite -(cmp_le_antisym hle hle') zero_extend_u.
+Qed.
+
 Lemma is_wconstP gd s sz e w:
   is_wconst sz e = Some w →
   sem_pexpr gd s e >>= to_word sz = ok w.
