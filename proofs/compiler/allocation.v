@@ -53,7 +53,7 @@ Module Type CheckB.
 
   Parameter check_e    : pexpr -> pexpr -> M.t -> cexec M.t.
   
-  Parameter check_lval : option pexpr -> lval -> lval -> M.t -> cexec M.t.
+  Parameter check_lval : option (stype * pexpr) -> lval -> lval -> M.t -> cexec M.t.
 
   Parameter eq_alloc : M.t -> vmap -> vmap -> Prop.
 
@@ -75,7 +75,8 @@ Module Type CheckB.
     check_lval e2 x1 x2 r1 = ok r1' ->
     eq_alloc r1 s1.(evm) vm1 ->
     value_uincl v1 v2 ->
-    oapp (fun e2 => sem_pexpr gd (Estate s1.(emem) vm1) e2 = ok v2) true e2 ->
+    oapp (fun te2 => 
+        sem_pexpr gd (Estate s1.(emem) vm1) te2.2 >>= truncate_val te2.1 = ok v2) true e2 ->
     write_lval gd x1 v1 s1 = ok s1' ->
     exists vm1', 
       write_lval gd x2 v2 (Estate s1.(emem) vm1) = ok (Estate s1'.(emem) vm1') /\
@@ -132,7 +133,7 @@ Fixpoint check_i iinfo i1 i2 r :=
   match i1, i2 with
   | Cassgn x1 _ ty1 e1, Cassgn x2 _ ty2 e2 =>
     if ty1 == ty2 then
-      add_iinfo iinfo (check_e e1 e2 r >>= check_lval (Some e2) x1 x2)
+      add_iinfo iinfo (check_e e1 e2 r >>= check_lval (Some (ty2,e2)) x1 x2)
     else cierror iinfo (Cerr_neqty ty1 ty2 salloc)
   | Copn xs1 _ o1 es1, Copn xs2 _ o2 es2 =>
     if o1 == o2 then
@@ -281,19 +282,21 @@ Section PROOF.
     by exists vm2;split=>//;constructor.
   Qed.
 
-  Local Lemma Hassgn s1 s2 x tag ty e v :
+  Local Lemma Hassgn s1 s2 x tag ty e v v':
     sem_pexpr gd s1 e = ok v ->
-    check_ty_val ty v ->
-    write_lval gd x v s1 = Ok error s2 ->
+    truncate_val ty v = ok v' ->
+    write_lval gd x v' s1 = Ok error s2 ->
     Pi_r s1 (Cassgn x tag ty e) s2.
   Proof.
-    case: s1 => sm1 svm1 He hty Hw ii r1 [] //= x2 tag2 ty2 e2 r2 vm1 Hvm1.
+    case: s1 => sm1 svm1 He Htr Hw ii r1 [] //= x2 tag2 ty2 e2 r2 vm1 Hvm1.
     case: eqP => // <- {ty2}.
     apply: add_iinfoP.
     apply: rbindP => r1' /check_eP -/(_ gd _ _ Hvm1) [Hr1'] /(_ _ _ He) [v2 [He2 Hu2]] Hcx.
-    have  /(_ _ Hr1') [ // | vm2 [Hwv Hvm2]] := check_lvalP Hcx _ Hu2 _ Hw.
-    (exists vm2;split=>//;econstructor;first exact He2) => //.
-    by apply (subtype_trans hty (value_uincl_subtype Hu2)).
+    have [v2' [Htr' Hu2']]:= truncate_value_uincl Hu2 Htr.
+    have  /(_ _ Hr1') [|]:= check_lvalP Hcx _ Hu2' _ Hw.
+    + by rewrite /= He2 /= Htr'.
+    move=> vm2 [Hwv Hvm2].
+    by exists vm2;split=>//;econstructor;eauto.
   Qed.
 
   Lemma check_esP e1 e2 r re s vm: 
@@ -1210,16 +1213,16 @@ Module CBAreg.
     if M.vsubtypeP x1 x2 is left h then check_var m h
     else cerror (Cerr_varalloc xi1 xi2 "type mismatch").
 
-  Definition is_Pvar (e:option pexpr) :=
+  Definition is_Pvar (e:option (stype * pexpr)) :=
     match e with
-    | Some (Pvar x) => Some x
+    | Some (ty, Pvar x) => Some (ty,x)
     | _ => None
     end.
 
-  Lemma is_PvarP e x : is_Pvar e = Some x -> e = Some (Pvar x).
-  Proof. by case: e => //= -[] //= v [] <-. Qed.
+  Lemma is_PvarP e ty x : is_Pvar e = Some (ty,x) -> e = Some (ty, Pvar x).
+  Proof. by case: e => //= -[? []] //= v [<- <-]. Qed.
 
-  Definition check_lval (e2:option pexpr) (x1 x2:lval) m : cexec M.t :=
+  Definition check_lval (e2:option (stype * pexpr)) (x1 x2:lval) m : cexec M.t :=
     let err _ := cerror (Cerr_neqrval x1 x2 salloc) in
     match x1, x2 with
     | Lnone  _ t1, Lnone _ t2  => 
@@ -1230,9 +1233,9 @@ Module CBAreg.
       else err tt
     | Lvar x1    , Lvar x2     => 
       match is_Pvar e2 with
-      | Some x2' =>
+      | Some (ty, x2') =>
         if M.vsubtypeP x1 x2 is left h then 
-          if (vtype x1 == vtype x2) && (x2.(v_var) == x2') then cok (M.add m x1 x2 h)
+          if (vtype x1 == ty) && (vtype x1 == vtype x2) && (x2.(v_var) == x2') then cok (M.add m x1 x2 h)
           else check_var m h
         else cerror (Cerr_varalloc x1 x2 "type mismatch")
       | _               => check_varc x1 x2 m
@@ -1486,7 +1489,8 @@ Module CBAreg.
     check_lval e2 x1 x2 r1 = ok r1' ->
     eq_alloc r1 s1.(evm) vm1 ->
     value_uincl v1 v2 ->
-    oapp (fun e2 => sem_pexpr gd (Estate s1.(emem) vm1) e2 = ok v2) true e2 ->
+    oapp (fun te2 => 
+        sem_pexpr gd (Estate s1.(emem) vm1) te2.2 >>= truncate_val te2.1 = ok v2) true e2 ->
     write_lval gd x1 v1 s1 = ok s1' ->
     exists vm1', 
       write_lval gd x2 v2 (Estate s1.(emem) vm1) = ok (Estate s1'.(emem) vm1') /\
@@ -1511,36 +1515,32 @@ Module CBAreg.
       by rewrite (negbTE hnw) /=;eexists;split;first reflexivity; apply eq_alloc_rm.
     + rewrite /write_var=> Hc Hvm1 Hv Happ; apply rbindP => vm1' Hset [<-] /=.
       move: Hc;case: is_Pvar (@is_PvarP e2). 
-      + move=> x /(_ _ (refl_equal _)) ?;subst e2.
-        case: M.vsubtypeP => // ht;case:ifPn.
-        + move=> /andP[/eqP heqt /eqP].
-          move: x1 x2 x heqt ht Hset Happ=> [[xt1 xn1] ii1] [[xt2 xn2] ii2] [x ii] /=.
-          set x1 := {| vname := xn1 |}; set x2 := {| vname := xn2 |}.
-          move=> hteq ht hset Happ ? [] ?;subst => /=.
-          apply: set_varP hset => /=;rewrite /set_var.
-          + move=> v1' Hv1 ?;subst.
-            apply: on_vuP Happ. 
-            + move=> v2_ hv2_ ?;subst.
-              rewrite pof_val_pto_val /=;eexists;split;first reflexivity.
-              have /= := @eq_alloc_add x1 (ok v1') r1 x2 (evm s1) vm1 ht Hvm1.
-              rewrite hv2_ /= /pval_uincl => H;apply H;last by eauto.
-              by apply (value_uincl_pof_val Hv1 Hv).
-            move=> ? [?];subst => /=.
-            by case: v1 Hv Hv1 => //= s ? /pof_val_undef_ok.
-          move=> /= hniw hv1 ?;subst;rewrite (negbTE hniw) /=.
-          apply: on_vuP Happ.
-          + move=> v2_ heq ?;subst v2.
+      + move=> [ty x] /(_ _ _ (refl_equal _)) ?;subst e2.
+        case: M.vsubtypeP => // ht;case:ifPn;
+          last by move=> ? hc;have [vm2' [-> /= ?]]:= check_varP Hvm1 hc Hset Hv;eauto.
+        move=> /andP[]/andP[]/eqP ? /eqP heqt /eqP;subst ty.
+        move: x1 x2 x heqt ht Hset Happ=> [[xt1 xn1] ii1] [[xt2 xn2] ii2] [x ii] /=.
+        set x1 := {| vname := xn1 |}; set x2 := {| vname := xn2 |}.
+        move=> hteq ht hset; t_xrbindP => v2' Happ htr ? [] ?;subst => /=.
+        apply: set_varP hset => /=;rewrite /set_var.
+        + move=> v1' Hv1 ?;subst.
+          apply: on_vuP Happ. 
+          + move=> v2_ hv2_ ?;subst.
+            have ?:= truncate_pto_val htr;subst v2.
             rewrite pof_val_pto_val /=;eexists;split;first reflexivity.
-            have /= := @eq_alloc_add x1 (pundef_addr xt2) r1 x2 (evm s1) vm1 ht Hvm1.
-            rewrite heq /= apply_undef_pundef_addr => H;apply H;last by eauto.
-            by apply eval_uincl_undef.
-          move=> heq [?];subst.
-          have [[? /pof_val_undef_ok //] | -> /=]:= pof_val_uincl_error hniw hv1 Hv.
-          eexists;split;eauto.
+            have /= := @eq_alloc_add x1 (ok v1') r1 x2 (evm s1) vm1 ht Hvm1.
+            rewrite hv2_ /= /pval_uincl => H;apply H;last by eauto.
+            by apply (value_uincl_pof_val Hv1 Hv).
+          move=> ? [?];subst => /=.
+          by move: htr;rewrite /truncate_val of_val_undef.
+        move=> /= hniw hv1 ?;subst;rewrite (negbTE hniw) /=.
+        apply: on_vuP Happ.
+        + move=> v2_ heq ?;subst;have ?:= truncate_pto_val htr;subst v2.
+          rewrite pof_val_pto_val /=;eexists;split;first reflexivity.
           have /= := @eq_alloc_add x1 (pundef_addr xt2) r1 x2 (evm s1) vm1 ht Hvm1.
           rewrite heq /= apply_undef_pundef_addr => H;apply H;last by eauto.
-          by case Hvm1 => Hvm0 ??; have := Hvm0 x2;rewrite Fv.get0 heq.
-        by move=> ? hc;have [vm2' [-> /= ?]]:= check_varP Hvm1 hc Hset Hv;eauto.
+          by apply eval_uincl_undef.
+        by move=> heq [?];subst;by move: htr;rewrite /truncate_val of_val_undef.
       by move=> ? hc;have [vm2' [-> /= ?]]:= check_varcP Hvm1 hc Hset Hv;eauto.
     + case: eqP => // ->; rewrite /to_pointer /=.
       apply: rbindP => r2 Hcv Hce Hvm1 Hv Happ.
