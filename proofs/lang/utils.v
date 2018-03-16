@@ -493,8 +493,8 @@ Section CMP.
     by rewrite cmp_sym h.
   Qed.
 
-  Lemma cmp_le_antisym x y : ~~ (cmp_le x y) -> cmp_le y x.
-  Proof. by move=> h;apply cmp_lt_le;rewrite -cmp_nle_lt. Qed.
+  Lemma cmp_nle_le x y : ~~ (cmp_le x y) -> cmp_le y x.
+  Proof. by rewrite cmp_nle_lt; apply: cmp_lt_le. Qed.
 
 End CMP.
 
@@ -516,6 +516,12 @@ Section EqCMP.
     + by rewrite (cmp_eq heq) eqxx.
     case: eqP => // ?;subst.
     by rewrite cmp_refl in heq.
+  Qed.
+
+  Lemma cmp_le_antisym x y :
+    cmp_le x y → cmp_le y x → x = y.
+  Proof.
+    by rewrite -cmp_nlt_le (cmp_le_eq_lt y) => /negbTE -> /eqP.
   Qed.
 
 End EqCMP.

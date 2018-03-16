@@ -1240,9 +1240,9 @@ Proof.
     case: (Sumbool.sumbool_of_bool (sz' ≤ s)%CMP).
     + move=> ?; eexists;split;first reflexivity => /=.
       by rewrite /word_uincl /= hsz eqxx.
-    move=> /negbT hle;rewrite /truncate_word (cmp_le_antisym hle) /=;eexists;split;first reflexivity.
+    move=> /negbT hle;rewrite /truncate_word (cmp_nle_ne hle) /=;eexists;split;first reflexivity.
     by rewrite /word_uincl /= e zero_extend_idem // eqxx.
-  move=> /negbT hlt1; have hle:= cmp_le_antisym hlt1; rewrite /truncate_word hle zero_extend_idem //= => -[<-].
+  move=> /negbT hlt1; have hle:= cmp_nle_le hlt1; rewrite /truncate_word hle zero_extend_idem //= => -[<-].
   have hnle: (sz' <= s)%CMP = false.
   + apply negbTE;rewrite cmp_nle_lt.
     by apply: cmp_lt_le_trans hsz;rewrite -cmp_nle_lt.
@@ -1556,7 +1556,7 @@ Proof.
   + by move=> [] ??;subst s2 p2;rewrite eq_dec_refl pos_dec_n_n /=;eauto.
   + by case: tv => //= s2 p2 [] ??;subst;rewrite !eqxx /=;eauto.
   + move => _; case: Sumbool.sumbool_of_bool => [ e | /negbT ]; first by eauto.
-    by rewrite /truncate_word => h; rewrite (cmp_le_antisym h) /=;eauto.
+    by rewrite /truncate_word => h; rewrite (cmp_nle_le h) /=;eauto.
   by case: tv => //= s2 _;eauto.
 Qed.
 
