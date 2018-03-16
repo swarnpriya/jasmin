@@ -1240,7 +1240,7 @@ Proof.
     case: (Sumbool.sumbool_of_bool (sz' ≤ s)%CMP).
     + move=> ?; eexists;split;first reflexivity => /=.
       by rewrite /word_uincl /= hsz eqxx.
-    move=> /negbT hle;rewrite /truncate_word (cmp_nle_ne hle) /=;eexists;split;first reflexivity.
+    move=> /negbT hle;rewrite /truncate_word (cmp_nle_le hle) /=;eexists;split;first reflexivity.
     by rewrite /word_uincl /= e zero_extend_idem // eqxx.
   move=> /negbT hlt1; have hle:= cmp_nle_le hlt1; rewrite /truncate_word hle zero_extend_idem //= => -[<-].
   have hnle: (sz' <= s)%CMP = false.
