@@ -953,46 +953,6 @@ Ltac elim_div :=
     end.
   Proof. by subst n; case: m. Qed.
 
-Lemma truncate_val_subtype ty v v' :
-  truncate_val ty v = ok v' →
-  subtype ty (type_of_val v).
-Proof.
-  case: ty v => [ | | sz n | sz ] [] //; try by case.
-  - move => sz' n' t; rewrite /truncate_val /=; case: wsize_eq_dec => // ?; subst.
-    by case: CEDecStype.pos_dec => // ?; subst.
-  - by case => // sz' n'; rewrite /truncate_val /=; case: ifP.
-  - by move => sz' w; rewrite /truncate_val /=; t_xrbindP => w' /truncate_wordP [].
-  by case => // sz'; rewrite /truncate_val /=; case: ifP.
-Qed.
-
-Lemma truncate_val_has_type ty v v' :
-  truncate_val ty v = ok v' →
-  type_of_val v' = ty.
-Proof.
-  case: ty v => [ | | sz n | sz ] [] //; try by case.
-  - by move => b [<-].
-  - by move => z [<-].
-  - move => sz' n' t; rewrite /truncate_val /=; case: wsize_eq_dec => // ?; subst.
-    by case: CEDecStype.pos_dec => // ?; subst => - [<-].
-  - by case => // sz' n'; rewrite /truncate_val /=; case: ifP.
-  - by move => sz' w; rewrite /truncate_val /=; t_xrbindP => w' /truncate_wordP [] ? -> <-.
-  by case => // sz'; rewrite /truncate_val /=; case: ifP.
-Qed.
-
-Lemma truncate_val_wordI ty v sz w :
-  truncate_val ty v = ok (@Vword sz w) →
-  ∃ sz' (w': word sz'), v = Vword w' ∧ (sz ≤ sz')%CMP.
-Proof.
-case: ty v => [ | | s n | s ] [] //; try by case.
-- move => sz' n' t; rewrite /truncate_val /=; case: wsize_eq_dec => // ?; subst.
-  by case: CEDecStype.pos_dec => // ?; subst.
-- by case => // sz' n'; rewrite /truncate_val /=; case: ifP.
-- move => sz' w'; rewrite /truncate_val /=.
-  apply: rbindP => w'' /truncate_wordP [] => hle -> h.
-  by have := ok_inj h => {h} /Vword_inj [] ?; subst => /= ?; subst; eauto.
-by case => // sz'; rewrite /truncate_val /=; case: ifP.
-Qed.
-
   Lemma lower_cassgn_classifyP e l s s' v ty v' (Hs: sem_pexpr gd s e = ok v)
       (Hv': truncate_val ty v = ok v')
       (Hw: write_lval gd l v' s = ok s'):
