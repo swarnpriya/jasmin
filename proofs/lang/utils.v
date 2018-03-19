@@ -280,6 +280,25 @@ Section FOLD2.
 
 End FOLD2.
 
+Section MAP2.
+
+  Variable A B E R:Type.
+  Variable e: E.
+
+  Variable f : A -> B -> result E R.
+
+  Fixpoint mapM2 (la:seq A) (lb: seq B) := 
+    match la, lb with
+    | [::]  , [::]   => Ok E [::]
+    | a::la, b::lb =>
+      Let c := f a b in
+      Let lc := mapM2 la lb in
+      ok (c::lc)
+    | _     , _      => Error e
+    end.
+  
+End MAP2.
+
 Section All2.
 
   Variable A B:Type.

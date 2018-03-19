@@ -319,14 +319,14 @@ with sem_for : var_i -> seq Z -> estate -> cmd -> estate -> Prop :=
     sem_for i (w :: ws) s1 c s3
 
 with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
-| EcallRun m1 m2 fn f vargs s1 vm2 vres:
+| EcallRun m1 m2 fn f vargs vargs' s1 vm2 vres vres' :
     get_fundef P fn = Some f ->
-    all2 check_ty_val f.(f_tyin) vargs ->
+    mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs ->
     write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1 ->
     sem s1 f.(f_body) (Estate m2 vm2) ->
     mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres ->
-    all2 check_ty_val f.(f_tyout) vres ->
-    sem_call m1 fn vargs m2 vres.
+    mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ->
+    sem_call m1 fn vargs'  m2 vres'.
 
 (* -------------------------------------------------------------------- *)
 (* The generated scheme is borring to use *)
@@ -406,16 +406,16 @@ Section SEM_IND.
     write_lvals gd {| emem := m2; evm := evm s1 |} xs vs = Ok error s2 ->
     Pi_r s1 (Ccall ii xs fn args) s2.
 
-  Hypothesis Hproc : forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs : seq value)
-         (s1 : estate) (vm2 : vmap) (vres : seq value),
+  Hypothesis Hproc : forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs vargs': seq value)
+         (s1 : estate) (vm2 : vmap) (vres vres': seq value),
     get_fundef P fn = Some f ->
-    all2 check_ty_val f.(f_tyin) vargs ->
+    mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs ->
     write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
     sem s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-    all2 check_ty_val f.(f_tyout) vres ->
-    Pfun m1 fn vargs m2 vres.
+    mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ->
+    Pfun m1 fn vargs' m2 vres'.
 
   Fixpoint sem_Ind (e : estate) (l : cmd) (e0 : estate) (s : sem e l e0) {struct s} :
     Pc e l e0 :=
@@ -465,8 +465,8 @@ Section SEM_IND.
   with sem_call_Ind (m : mem) (f13 : funname) (l : seq value) (m0 : mem)
          (l0 : seq value) (s : sem_call m f13 l m0 l0) {struct s} : Pfun m f13 l m0 l0 :=
     match s with
-    | @EcallRun m1 m2 fn f vargs s1 vm2 vres Hget Hca Hw Hsem Hvres Hcr =>
-       @Hproc m1 m2 fn f vargs s1 vm2 vres Hget Hca Hw Hsem (sem_Ind Hsem) Hvres Hcr
+    | @EcallRun m1 m2 fn f vargs vargs' s1 vm2 vres vres' Hget Hca Hw Hsem Hvres Hcr =>
+       @Hproc m1 m2 fn f vargs vargs' s1 vm2 vres vres' Hget Hca Hw Hsem (sem_Ind Hsem) Hvres Hcr
     end.
 
 End SEM_IND.
@@ -1162,6 +1162,19 @@ case) => // [ sz'' w' | sz'' w' | [] // sz'' ] /=.
   by rewrite/= zero_extend_idem.
 + by rewrite /truncate_val /=; case: ifP.
 by rewrite /truncate_val /=; case: ifP.
+Qed.
+
+Lemma mapM2_truncate_val tys vs1' vs1 vs2' : 
+  mapM2 ErrType truncate_val tys vs1' = ok vs1 ->
+  List.Forall2 value_uincl vs1' vs2' ->
+  exists vs2, mapM2 ErrType truncate_val tys vs2' = ok vs2 /\ 
+    List.Forall2 value_uincl vs1 vs2.
+Proof.
+  elim: tys vs1' vs1 vs2' => [ | t tys hrec] [|v1' vs1'] //=.
+  + by move=> ?? [<-] h;sinversion h;eauto.
+  move=> vs1 vs2';t_xrbindP => v1 htr vs2 htrs <- h;sinversion h.  
+  have [v2 [-> hv2] /=]:= truncate_value_uincl H1 htr.
+  by have [vs2'' [-> hvs2] /=] := hrec _ _ _ htrs H3;eauto.
 Qed.
 
 Definition val_uincl (t1 t2:stype) (v1:sem_t t1) (v2:sem_t t2) :=
@@ -1997,25 +2010,24 @@ Lemma all2_check_ty_val v1 x v2 :
 Proof.
   move=> /all2P H1 H2;apply /all2P;apply: Forall2_trans H1 H2;apply check_ty_val_uincl.
 Qed.
-   
-Local Lemma Hproc m1 m2 fn fd vargs s1 vm2 vres:
+ 
+Local Lemma Hproc m1 m2 fn fd vargs vargs' s1 vm2 vres vres':
   get_fundef p fn = Some fd ->
-  all2 check_ty_val fd.(f_tyin) vargs ->
+  mapM2 ErrType truncate_val fd.(f_tyin) vargs' = ok vargs ->
   write_vars (f_params fd) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
   sem p gd s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
   Pc s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
   mapM (fun x : var_i => get_var vm2 x) (f_res fd) = ok vres ->
-  all2 check_ty_val fd.(f_tyout) vres ->
-  Pfun m1 fn vargs m2 vres.
+  mapM2 ErrType truncate_val fd.(f_tyout) vres = ok vres' ->
+  Pfun m1 fn vargs' m2 vres'.
 Proof.
-  move=> Hget Hca Hargs Hsem Hrec Hmap Hcr vargs' Uargs.
-  have [vm1 [Hargs' Hvm1]] := write_vars_uincl (vm_uincl_refl _) Uargs Hargs.
+  move=> Hget Hca Hargs Hsem Hrec Hmap Hcr vargs1' Uargs.
+  have [vargs2' [hm2 Uargs']]:= mapM2_truncate_val Hca Uargs.
+  have [vm1 [Hargs' Hvm1]] := write_vars_uincl (vm_uincl_refl _) Uargs' Hargs.
   have [vm2' /= [] Hsem' Uvm2]:= Hrec _ Hvm1.
   have [vs2 [Hvs2 Hsub]] := get_vars_uincl Uvm2 Hmap.
-  exists vs2;split=>//.
-  econstructor;eauto.
-  apply: all2_check_ty_val Hca Uargs.
-  apply: all2_check_ty_val Hcr Hsub.
+  have [vres2' [hmr2 Ures']]:= mapM2_truncate_val Hcr Hsub.
+  by exists vres2';split=>//;econstructor;eauto.
 Qed.
 
 Lemma sem_call_uincl vargs m1 f m2 vres vargs':
