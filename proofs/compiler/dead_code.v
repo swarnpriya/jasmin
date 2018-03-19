@@ -92,7 +92,7 @@ Definition check_nop_opn (xs:lvals) (o: sopn) (es:pexprs) :=
 Fixpoint dead_code_i (i:instr) (s:Sv.t) {struct i} : ciexec (Sv.t * cmd) := 
   let (ii,ir) := i in
   match ir with
-  | Cassgn x tag e =>
+  | Cassgn x tag _ e =>
     let w := write_i ir in
     if tag != AT_keep then
       if disjoint s w && negb (write_mem x) then ciok (s, [::])
@@ -138,12 +138,10 @@ Fixpoint dead_code_i (i:instr) (s:Sv.t) {struct i} : ciexec (Sv.t * cmd) :=
   end.
 
 Definition dead_code_fd (fd: fundef) :=
-  match fd with
-  | MkFun ii params c res =>
-    let s := read_es (map Pvar res) in
-    Let c := dead_code_c dead_code_i c s in
-    ciok (MkFun ii params c.2 res)
-  end.
+  let 'MkFun ii tyi params c tyo res := fd in
+  let s := read_es (map Pvar res) in
+  Let c := dead_code_c dead_code_i c s in
+  ciok (MkFun ii tyi params c.2 tyo res).
 
 Definition dead_code_prog (p: prog) : cfexec prog :=
   map_cfprog dead_code_fd p.
