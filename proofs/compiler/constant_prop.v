@@ -24,7 +24,7 @@
  * ----------------------------------------------------------------------- *)
 
 (* ** Imports and settings *)
-Require Import expr ZArith sem.
+Require Import expr ZArith psem.
 Import all_ssreflect all_algebra.
 Import Utf8.
 
@@ -38,50 +38,6 @@ Local Open Scope Z_scope.
 (* -------------------------------------------------------------------------- *)
 (* ** Smart constructors                                                      *)
 (* -------------------------------------------------------------------------- *)
-
-Definition szeroext_aux (e: pexpr) :=
-  match e with
-  | Pcast sz e' => Some (sz, λ sz, Pcast sz e')
-
-  | Papp1 (Ozeroext sz) e' => Some (sz, λ sz, Papp1 (Ozeroext sz) e')
-  | Papp1 (Olnot sz) e' => Some (sz, λ sz, Papp1 (Olnot sz) e')
-  | Papp1 (Oneg (Op_w sz)) e' => Some (sz, λ sz, Papp1 (Oneg (Op_w sz)) e')
-
-  | Papp2 (Oadd (Op_w sz)) e1 e2 => Some (sz, λ sz, Papp2 (Oadd (Op_w sz)) e1 e2)
-  | Papp2 (Osub (Op_w sz)) e1 e2 => Some (sz, λ sz, Papp2 (Osub (Op_w sz)) e1 e2)
-  | Papp2 (Omul (Op_w sz)) e1 e2 => Some (sz, λ sz, Papp2 (Omul (Op_w sz)) e1 e2)
-
-  | Papp2 (Oland sz) e1 e2 => Some (sz, λ sz, Papp2 (Oland sz) e1 e2)
-  | Papp2 (Olor sz) e1 e2 => Some (sz, λ sz, Papp2 (Olor sz) e1 e2)
-  | Papp2 (Olxor sz) e1 e2 => Some (sz, λ sz, Papp2 (Olxor sz) e1 e2)
-  | Papp2 (Olsr sz) e1 e2 => Some (sz, λ sz, Papp2 (Olsr sz) e1 e2)
-  | Papp2 (Olsl sz) e1 e2 => Some (sz, λ sz, Papp2 (Olsl sz) e1 e2)
-  | Papp2 (Oasr sz) e1 e2 => Some (sz, λ sz, Papp2 (Oasr sz) e1 e2)
-
-  | _ => None end.
-
-(* TODO: move to utils *)
-(* TODO: move to stdlib *)
-Scheme Equality for comparison.
-
-Lemma comparison_eq_axiom : Equality.axiom comparison_beq.
-Proof.
-  move=> x y;apply:(iffP idP).
-  + by apply: internal_comparison_dec_bl.
-  by apply: internal_comparison_dec_lb.
-Qed.
-
-Definition comparison_eqMixin     := Equality.Mixin comparison_eq_axiom.
-Canonical  comparison_eqType      := Eval hnf in EqType _ comparison_eqMixin.
-
-Definition szeroext sz (e: pexpr) :=
-  let default := Papp1 (Ozeroext sz) e in
-  match szeroext_aux e with
-  | Some (sz', k) =>
-    (* if sz <= sz' one cast to sz is enough. *)
-    if wsize_cmp sz' sz == Lt then default else k sz
-  | None => default
-  end.
 
 Definition snot_bool (e:pexpr) := 
   match e with
@@ -111,7 +67,6 @@ Definition sneg_w (sz: wsize) (e:pexpr) :=
 
 Definition s_op1 o e :=
   match o with
-  | Ozeroext sz => szeroext sz e
   | Onot  => snot_bool e 
   | Olnot sz => snot_w sz e
   | Oneg Op_int => sneg_int e
@@ -149,8 +104,8 @@ Definition sadd_int e1 e2 :=
 Definition sadd_w sz e1 e2 :=
   match is_wconst sz e1, is_wconst sz e2 with
   | Some n1, Some n2 => wconst (n1 + n2)
-  | Some n, _ => if n == 0%R then szeroext sz e2 else Papp2 (Oadd (Op_w sz)) e1 e2
-  | _, Some n => if n == 0%R then szeroext sz e1 else Papp2 (Oadd (Op_w sz)) e1 e2
+  | Some n, _ => if n == 0%R then e2 else Papp2 (Oadd (Op_w sz)) e1 e2
+  | _, Some n => if n == 0%R then e1 else Papp2 (Oadd (Op_w sz)) e1 e2
   | _, _ => Papp2 (Oadd (Op_w sz)) e1 e2
   end.
 
@@ -171,7 +126,7 @@ Definition ssub_int e1 e2 :=
 Definition ssub_w sz e1 e2 :=
   match is_wconst sz e1, is_wconst sz e2 with
   | Some n1, Some n2 => wconst (n1 - n2)
-  | _, Some n => if n == 0%R then szeroext sz e1 else Papp2 (Osub (Op_w sz)) e1 e2
+  | _, Some n => if n == 0%R then e1 else Papp2 (Osub (Op_w sz)) e1 e2
   | _, _ => Papp2 (Osub (Op_w sz)) e1 e2
   end.
 
@@ -200,11 +155,11 @@ Definition smul_w sz e1 e2 :=
   | Some n1, Some n2 => wconst (n1 * n2)
   | Some n, _ =>
     if n == 0%R then @wconst sz 0
-    else if n == 1%R then szeroext sz e2
+    else if n == 1%R then e2
     else Papp2 (Omul (Op_w sz)) (wconst n) e2
   | _, Some n => 
     if n == 0%R then @wconst sz 0
-    else if n == 1%R then szeroext sz e1
+    else if n == 1%R then e1
     else Papp2 (Omul (Op_w sz)) e1 (wconst n)
   | _, _ => Papp2 (Omul (Op_w sz)) e1 e2
   end.
@@ -360,11 +315,11 @@ Fixpoint const_prop_e (m:cpm) e :=
   match e with
   | Pconst _      => e
   | Pbool  _      => e
-  | Pcast sz e       => Pcast sz (const_prop_e m e)
+  | Pcast sz e    => Pcast sz (const_prop_e m e)
   | Pvar  x       => if Mvar.get m x is Some n then const n else e
-  | Pglobal _ => e
+  | Pglobal _     => e
   | Pget  x e     => Pget x (const_prop_e m e)
-  | Pload sz x e     => Pload sz x (const_prop_e m e)
+  | Pload sz x e  => Pload sz x (const_prop_e m e)
   | Papp1 o e     => s_op1 o (const_prop_e m e)
   | Papp2 o e1 e2 => s_op2 o (const_prop_e m e1)  (const_prop_e m e2)
   | Pif e e1 e2   => s_if (const_prop_e m e) (const_prop_e m e1) (const_prop_e m e2)
@@ -386,10 +341,10 @@ Definition remove_cpm (m:cpm) (s:Sv.t): cpm :=
 
 Definition const_prop_rv (m:cpm) (rv:lval) : cpm * lval := 
   match rv with 
-  | Lnone _ _ => (m, rv)
-  | Lvar  x   => (Mvar.remove m x, rv)
+  | Lnone _ _   => (m, rv)
+  | Lvar  x     => (Mvar.remove m x, rv)
   | Lmem sz x e => (m, Lmem sz x (const_prop_e m e))
-  | Laset x e => (Mvar.remove m x, Laset x (const_prop_e m e))
+  | Laset x e   => (Mvar.remove m x, Laset x (const_prop_e m e))
   end.
 
 Fixpoint const_prop_rvs (m:cpm) (rvs:lvals) : cpm * lvals := 
@@ -432,13 +387,23 @@ Section CMD.
 
 End CMD.
 
+Definition restr_ty ty e := 
+  match ty with
+  | sword sz => 
+    match is_wconst sz e with
+    | Some w => wconst w
+    | None   => e
+    end
+  | _ => e
+  end.
+ 
 Fixpoint const_prop_ir (m:cpm) ii (ir:instr_r) : cpm * cmd := 
   match ir with
-  | Cassgn x tag e => 
+  | Cassgn x tag ty e => 
     let e := const_prop_e m e in 
     let (m,x) := const_prop_rv m x in
     let m := add_cpm m x tag e in
-    (m, [:: MkI ii (Cassgn x tag e)])
+    (m, [:: MkI ii (Cassgn x tag ty e)])
 
   | Copn xs t o es =>
     (* TODO: Improve this *)
@@ -487,9 +452,9 @@ with const_prop_i (m:cpm) (i:instr) : cpm * cmd :=
   const_prop_ir m ii ir.
 
 Definition const_prop_fun (f:fundef) :=
-  let (ii,p,c,r) := f in
+  let (ii,tin,p,c,tout,r) := f in
   let (_, c) := const_prop const_prop_i empty_cpm c in
-  MkFun ii p c r.
+  MkFun ii tin p c tout r.
 
 Definition const_prop_prog (p:prog) : prog := map_prog const_prop_fun p.
 

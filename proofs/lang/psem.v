@@ -1120,6 +1120,13 @@ case: v1; case: v2 => //=; last (by move => s s'; rewrite -vundef_type_idem => -
   by move=> ??????? -> [->] [??];subst.
 Qed.
 
+Lemma word_uincl_zero_ext sz sz' (w':word sz') : (sz ≤ sz')%CMP -> word_uincl (zero_extend sz w') w'.
+Proof. by move=> ?;apply /andP. Qed.
+
+Lemma value_uincl_zero_ext sz sz' (w':word sz') : (sz ≤ sz')%CMP -> 
+  value_uincl (Vword (zero_extend sz w')) (Vword w').
+Proof. apply word_uincl_zero_ext. Qed.
+
 Lemma of_val_undef t t':
   of_val t (Vundef t') = Error (if subtype t t' then ErrAddrUndef else ErrType).
 Proof.
