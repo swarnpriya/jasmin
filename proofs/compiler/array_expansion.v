@@ -180,7 +180,7 @@ Module CBEA.
   Definition check_e (e1 e2:pexpr) m := 
     if check_eb m e1 e2 then cok m else cerror (Cerr_arr_exp e1 e2). 
 
-  Definition check_lval (e2:option pexpr) (r1 r2:lval) m := 
+  Definition check_lval (_:option (stype * pexpr)) (r1 r2:lval) m := 
     match r1, r2 with 
     | Lnone _ t1, Lnone _ t2 => 
       if t1 == t2 then cok m
@@ -326,7 +326,8 @@ Module CBEA.
     check_lval oe2 x1 x2 r1 = ok r1' ->
     eq_alloc r1 s1.(evm) vm1 ->
     value_uincl v1 v2 ->
-    oapp (fun e2 => sem_pexpr gd (Estate s1.(emem) vm1) e2 = ok v2) true oe2 ->
+    oapp (fun te2 => 
+     sem_pexpr gd (Estate s1.(emem) vm1) te2.2 >>= truncate_val te2.1 = ok v2) true oe2 ->
     write_lval gd x1 v1 s1 = ok s1' ->
     exists vm1', 
       write_lval gd x2 v2 (Estate s1.(emem) vm1) = ok (Estate s1'.(emem) vm1') /\
