@@ -1526,8 +1526,7 @@ Lemma vuincl_sopn ts o vs vs' v :
   all is_w_or_b ts ->
   List.Forall2 value_uincl vs vs' ->
   app_sopn ts o vs = ok v ->
-  exists v' : values,
-     app_sopn ts o vs' = ok v' /\ List.Forall2 value_uincl v v'.
+  app_sopn ts o vs' = ok v.
 Proof.
   elim: ts o vs vs' => /= [ | t ts Hrec] o [] //.
   + by move => vs' _ /List_Forall2_inv_l -> ->; eauto using List_Forall2_refl.
@@ -1537,9 +1536,9 @@ Proof.
   by move=> w /(value_uincl_word hv) -> /= /(Hrec _ _ _ hts hvs).
 Qed.
 
-Lemma vuincl_exec_opn o vs vs' v :
+Lemma vuincl_exec_opn_eq o vs vs' v :
   List.Forall2 value_uincl vs vs' -> exec_sopn o vs = ok v ->
-  exists v', exec_sopn o vs' = ok v' /\ List.Forall2  value_uincl v v'.
+  exec_sopn o vs' = ok v.
 Proof.
 rewrite /sem_sopn; case: o; (try (refine (λ sz: wsize, _)));
 try apply: vuincl_sopn => //.
@@ -1552,6 +1551,11 @@ t_xrbindP => b /(value_uincl_bool H1) [] _ -> /=.
 by case: b; t_xrbindP => w hw <-;
 rewrite (value_uincl_word _ hw) /=; eauto.
 Qed.
+
+Lemma vuincl_exec_opn o vs vs' v :
+  List.Forall2 value_uincl vs vs' -> exec_sopn o vs = ok v ->
+  exists v', exec_sopn o vs' = ok v' /\ List.Forall2  value_uincl v v'.
+Proof. move => /vuincl_exec_opn_eq h /h {h}; eauto using List_Forall2_refl. Qed.
 
 Lemma set_vm_uincl vm vm' x z z' :
   vm_uincl vm vm' ->
