@@ -598,16 +598,18 @@ Proof.
   by case: b; eauto.
 Qed.
 
-Definition eqoks (e1 e2:seq pexpr) st := 
-  forall v, sem_pexprs gd st e1 = ok v -> sem_pexprs gd st e2 = ok v.
+Definition eqoks e1 e2 st :=
+  ∀ vs, sem_pexprs gd st e1 = ok vs → ∃ vs', sem_pexprs gd st e2 = ok vs' ∧ List.Forall2 value_uincl vs vs'.
 
-Lemma const_prop_esP es s m vs: 
-  valid_cpm (evm s) m ->
-  sem_pexprs gd s es = ok vs -> sem_pexprs gd s (map (const_prop_e m) es) = ok vs.
+Lemma const_prop_esP es s m :
+  valid_cpm (evm s) m →
+  eqoks es (map (const_prop_e m) es) s.
 Proof.
-  move=> Hv;elim: es vs => //= e es Hrec /= vs.
-  rewrite /sem_pexprs /=;apply : rbindP => v /(const_prop_eP Hv) ->.
-  by apply: rbindP => vs' /Hrec /=;rewrite /sem_pexprs => -> [] <-.
+move => hv; elim: es.
++ by move => ? [<-]; exists [::].
+move => e es ih ?; rewrite /sem_pexprs /=.
+apply: rbindP => v /(const_prop_eP hv) [v'] [->] hu.
+apply: rbindP => vs /ih{ih}; rewrite -/(sem_pexprs gd s _) => - [vs'] [->] hrec [<-] /=; eauto.
 Qed.
 
 Lemma remove_cpm1P x v m s1 s1' : 
