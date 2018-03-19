@@ -64,34 +64,36 @@ Module S.
     sem_I s1 (MkI ii i) s2
 
   with sem_i : estate -> instr_r -> estate -> Prop :=
-  | Eassgn s1 s2 (x:lval) tag e:
-    (Let v := sem_pexpr gd s1 e in write_lval gd x v s1) = ok s2 ->
-    sem_i s1 (Cassgn x tag e) s2
+  | Eassgn s1 s2 (x:lval) tag ty e v v' :
+    sem_pexpr gd s1 e = ok v ->
+    truncate_val ty v = ok v' ->
+    write_lval gd x v' s1 = ok s2 ->
+    sem_i s1 (Cassgn x tag ty e) s2
 
   | Eopn s1 s2 t o xs es:
     sem_sopn gd o s1 xs es = ok s2 ->
     sem_i s1 (Copn xs t o es) s2
 
   | Eif_true s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e >>= to_bool = ok true ->
+    sem_pexpr gd s1 e= ok (Vbool true) ->
     sem s1 c1 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
   | Eif_false s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e >>= to_bool = ok false ->
+    sem_pexpr gd s1 = ok (Vbool false) ->
     sem s1 c2 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
   | Ewhile_true s1 s2 s3 s4 c e c' :
     sem s1 c s2 ->
-    sem_pexpr gd s2 e >>= to_bool = ok true ->
+    sem_pexpr gd s2 e = ok (Vbool true) ->
     sem s2 c' s3 ->
     sem_i s3 (Cwhile c e c') s4 ->
     sem_i s1 (Cwhile c e c') s4
 
   | Ewhile_false s1 s2 c e c' :
     sem s1 c s2 ->
-    sem_pexpr gd s2 e >>= to_bool = ok false ->
+    sem_pexpr gd s2 e = ok (Vbool false) ->
     sem_i s1 (Cwhile c e c') s2
 
   | Ecall s1 m2 s2 ii xs f args vargs vs :
