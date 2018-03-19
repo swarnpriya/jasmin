@@ -1793,10 +1793,7 @@ Ltac elim_div :=
     exact: Hs4'1.
     rewrite /= -Hcond in Hs5'1.
     rewrite {1}/map /= in Hs5'1.
-    sinversion Hs5'1.
-    sinversion H4.
-    sinversion H2.
-    exact: H4.
+    by case/semE: Hs5'1 => ? [/sem_IE H] /semE ->.
   Qed.
 
   Local Lemma Hwhile_false s1 s2 c e c' :
@@ -1889,15 +1886,15 @@ Ltac elim_div :=
     exact: Hfun.
   Qed.
 
-  Local Lemma Hproc m1 m2 fn f vargs s1 vm2 vres:
+  Local Lemma Hproc m1 m2 fn f vargs vargs' s1 vm2 vres vres' :
     get_fundef p fn = Some f ->
-    all2 check_ty_val f.(f_tyin) vargs ->
+    mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs ->
     write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
     sem p gd s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
     mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-    all2 check_ty_val f.(f_tyout) vres ->
-    Pfun m1 fn vargs m2 vres.
+    mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ->
+    Pfun m1 fn vargs' m2 vres'.
   Proof.
     move=> Hget Htya Harg _ Hc Hres Htyr.
     have H: eq_exc_fresh s1 s1 by [].

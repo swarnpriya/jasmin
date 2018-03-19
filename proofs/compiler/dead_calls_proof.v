@@ -333,8 +333,7 @@ Section PROOF.
     move=> Hincl H.
     apply: (@sem_call_Ind p gd Pc Pi_r Pi Pfor Pfun Hskip Hcons HmkI Hassgn Hopn
              Hif_true Hif_false Hwhile_true Hwhile_false Hfor Hfor_nil Hfor_cons Hcall Hproc)=> //.
-    sinversion H.
-    move=> {H1 H2 H3} x Hx.
+    move => x Hx.
     SpD.fsetdec.
   Qed.
 

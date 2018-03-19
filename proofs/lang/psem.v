@@ -328,6 +328,20 @@ with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
     mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ->
     sem_call m1 fn vargs'  m2 vres'.
 
+Lemma semE s c s' :
+  sem s c s' ->
+  match c with
+  | [::] => s' = s
+  | i :: c' => exists si, sem_I s i si /\ sem si c' s'
+  end.
+Proof. by case; eauto. Qed.
+
+Lemma sem_IE s i s' :
+  sem_I s i s' ->
+  let 'MkI ii r := i in
+  sem_i s r s'.
+Proof. by case. Qed.
+
 (* -------------------------------------------------------------------- *)
 (* The generated scheme is borring to use *)
 (*
@@ -1171,10 +1185,10 @@ Lemma mapM2_truncate_val tys vs1' vs1 vs2' :
     List.Forall2 value_uincl vs1 vs2.
 Proof.
   elim: tys vs1' vs1 vs2' => [ | t tys hrec] [|v1' vs1'] //=.
-  + by move=> ?? [<-] h;sinversion h;eauto.
-  move=> vs1 vs2';t_xrbindP => v1 htr vs2 htrs <- h;sinversion h.  
-  have [v2 [-> hv2] /=]:= truncate_value_uincl H1 htr.
-  by have [vs2'' [-> hvs2] /=] := hrec _ _ _ htrs H3;eauto.
+  + by move => ? ? [<-] /List_Forall2_inv_l ->; eauto.
+  move=> vs1 vs2';t_xrbindP => v1 htr vs2 htrs <- /List_Forall2_inv_l [v] [vs] [->] [hv hvs].
+  have [v2 [-> hv2] /=]:= truncate_value_uincl hv htr.
+  by have [vs2'' [-> hvs2] /=] := hrec _ _ _ htrs hvs;eauto.
 Qed.
 
 Definition val_uincl (t1 t2:stype) (v1:sem_t t1) (v2:sem_t t2) :=
@@ -1508,12 +1522,12 @@ Lemma vuincl_sopn ts o vs vs' v :
   exists v' : values,
      app_sopn ts o vs' = ok v' /\ List.Forall2 value_uincl v v'.
 Proof.
-  elim: ts o vs vs' => /= [ | t ts Hrec] o vs vs' Hall Hu;sinversion Hu => //=.
-  + move => ->;exists v;auto using List_Forall2_refl.
-  move: Hall=> /andP [].
-  case: t o => //= [ | sz ] o _ Hall; apply: rbindP.
-  + by move=> b /(value_uincl_bool H) [] _ -> /= /(Hrec _ _ _ Hall H0).
-  by move=> w /(value_uincl_word H) -> /= /(Hrec _ _ _ Hall H0).
+  elim: ts o vs vs' => /= [ | t ts Hrec] o [] //.
+  + by move => vs' _ /List_Forall2_inv_l -> ->; eauto using List_Forall2_refl.
+  move => n vs vs'' /andP [] ht hts /List_Forall2_inv_l [v'] [vs'] [->] {vs''} [hv hvs].
+  case: t o ht => //= [ | sz ] o _; apply: rbindP.
+  + by move=> b /(value_uincl_bool hv) [] _ -> /= /(Hrec _ _ _ hts hvs).
+  by move=> w /(value_uincl_word hv) -> /= /(Hrec _ _ _ hts hvs).
 Qed.
 
 Lemma vuincl_exec_opn o vs vs' v :
