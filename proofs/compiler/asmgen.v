@@ -2,7 +2,7 @@ From mathcomp Require Import all_ssreflect all_algebra.
 Require Import low_memory x86_sem compiler_util.
 Require Import x86_variables_proofs.
 Import Utf8.
-Import oseq sem x86_variables.
+Import oseq psem x86_variables.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -665,7 +665,7 @@ Proof.
 move=> eqv; case: e => //.
 + move=> [] // [] //= z [<-] /= [<-] _ [<-] /=.
   eexists; first by eauto.
-  by move=> /=;exists erefl.
+  by apply/andP; split => //; rewrite zero_extend_u.
 + move=> x /=;t_xrbindP.
   move=> r ok_r -[<-] /= [<-] Hsize /=ok_v /=; eexists; first by reflexivity.
   exact: xgetreg_ex eqv ok_r ok_v.
@@ -675,7 +675,7 @@ move=> eqv; case: e => //.
 move=> ws x e /=; t_xrbindP => r1 ok_r1 w ok_w [<-] /=. 
 move=> H /eqP ?;subst;case: H => ?;subst.
 move=> z o ok_o ok_z z' o' ok_o' ok_z' res ok_res <- {v} /=.
-exists (Vword res) => //=;last by exists erefl.
+exists (Vword res) => //=.
 suff : (z + z')%R = decode_addr m w.
 + by move=> <-;case:eqv => <- _ _;rewrite ok_res.
 move: ok_w; rewrite /addr_of_pexpr.
@@ -799,6 +799,21 @@ Proof.
   by constructor.
 Qed.
 
+Lemma zero_extend_mask_word sz sz' :
+  (sz ≤ sz')%CMP →
+  zero_extend sz (mask_word sz') = 0%R.
+Proof.
+Admitted.
+
+Lemma word_uincl_ze_mw sz sz' (w: word sz) (u: u64) :
+  (sz' ≤ sz)%CMP →
+  (sz' ≤ U64)%CMP →
+  word_uincl (zero_extend sz' w) (merge_word u w).
+Proof.
+move => hle hle'.
+by rewrite /word_uincl hle' /= /merge_word -wxor_zero_extend // zero_extend_idem // -wand_zero_extend // zero_extend_mask_word // (eqP (wand0 _)) (eqP (wxor0 _)).
+Qed.
+
 Lemma write_var_compile_var x y y0 m lom m1 rf :
   write_var x y m = ok m1 →
   value_uincl y y0 →
@@ -813,17 +828,20 @@ case: register_of_var (@var_of_register_of_var (Var ty x)) => [ r | ].
 - (* Register *)
   move => /(_ _ erefl) [? ?]; subst x ty .
   case => <- /= {rf}.
-  move: hwv; apply: set_varP => //= w ok_w <- {vm}.
-  have hy0 := value_uincl_word hvu ok_w.
-Print mem_write_reg.
-  subst y y0 => {hvu ok_w}.
+  move: hwv; apply: set_varP => //= w /to_pwordI [sz'] [w''] [?]; subst y => ok_w <- {vm}.
+  case: y0 hvu => // sz x /andP [hle /eqP ?]; subst w''.
   eexists; first by reflexivity.
   case: eqm => eqm eqr eqf.
   split => //=.
   + move => r' v; apply: on_vuP.
     * move => /= w' hw' <- {v}; move: hw'.
       rewrite ffunE; case: eqP.
-      - by move => ?; subst r'; rewrite Fv.setP_eq => -[<-].
+      - move => ?; subst r'; rewrite Fv.setP_eq => -[<-] /=.
+        case: Sumbool.sumbool_of_bool ok_w => /= hle'.
+        + move => -> {w} /=; exact: word_uincl_ze_mw.
+        case => u []. rewrite /truncate_word; case: ifP => // hle'' [<-] {u} -> {w} /=.
+        rewrite zero_extend_idem //; apply: word_uincl_ze_mw => //.
+        exact: (cmp_le_trans hle'' hle).
       move => ne ; rewrite Fv.setP_neq.
       - by move => hw'; apply: eqr; rewrite /get_var hw'.
       by apply/eqP => -[] k; have ?:= inj_string_of_register k; apply: ne.
@@ -845,7 +863,7 @@ move: hwv. apply: set_varP => /=.
   + move => r' v; apply: on_vuP.
     * move => /= w' hw' <- {v}; move: hw'.
       rewrite Fv.setP_neq => // h.
-      by have := eqr r' w'; rewrite /get_var /= h => /(_ erefl).
+      by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
     by move => _ [<-].
   move => f' v /=; rewrite /get_var /=; apply: on_vuP.
   + move => b' hb' <- {v}; move: hb'.
@@ -862,7 +880,7 @@ case: y0 hvu => // [ b | [] //] _; (eexists; first by reflexivity); split => //=
   + move => r' v; apply: on_vuP.
     * move => /= w' hw' <- {v}; move: hw'.
       rewrite Fv.setP_neq => // h.
-      by have := eqr r' w'; rewrite /get_var /= h => /(_ erefl).
+      by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
     by move => _ [<-].
   move => f' v /=; rewrite /get_var /=; apply: on_vuP.
   + move => b' hb' <- {v}; move: hb'.
@@ -875,7 +893,7 @@ case: y0 hvu => // [ b | [] //] _; (eexists; first by reflexivity); split => //=
   + move => r' v; apply: on_vuP.
     * move => /= w' hw' <- {v}; move: hw'.
       rewrite Fv.setP_neq => // h.
-      by have := eqr r' w'; rewrite /get_var /= h => /(_ erefl).
+      by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
     by move => _ [<-].
   move => f' v /=; rewrite /get_var /=; apply: on_vuP.
   + move => b' hb' <- {v}; move: hb'.
