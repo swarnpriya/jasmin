@@ -1365,7 +1365,7 @@ Ltac elim_div :=
       clear s2' Hw' Hs2'.
       rewrite /= in Hv'.
       move: Hv'; t_xrbindP=> b bv Hbv Hb v1 Hv1 v2 Hv2.
-      case: eqP => // hty' [?]; subst v.
+      case: eqP => // hty'; case: ifP => // _ [?]; subst v.
       have [s2' [Hs2'1 [Hs2'2 Hs2'3]]] := lower_condition_corr ii Hcond Hs1' Hbv.
       have [s3' [Hw' Hs3']] := write_lval_same Hdisjl Hs2'2 Hw.
       exists s3'; split=> //.

@@ -1366,7 +1366,8 @@ Module CBAreg.
     have [v2' [-> Hv2']] := Hs1 _ _ Hv2.
     have [v3' [-> Hv3']] := Hs2 _ _ Hv3.
     case: ifP => //=.
-    rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => -> [<-].
+    rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => ->.
+    case: andP => // - [] /(value_uincl_is_defined Hv2') -> /(value_uincl_is_defined Hv3') -> [<-].
     eexists;split;first by eauto.
     by case b.
   Qed.

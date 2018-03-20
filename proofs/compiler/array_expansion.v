@@ -267,7 +267,8 @@ Module CBEA.
     apply: rbindP=> v2 /He11 [] v2' [] -> Hv2'.
     apply: rbindP=> v3 /He12 [] v3' [] -> Hv3'.
     case: ifP => //=.
-    rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => -> [<-].
+    rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => ->.
+    case: andP => // - [] /(value_uincl_is_defined Hv2') -> /(value_uincl_is_defined Hv3') -> [<-].
     eexists;split;first by eauto.
     by case b.
   Qed.

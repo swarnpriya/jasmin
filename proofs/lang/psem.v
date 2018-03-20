@@ -192,7 +192,9 @@ Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
     Let v1 := sem_pexpr s e1 in
     Let v2 := sem_pexpr s e2 in
     if vundef_type (type_of_val v1) == vundef_type (type_of_val v2) then
+    if is_defined v1 && is_defined v2 then
       ok (if b then v1 else v2)
+    else undef_error
     else type_error
   end.
 
@@ -1120,6 +1122,12 @@ case: v1; case: v2 => //=; last (by move => s s'; rewrite -vundef_type_idem => -
   by move=> ??????? -> [->] [??];subst.
 Qed.
 
+Lemma value_uincl_is_defined x y :
+  value_uincl x y →
+  is_defined x →
+  is_defined y.
+Proof. by case: y => //=; case; case: x. Qed.
+
 Lemma word_uincl_zero_ext sz sz' (w':word sz') : (sz ≤ sz')%CMP -> word_uincl (zero_extend sz w') w'.
 Proof. by move=> ?;apply /andP. Qed.
 
@@ -1499,7 +1507,8 @@ Proof.
   move=> /value_uincl_bool -/(_ _ Hue') [??];subst wb ve' => /=.
   t_xrbindP => v2 /He1 [] v2' [] -> Hv2' v3 /He2 [] v3' [] -> Hv3'.
   case: ifP => //=.
-  rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => -> [<-].
+  rewrite (value_uincl_vundef_type_eq Hv2') (value_uincl_vundef_type_eq Hv3') => ->.
+  case: andP => // - [] /(value_uincl_is_defined Hv2') -> /(value_uincl_is_defined Hv3') -> [<-].
   eexists;split;first by eauto.
   by case b.
 Qed.

@@ -417,6 +417,9 @@ Definition get_global gd g : exec value :=
   then ok (Vword v)
   else type_error.
 
+Definition is_defined (v: value) : bool :=
+  if v is Vundef _ then false else true.
+
 Section SEM_PEXPR.
 
 Context (gd: glob_defs).
@@ -451,8 +454,10 @@ Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
     Let b := sem_pexpr s e >>= to_bool in
     Let v1 := sem_pexpr s e1 in
     Let v2 := sem_pexpr s e2 in
-    if (type_of_val v1) == (type_of_val v2) then
+    if type_of_val v1 == type_of_val v2 then
+    if is_defined v1 && is_defined v2 then
       ok (if b then v1 else v2)
+    else undef_error
     else type_error
   end.
 
