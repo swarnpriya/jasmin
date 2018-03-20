@@ -75,12 +75,12 @@ Module S.
     sem_i s1 (Copn xs t o es) s2
 
   | Eif_true s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e= ok (Vbool true) ->
+    sem_pexpr gd s1 e = ok (Vbool true) ->
     sem s1 c1 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
   | Eif_false s1 s2 e c1 c2 :
-    sem_pexpr gd s1 = ok (Vbool false) ->
+    sem_pexpr gd s1 e = ok (Vbool false) ->
     sem s1 c2 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
