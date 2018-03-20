@@ -630,6 +630,22 @@ case: ty v => [ | | s n | s ] [] //; try by case.
 by case => // sz'; rewrite /truncate_val /=; case: ifP.
 Qed.
 
+Lemma truncate_val_int ty (z: Z) v :
+  truncate_val ty z = ok v →
+  ty = sint ∧ v = z.
+Proof. by case: ty => // - []. Qed.
+
+Lemma truncate_val_word ty sz (w: word sz) v :
+  truncate_val ty (Vword w) = ok v →
+  ∃ sz',
+    [/\
+    ty = sword sz',
+    (sz' ≤ sz)%CMP &
+    v = Vword (zero_extend sz' w) ].
+Proof.
+by case: ty => // sz'; apply: rbindP => w' /truncate_wordP [] hle -> [<-]; exists sz'.
+Qed.
+
 Lemma truncate_pto_val ty v v':
   truncate_val ty (@pto_val ty v) = ok v' →
   v' = pto_val v.

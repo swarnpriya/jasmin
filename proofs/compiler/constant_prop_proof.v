@@ -591,10 +591,11 @@ Proof.
     rewrite /= hw1 hw2 /=.
     by apply: vuincl_sem_sop2 h.
   t_xrbindP => b vb /He [wb] [hwb] /value_uincl_bool h /h {h} [??]; subst.
-  move => v1 /He1 [w1] [hw1 hvw1] v2 /He2 [w2] [hw2 hvw2]; case: ifP => // h [<-].
+  move => v1 /He1 [w1] [hw1 hvw1] v2 /He2 [w2] [hw2 hvw2].
+  case: ifP => // h; case: andP => // - [] /(value_uincl_is_defined hvw1) hd1 /(value_uincl_is_defined hvw2) hd2 [<-].
   rewrite /s_if. case: is_boolP hwb => [ [] | ] /=; try by case => <-; eauto.
   move => p -> /=; rewrite hw1 hw2 /=.
-  rewrite -(value_uincl_vundef_type_eq hvw1) -(value_uincl_vundef_type_eq hvw2) h.
+  rewrite -(value_uincl_vundef_type_eq hvw1) -(value_uincl_vundef_type_eq hvw2) h hd1 hd2 /=.
   by case: b; eauto.
 Qed.
 
@@ -623,24 +624,33 @@ Proof.
   by case: ifP => //= _ ? [<-] [<-] /=;rewrite /get_var /= Fv.setP_neq.
 Qed.
 
-Lemma add_cpmP s1 s1' m x e tag v : 
+Lemma add_cpmP s1 s1' m x e tag ty v v' :
   sem_pexpr gd s1 e = ok v ->
-  write_lval gd x v s1 = ok s1' ->
+  truncate_val ty v = ok v' ->
+  write_lval gd x v' s1 = ok s1' ->
   valid_cpm (evm s1') m -> 
-  valid_cpm (evm s1') (add_cpm m x tag e).
+  valid_cpm (evm s1') (add_cpm m x tag ty e).
 Proof.
   rewrite /add_cpm;case: x => [xi | x | x | x] //= He.
   case: tag => //.
   case: e He => // [ n | sz [] //= p ] [<-].
-  + case: x => -[] [] //= xn vi [] <- /= Hv z /= n0.
+  + case/truncate_val_int => ??; subst.
+    case: x => -[] [] //= xn vi [] <- /= Hv z /= n0.
     have := Hv z n0.
     case: ({| vtype := sint; vname := xn |} =P z).
     + move=> <- /=;rewrite Mvar.setP_eq=> ? -[] <-;by rewrite /get_var Fv.setP_eq.
     by move=> /eqP Hneq;rewrite Mvar.setP_neq.
-  case: x => -[] [] //= sz' xn vi [] <- /= Hv z /= n0.
-  have := Hv z n0.
-  case: ({| vtype := sword sz'; vname := xn |} =P z).
-  + move=> <- /=; rewrite Mvar.setP_eq=> ? -[] <-;by rewrite /get_var Fv.setP_eq.
+  case/truncate_val_word => szw [] -> hle -> /=.
+  rewrite zero_extend_wrepr //.
+  case: x => -[] [] //= szx xn vi; apply: rbindP => vm.
+  apply: set_varP => //= w' h <- [<-] /= Hv z /= n.
+  have := Hv z n.
+  case: ({| vtype := sword szx; vname := xn |} =P z).
+  + move=> <- /=; rewrite Mvar.setP_eq=> ? -[] <-; rewrite /get_var Fv.setP_eq /=.
+    f_equal.
+    case: Sumbool.sumbool_of_bool h => /= hlt; rewrite hlt.
+    * by move => [<-] /=.
+    by t_xrbindP => w'' /truncate_wordP [] hle' -> <- /=.
   by move=> /eqP Hneq;rewrite Mvar.setP_neq.
 Qed.
 
@@ -665,10 +675,12 @@ Proof.
   + by move=> H;split=>//;apply: remove_cpm1P H Hv.
   + apply: rbindP => z Hz;rewrite Hz /=.
     apply: rbindP => z'.
-    apply: rbindP => z'' /(@const_prop_eP p _ _ Hv) -> /= -> /=.
+    apply: rbindP => z'' /(@const_prop_eP p _ _ Hv) [] z3 [] -> /=.
+    rewrite /to_pointer => /value_uincl_word h /h {h} ->.
     by apply: rbindP => w -> /=;apply: rbindP => m' -> [<-].
   apply: on_arr_varP;rewrite /on_arr_var => ? n t Htx -> /=.
-  apply: rbindP => z;apply: rbindP => z'' /(@const_prop_eP p _ _ Hv) -> /= -> /=.
+  apply: rbindP => z;apply: rbindP => z'' /(@const_prop_eP p _ _ Hv) [] z3 [] ->.
+  move => /value_uincl_int h /h {h} [] ??; subst.
   apply: rbindP => w -> /=;apply: rbindP => t' -> /=.
   apply: rbindP => vm Hvm [<-];rewrite Hvm;split=>//=.
   have H : write_var x (Varr t') s1 = ok (Estate (emem s1) vm) by rewrite /write_var Hvm.
