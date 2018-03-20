@@ -526,6 +526,24 @@ Proof.
   by move=> hle;rewrite [X in (zero_extend _ X) = _]/zero_extend zero_extend_wrepr.
 Qed.
 
+Lemma wand_zero_extend sz sz' (x y: word sz') :
+  (sz ≤ sz')%CMP →
+  wand (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wand x y).
+Proof.
+Admitted.
+
+Lemma wxor_zero_extend sz sz' (x y: word sz') :
+  (sz ≤ sz')%CMP →
+  wxor (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wxor x y).
+Proof.
+Admitted.
+
+Lemma wand0 sz (x: word sz) : wand 0 x == 0%R.
+Proof. done. Qed.
+
+Lemma wxor0 sz (x: word sz) : wxor 0 x == x.
+Proof. by apply/eq_from_wbit. Qed.
+
 (* -------------------------------------------------------------------*)
 
 Ltac wring := 
