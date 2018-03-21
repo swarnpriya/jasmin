@@ -132,6 +132,13 @@ Definition ok_inj {E A} (a a': A) (H: Ok E a = ok a') : a = a' :=
 Definition Error_inj {E A} (a a': E) (H: @Error E A a = Error a') : a = a' :=
   let 'Logic.eq_refl := H in Logic.eq_refl.
 
+Definition assert E (b: bool) (e: E) : result E unit :=
+  if b then ok tt else Error e.
+
+Lemma assertP E b e u :
+  @assert E b e = ok u → b.
+Proof. by case: b. Qed.
+
 Variant error :=
  | ErrOob | ErrAddrUndef | ErrAddrInvalid | ErrStack | ErrType.
 

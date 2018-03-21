@@ -582,6 +582,7 @@ Definition vbools bs : exec values := ok (List.map Vbool bs).
 
 (* -------------------------------------------------------------------- *)
 Definition x86_MOV sz (x: word sz) : exec values :=
+  Let _ := assert (sz ≤ U64)%CMP ErrType in
   ok [:: Vword x].
 
 Definition x86_add {sz} (v1 v2 : word sz) :=
