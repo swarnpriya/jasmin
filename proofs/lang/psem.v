@@ -584,6 +584,11 @@ Definition Vword_inj sz sz' w w' (e: @Vword sz w = @Vword sz' w') :
   ∃ e : sz = sz', eq_rect sz (λ s, (word s)) w sz' e = w' :=
   let 'Logic.eq_refl := e in (ex_intro _ erefl erefl).
 
+Lemma ok_word_inj E sz sz' w w' :
+  ok (@Vword sz w) = Ok E (@Vword sz' w') →
+  ∃ e : sz = sz', eq_rect sz word w sz' e = w'.
+Proof. by move => h; have /Vword_inj := ok_inj h. Qed.
+
 Lemma truncate_val_subtype ty v v' :
   truncate_val ty v = ok v' →
   subtype ty (type_of_val v).
