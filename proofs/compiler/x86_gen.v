@@ -11,8 +11,6 @@ Unset Printing Implicit Defensive.
 Definition assemble_i (i: linstr) : ciexec asm :=
   let '{| li_ii := ii ; li_i := ir |} := i in
   match ir with
-  | Lassgn d _ e => assemble_sopn ii [:: d] Ox86_MOV [:: e ]
-
   | Lopn ds op es => assemble_sopn ii ds op es
 
   | Llabel lbl => ciok (LABEL lbl)

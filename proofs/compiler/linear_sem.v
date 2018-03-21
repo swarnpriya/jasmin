@@ -31,7 +31,7 @@ From mathcomp Require Import all_ssreflect.
 Require Import ZArith Utf8.
         Import Relations.
 Require oseq.
-Require Import sem compiler_util stack_alloc stack_sem linear.
+Require Import psem compiler_util stack_alloc stack_sem linear.
 
 Import Memory.
 
@@ -77,10 +77,6 @@ Context (gd: glob_defs).
 
 Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
   match li_i i with
-  | Lassgn x _ e =>
-    Let v := sem_pexpr gd (to_estate s1) e in
-    Let s2 := write_lval gd x v (to_estate s1) in
-    ok (of_estate s2 s1.(lc) s1.(lpc).+1)
   | Lopn xs o es =>
     Let s2 := sem_sopn gd o (to_estate s1) xs es in
     ok (of_estate s2 s1.(lc) s1.(lpc).+1)

@@ -23,13 +23,11 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ----------------------------------------------------------------------- *)
 
-(* * Prove properties about semantics of dmasm input language *)
-
 (* ** Imports and settings *)
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat ssrint ssralg.
 From mathcomp Require Import choice fintype eqtype div seq zmodp finset.
 Require Import Coq.Logic.Eqdep_dec.
-Require Import strings word utils type var expr low_memory sem stack_alloc.
+Require Import strings word utils type var expr low_memory psem stack_alloc.
 
 Require Import compiler_util.
 Require Import ZArith.
@@ -115,5 +113,55 @@ Module S.
     sem_call m1 fn vargs m2 vres.
 
   End SEM.
+
+  Lemma semE p gd s1 c s2 :
+    sem p gd s1 c s2 ->
+    match c with
+    | [::] => s2 = s1
+    | i :: c' => exists si, sem_I p gd s1 i si /\ sem p gd si c' s2
+    end.
+  Proof. case; eauto. Qed.
+
+  Lemma sem_IE p gd s1 i s2 :
+    sem_I p gd s1 i s2 ->
+    let 'MkI _ r := i in
+    sem_i p gd s1 r s2.
+  Proof. by case. Qed.
+
+  Lemma sem_iE p gd s1 i s2 :
+    sem_i p gd s1 i s2 ->
+    match i with
+    | Cassgn x _ ty e =>
+      exists v v',
+      [/\ sem_pexpr gd s1 e = ok v,
+       truncate_val ty v = ok v' &
+       write_lval gd x v' s1 = ok s2]
+    | Copn xs _ op es => sem_sopn gd op s1 xs es = ok s2
+    | Cif e c1 c2 =>
+      exists b,
+      sem_pexpr gd s1 e = ok (Vbool b) /\
+      sem p gd s1 (if b then c1 else c2) s2
+    | Cfor _ _ _ => False
+    | Cwhile c1 e c2 =>
+      exists si b,
+      sem p gd s1 c1 si /\
+      sem_pexpr gd si e = ok (Vbool b) /\
+      if b then (exists sj, sem p gd si c2 sj /\ sem_i p gd sj (Cwhile c1 e c2) s2) else si = s2
+    | Ccall _ xs fn es =>
+      exists vs m2 rs,
+      [/\ sem_pexprs gd s1 es = ok vs,
+          sem_call p gd (emem s1) fn vs m2 rs &
+          write_lvals gd {| emem := m2 ; evm := evm s1 |} xs rs = ok s2 ]
+    end.
+  Proof.
+    case => // {s1 s2 i} s1 s2.
+    - by move => x _ ty e v v' ? ? ?; exists v, v'.
+    - by move => e c1 c2 ? ?; exists true.
+    - by move => e c1 c2 ? ?; exists false.
+    - by move => s3 s4 c1 e c2 ? ? ? ?; exists s2, true; eauto.
+    - by move => c1 e c2 ? ?; exists s2, false; eauto.
+    by move => s _ xs fn es vs rs ? ? ?; exists vs, s2, rs.
+  Qed.
+
 End S.
 
