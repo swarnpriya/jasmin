@@ -25,7 +25,7 @@
 
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
-Require Import sem compiler_util inline_proof.
+Require Import psem compiler_util inline_proof.
 Require Export dead_code.
 Import Utf8.
 
@@ -142,22 +142,23 @@ Section PROOF.
     exists x i1 i2, r = (Lvar (VarI x i1)) /\ e = (Pvar(VarI x i2)).
   Proof. by case: r e => //= -[x1 i1] [] //= -[x2 i2] /= /eqP <-;exists x1, i1, i2. Qed.
 
-  Local Lemma Hassgn_aux ii m1 vm1 m2 vm2 v x tag e s2:
+  Local Lemma Hassgn_aux ii m1 vm1 m2 vm2 v v' x tag ty e s2:
     sem_pexpr gd {| emem := m1; evm := vm1 |} e = ok v ->
-    write_lval gd x v {| emem := m1; evm := vm1 |} = ok {| emem := m2; evm := vm2 |} ->
+    truncate_val ty v = ok v' ->
+    write_lval gd x v' {| emem := m1; evm := vm1 |} = ok {| emem := m2; evm := vm2 |} ->
     wf_vm vm1 → 
     ∀ vm1' : vmap,
-      vm1 =[read_rv_rec (read_e_rec (Sv.diff s2 (write_i (Cassgn x tag e))) e) x]  vm1' → 
+      vm1 =[read_rv_rec (read_e_rec (Sv.diff s2 (write_i (Cassgn x tag ty e))) e) x]  vm1' →
       ∃ vm2' : vmap, vm2 =[s2]  vm2'
-        ∧ sem p' gd {| emem := m1; evm := vm1' |} [:: MkI ii (Cassgn x tag e)]
+        ∧ sem p' gd {| emem := m1; evm := vm1' |} [:: MkI ii (Cassgn x tag ty e)]
                     {| emem := m2; evm := vm2' |}.
   Proof.
-    move=> Hv Hw Hwf vm1' Hvm.
+    move=> Hv Hv' Hw Hwf vm1' Hvm.
     rewrite write_i_assgn in Hvm.
     move: Hvm; rewrite read_rvE read_eE=> Hvm.
     have [|vm2' [Hvm2 Hw2]] := write_lval_eq_on _ Hw Hvm; first by SvD.fsetdec.
     exists vm2'; split;first by apply: eq_onI Hvm2; SvD.fsetdec.
-    apply: sem_seq1; constructor; constructor.
+    apply: sem_seq1; constructor; econstructor; eauto.
     rewrite (@read_e_eq_on gd Sv.empty vm1 vm1') ?Hv // read_eE.
     by apply: eq_onS; apply: eq_onI Hvm; SvD.fsetdec.
   Qed.
