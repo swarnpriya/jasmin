@@ -537,12 +537,6 @@ case: CEDecStype.pos_dec => // ?; subst.
 by case => ->.
 Qed.
 
-Lemma on_vuP T R (fv: T -> R) (fu: exec R) (v:exec T) r P0:
-  (forall t, v = ok t -> fv t = r -> P0) ->
-  (v = Error ErrAddrUndef -> fu = ok r -> P0) ->
-  on_vu fv fu v = ok r -> P0.
-Proof. by case: v => [a | []] Hfv Hfu //=;[case; apply: Hfv | apply Hfu]. Qed.
-
 Lemma set_varP (m m':vmap) x v P0 :
    (forall t, pof_val (vtype x) v = ok t -> m.[x <- ok t]%vmap = m' -> P0) ->
    ( ~~is_sword x.(vtype)  ->
