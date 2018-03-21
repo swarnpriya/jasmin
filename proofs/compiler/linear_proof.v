@@ -80,7 +80,7 @@ Section CAT.
   Qed.
 
   Let Hassgn : forall x tg ty e, Pr (Cassgn x tg ty e).
-  Proof. by move => x tg []. Qed.
+  Proof. by move => x tg [] // sz e ii lbl c /=; case: assert. Qed.
 
   Let Hopn : forall xs t o es, Pr (Copn xs t o es).
   Proof. by []. Qed.
@@ -462,11 +462,11 @@ Section PROOF.
     
   Let Hassgn : forall x tag ty e, Pi_r (Cassgn x tag ty e).
   Proof.
-    move=> x tag [] // sz e ii lbl lbl' l' [] <- <-; rewrite Pos.leb_refl; split => //.
+    move=> x tag [] // sz e ii lbl lbl' l' /=; apply: rbindP => // ? h; have := assertP h => {h} hsz [] <- <-; rewrite Pos.leb_refl; split => //.
     move => -[m1 vm1] s2 /S.sem_iE [v] [v'] [ok_v].
     apply: rbindP => w /of_val_word [sz'] [w'] [hle ? ?]; subst v w => - [<-] {v'} ok_s2.
     apply: LSem_step.
-    by rewrite /lsem1 /step /= /eval_instr /= !to_of_estate /sem_sopn /sem_pexprs /= ok_v /= /truncate_word hle /= ok_s2.
+    by rewrite /lsem1 /step /= /eval_instr /= !to_of_estate /sem_sopn /sem_pexprs /= ok_v /= /truncate_word hle /x86_MOV hsz /= ok_s2.
   Qed.
 
   Let Hopn : forall xs t o es, Pi_r (Copn xs t o es).

@@ -353,13 +353,14 @@ Definition is_lea sz x e :=
 (* -------------------------------------------------------------------- *)
 
 Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
-  let k sz r := if sz == sz' then r else LowerAssgn in
+  let chk (b: bool) r := if b then r else LowerAssgn in
+  let k sz := chk (sz == sz') in
   match e with
-  | Pcast _ (Pconst _) => LowerMov false
+  | Pcast sz (Pconst _) => chk (sz ≤ U64)%CMP (LowerMov false)
   | Pget ({| v_var := {| vtype := sword sz |} |} as v) _
   | Pvar ({| v_var := {| vtype := sword sz |} |} as v) =>
-    LowerMov (if is_var_in_memory v then is_lval_in_memory x else false)
-  | Pload sz _ _ => LowerMov (is_lval_in_memory x)
+    chk (sz ≤ U64)%CMP (LowerMov (if is_var_in_memory v then is_lval_in_memory x else false))
+  | Pload sz _ _ => chk (sz ≤ U64)%CMP (LowerMov (is_lval_in_memory x))
 
   | Papp1 (Olnot sz) a => k sz (LowerCopn (Ox86_NOT sz) a)
   | Papp1 (Oneg (Op_w sz)) a => k sz (LowerFopn (Ox86_NEG sz) [:: a] 0)
@@ -539,6 +540,8 @@ Definition lower_addcarry sz (sub: bool) (xs: lvals) tg (es: pexprs) : seq instr
   end.
 
 Definition lower_mulu sz (xs: lvals) tg (es: pexprs) : seq instr_r :=
+  (* TODO: is multiplication of large values (above 64 bits) possible? *)
+  if (sz ≤ U64)%CMP then
   match xs, es with
   | [:: r1; r2 ], [:: x ; y ] =>
     let vi := var_info_of_lval r2 in
@@ -557,7 +560,8 @@ Definition lower_mulu sz (xs: lvals) tg (es: pexprs) : seq instr_r :=
     | None => [:: Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86_MUL sz) es ]
     end end
   | _, _ => [:: Copn xs tg (Omulu sz) es ]
-  end.
+  end
+  else [:: Copn xs tg (Omulu sz) es ].
 
 Definition lower_copn (xs: lvals) tg (op: sopn) (es: pexprs) : seq instr_r :=
   match op with

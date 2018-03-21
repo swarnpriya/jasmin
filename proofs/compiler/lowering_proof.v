@@ -958,7 +958,7 @@ Ltac elim_div :=
       (Hw: write_lval gd l v' s = ok s'):
     match lower_cassgn_classify is_var_in_memory (wsize_of_stype ty) e l with
     | LowerMov _ =>
-      ∃ sz' (w : word sz'), v = Vword w
+      ∃ sz' (w : word sz'), (sz' ≤ U64)%CMP ∧ v = Vword w
     | LowerCopn o a =>
       sem_pexprs gd s [:: a] >>= exec_sopn o = ok [:: v' ]
     | LowerInc o a =>
@@ -987,15 +987,18 @@ Ltac elim_div :=
     rewrite /lower_cassgn_classify.
     move: e Hs=> [z|b|sz e|x| g |x e|sz x e|o e|o e1 e2|e e1 e2] //.
     + move: e=> [z'|b'|sz' e'|x'| g' |x' e'|sz' x' e'|o' e'|o' e1' e2'|e' e1' e2'] //.
-      by case => <-; eauto.
+      by case: ifP => // ? [<-]; eauto.
     + case: x => - [] [] // sz vn vi /= /type_of_get_var [sz'] [Hs Hs'].
       have := truncate_val_subtype Hv'. rewrite Hs -(truncate_val_has_type Hv').
       case hty: (type_of_val v') => [ | | | sz'' ] //= hle.
-      case: (write_lval_undef Hw hty) => w ?; subst v'.
+      case: (write_lval_undef Hw hty) => w ? {hty}; subst v'.
       have := truncate_val_wordI Hv'.
-      by case => ? [] ? []; eauto.
+      case => s'' [w''] [? _]; subst.
+      case: Hs => ?; subst.
+      case: ifP => // h; exists sz', w''; split => //.
+      exact: (cmp_le_trans Hs').
     + by case: x => - [] [] // sz vn vi /=; apply: on_arr_varP=> sz' n t.
-    + by rewrite /=; t_xrbindP => ???????? w _<-; eauto.
+    + by rewrite /=; t_xrbindP => ???????? w _<-; case: ifP => // ?; eauto.
     + move: o=> [] //.
       (* Olnot *)
       + move=> sz /sem_op1_w_dec [sz' [z [Hsz Hv Hz]]].
@@ -1262,8 +1265,9 @@ Ltac elim_div :=
     have := lower_cassgn_classifyP Hv' hty Hw'.
     case: (lower_cassgn_classify is_var_in_memory _ e l).
     (* LowerMov *)
-    + move=> b [sz'] [vw Hvw]; subst v.
+    + move=> b [sz'] [vw] [Hsz' Hvw]; subst v.
       case: ty hty => //= tw; rewrite /truncate_val /=; apply: rbindP => w /truncate_wordP [] hle -> {w} [?]; subst v'.
+      have hle' : (tw ≤ U64)%CMP := cmp_le_trans hle Hsz'.
       case: b.
       * set ℓ := {|
                   emem := emem s1';
@@ -1273,13 +1277,13 @@ Ltac elim_div :=
         case: (write_lval_same Hdisjl dℓ Hw') => ℓ' [ hℓ' dℓ' ].
         eexists; split.
           repeat econstructor.
-            by rewrite /sem_sopn /sem_pexprs /= Hv' /= /truncate_word hle /= /write_var /set_var /= sumbool_of_boolET.
-          by rewrite /sem_sopn /sem_pexprs/= /get_var Fv.setP_eq /= /truncate_word cmp_le_refl /= zero_extend_u /= -/ℓ hℓ'.
+            by rewrite /sem_sopn /sem_pexprs /= Hv' /= /truncate_word hle /= /x86_MOV hle' /= /write_var /set_var /= sumbool_of_boolET.
+          by rewrite /sem_sopn /sem_pexprs/= /get_var Fv.setP_eq /= /truncate_word cmp_le_refl /= /x86_MOV hle' /= zero_extend_u /= -/ℓ hℓ'.
         by eauto using eq_exc_freshT.
       * exists s2'; split=> //.
         case: ifP => [/andP [] /andP [] /eqP ???| _ ];first last.
         - apply: sem_seq1; apply: EmkI; apply: Eopn.
-          by rewrite /sem_sopn /= /sem_pexprs /= Hv' /= /truncate_word hle /= Hw'.
+          by rewrite /sem_sopn /= /sem_pexprs /= Hv' /= /truncate_word hle /= /x86_MOV hle' /= Hw'.
         subst e;apply: sem_seq1; apply: EmkI; apply: Eopn.
         case/Vword_inj: (ok_inj Hv') => ?; subst => /= ?; subst.
         by rewrite /sem_sopn /sem_pexprs /= Hw'.
@@ -1644,9 +1648,9 @@ Ltac elim_div :=
     apply: rbindP=> v; apply: rbindP=> x Hx Hv Hw ii Hdisj s1' Hs1'.
     move: Hdisj; rewrite /disj_fvars /lowering.disj_fvars vars_I_opn=> /disj_fvars_union [Hdisjl Hdisje].
     have Hx' := sem_pexprs_same Hdisje Hs1' Hx; have [s2' [Hw' Hs2']] := write_lvals_same Hdisjl Hs1' Hw.
-    case: o Hv; (move => sz Hv || move => Hv); try (
-      exists s2'; split=> //; apply: sem_seq1; apply: EmkI; apply: Eopn;
-      rewrite /sem_sopn Hx' /=; rewrite /= in Hv; by rewrite Hv).
+    have default : ∃ s2' : estate, sem p' gd s1' [:: MkI ii (Copn xs t o es)] s2' ∧ eq_exc_fresh s2' s2.
+    + by exists s2'; split=> //; apply: sem_seq1; apply: EmkI; apply: Eopn; rewrite /sem_sopn Hx' /=; rewrite /= in Hv; by rewrite Hv.
+    case: o Hv default => //; (move => sz Hv default || move => Hv default).
     (* Omulu *)
     + case/app_ww_dec: Hv => sz1 [w1 [sz2 [w2 [hsz1 [hsz2 [? [?]]]]]]]; subst x v.
       move=> {Hx Hw}.
@@ -1654,6 +1658,7 @@ Ltac elim_div :=
       have [e1 [e2 ?]] := sem_pexprs_dec2_s Hx'; subst es.
       rewrite /=.
       have [He1 He2] := sem_pexprs_dec2 Hx'.
+      rewrite /lower_mulu; case: ifP => // hsz.
       have := @is_wconstP gd s1' sz e1; case: is_wconst => [ n1 | _ ].
       + move => /(_ _ erefl) /=; rewrite He1 /= /truncate_word hsz1 => - [?]; subst n1.
         set s2'' := {| emem := emem s1'; evm := (evm s1').[vword sz (fv.(fresh_multiplicand) sz) <- ok (pword_of_word (zero_extend _ w1)) ] |}.
@@ -1671,7 +1676,7 @@ Ltac elim_div :=
         eexists; split.
         + apply: Eseq.
           + apply: EmkI; apply: Eopn; eauto.
-            rewrite /sem_sopn /sem_pexprs /= He1 /= /truncate_word hsz1 /=.
+            rewrite /sem_sopn /sem_pexprs /= He1 /= /truncate_word hsz1 /= /x86_MOV hsz /=.
             by rewrite /write_var /set_var /= sumbool_of_boolET.
           + apply: sem_seq1; apply: EmkI; apply: Eopn=> /=.
             rewrite /= /read_es /= in Hdisje.
@@ -1694,7 +1699,7 @@ Ltac elim_div :=
         eexists; split.
         + apply: Eseq.
           + apply: EmkI; apply: Eopn; eauto.
-            rewrite /sem_sopn /sem_pexprs /= He2 /= /truncate_word hsz2 /=.
+            rewrite /sem_sopn /sem_pexprs /= He2 /= /truncate_word hsz2 /= /x86_MOV hsz /=.
             by rewrite /write_var /set_var /= sumbool_of_boolET.
           + apply: sem_seq1; apply: EmkI; apply: Eopn=> /=.
             rewrite /= /read_es /= in Hdisje.
