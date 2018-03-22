@@ -1,4 +1,3 @@
-(* * Utility definition for dmasm *)
 (* ** License
  * -----------------------------------------------------------------------
  * Copyright 2016--2017 IMDEA Software Institute
@@ -306,6 +305,39 @@ Section MAP2.
   
 End MAP2.
 
+(* Inversion lemmas *)
+(* -------------------------------------------------------------- *)
+Lemma seq_eq_injL A (m n: seq A) (h: m = n) :
+  match m with
+  | [::] => if n is [::] then True else False
+  | a :: m' => if n is b :: n' then a = b ∧ m' = n' else False
+  end.
+Proof. by subst n; case: m. Qed.
+
+Lemma List_Forall_inv A (P: A → Prop) m :
+  List.Forall P m →
+  match m with [::] => True | x :: m' => P x ∧ List.Forall P m' end.
+Proof. by case. Qed.
+
+Lemma List_Forall2_refl A (R:A->A->Prop) l : (forall a, R a a) -> List.Forall2 R l l.
+Proof. by move=> HR;elim: l => // a l Hrec;constructor. Qed.
+
+Lemma List_Forall2_inv_l A B (R: A → B → Prop) m n :
+  List.Forall2 R m n →
+  match m with
+  | [::] => n = [::]
+  | a :: m' => ∃ b n', n = b :: n' ∧ R a b ∧ List.Forall2 R m' n'
+  end.
+Proof. case; eauto. Qed.
+
+Lemma List_Forall2_inv_r A B (R: A → B → Prop) m n :
+  List.Forall2 R m n →
+  match n with
+  | [::] => m = [::]
+  | b :: n' => ∃ a m', m = a :: m' ∧ R a b ∧ List.Forall2 R m' n'
+  end.
+Proof. case; eauto. Qed.
+
 Section All2.
 
   Variable A B:Type.
@@ -321,10 +353,12 @@ Section All2.
   Lemma all2P l1 l2 : reflect (List.Forall2 f l1 l2) (all2 l1 l2).
   Proof.
     elim: l1 l2 => [ | a l1 hrec] [ | b l2] /=;try constructor.
-    + by constructor. + by move=> h;inversion h. + by move=> h;inversion h.
+    + by constructor.
+    + by move/List_Forall2_inv_l.
+    + by move/List_Forall2_inv_r.
     apply: equivP;first apply /andP.
-    split => [[]h1 /hrec h2 | h];first by constructor.
-    by inversion_clear h;split=>//; apply /hrec.
+    split => [[]h1 /hrec h2 |];first by constructor.
+    by case/List_Forall2_inv_l => b' [n] [] [-> ->] [->] /hrec.
   Qed.
 
 End All2.
@@ -363,39 +397,16 @@ Definition req eT aT (f : aT -> aT -> Prop) (o1 o2 : result eT aT) :=
   | _ ,       _      => false
   end.
 
-Lemma List_Forall_inv A (P: A → Prop) m :
-  List.Forall P m →
-  match m with [::] => True | x :: m' => P x ∧ List.Forall P m' end.
-Proof. by case. Qed.
-
-Lemma List_Forall2_refl A (R:A->A->Prop) l : (forall a, R a a) -> List.Forall2 R l l.
-Proof. by move=> HR;elim: l => // a l Hrec;constructor. Qed.
-
-Lemma List_Forall2_inv_l A B (R: A → B → Prop) m n :
-  List.Forall2 R m n →
-  match m with
-  | [::] => n = [::]
-  | a :: m' => ∃ b n', n = b :: n' ∧ R a b ∧ List.Forall2 R m' n'
-  end.
-Proof. case; eauto. Qed.
-
-Lemma List_Forall2_inv_r A B (R: A → B → Prop) m n :
-  List.Forall2 R m n →
-  match n with
-  | [::] => m = [::]
-  | b :: n' => ∃ a m', m = a :: m' ∧ R a b ∧ List.Forall2 R m' n'
-  end.
-Proof. case; eauto. Qed.
-
-Lemma Forall2_trans (A B C:Type) l2 (R1:A->B->Prop) (R2:B->C->Prop) 
+Lemma Forall2_trans (A B C:Type) l2 (R1:A->B->Prop) (R2:B->C->Prop)
                     l1 l3 (R3:A->C->Prop)  : 
    (forall b a c, R1 a b -> R2 b c -> R3 a c) ->
    List.Forall2 R1 l1 l2 ->
    List.Forall2 R2 l2 l3 ->
    List.Forall2 R3 l1 l3.
 Proof.
-  move=> H hr1;elim: hr1 l3 => {l1 l2} [ | a b l1 l2 hr1 _ hrec] l3 h;
-    inversion h;constructor;eauto.
+  move=> H hr1;elim: hr1 l3 => {l1 l2} [ | a b l1 l2 hr1 _ hrec] l3 /List_Forall2_inv_l.
+  + by move => ->.
+   by case => ? [?] [->] [??]; constructor; eauto.
 Qed.
 
 (* -------------------------------------------------------------------------- *)

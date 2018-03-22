@@ -958,14 +958,6 @@ Ltac elim_div :=
     case: andP => // - [] /andP [] ? _ _ [<-] //=.
   Qed.
 
-  (* TODO: move *)
-  Lemma seq_eq_injL A (m n: seq A) (h: m = n) :
-    match m with
-    | [::] => if n is [::] then True else False
-    | a :: m' => if n is b :: n' then a = b ∧ m' = n' else False
-    end.
-  Proof. by subst n; case: m. Qed.
-
   Lemma lower_cassgn_classifyP e l s s' v ty v' (Hs: sem_pexpr gd s e = ok v)
       (Hv': truncate_val ty v = ok v')
       (Hw: write_lval gd l v' s = ok s'):
