@@ -582,22 +582,25 @@ Definition vbools bs : exec values := ok (List.map Vbool bs).
 
 (* -------------------------------------------------------------------- *)
 Definition x86_MOV sz (x: word sz) : exec values :=
-  Let _ := assert (sz ≤ U64)%CMP ErrType in
+  Let _ := check_size_8_64 sz in
   ok [:: Vword x].
 
 Definition x86_add {sz} (v1 v2 : word sz) :=
+  Let _ := check_size_8_64 sz in
   rflags_of_aluop_w
     (v1 + v2)%R
     (wunsigned v1 + wunsigned v2)%Z
     (wsigned   v1 + wsigned   v2)%Z.
 
 Definition x86_sub {sz} (v1 v2 : word sz) :=
+  Let _ := check_size_8_64 sz in
   rflags_of_aluop_w
     (v1 - v2)%R
     (wunsigned v1 - wunsigned v2)%Z
     (wsigned   v1 - wsigned   v2)%Z.
 
 Definition x86_mul {sz} (v1 v2: word sz): exec values :=
+  Let _  := check_size_16_64 sz in
   let lo := (v1 * v2)%R in
   let hi := wmulhu v1 v2 in
   let ov := wdwordu hi lo in
@@ -605,6 +608,7 @@ Definition x86_mul {sz} (v1 v2: word sz): exec values :=
   ok (rflags_of_mul ov ++ [::Vword hi; Vword lo]).
 
 Definition x86_imul {sz} (v1 v2: word sz) : exec values:=
+  Let _  := check_size_16_64 sz in
   let lo := (v1 * v2)%R in
   let hi := wmulhs v1 v2 in
   let ov := wdwords hi lo in
@@ -612,6 +616,7 @@ Definition x86_imul {sz} (v1 v2: word sz) : exec values:=
   ok (rflags_of_mul ov ++ [::Vword hi; Vword lo]).
 
 Definition x86_imult {sz} (v1 v2: word sz) : exec values:=
+  Let _  := check_size_16_64 sz in
   let lo := (v1 * v2)%R in
   let hi := wmulhs v1 v2 in
   let ov := wdwords hi lo in
@@ -619,6 +624,7 @@ Definition x86_imult {sz} (v1 v2: word sz) : exec values:=
   ok (rflags_of_mul ov ++ [::Vword lo]).
 
 Definition x86_div {sz} (hi lo dv: word sz) : exec values:=
+  Let _  := check_size_16_64 sz in
   let dd := wdwordu hi lo in
   let dv := wunsigned dv in
   let q  := (dd  /  dv)%Z in
@@ -630,6 +636,7 @@ Definition x86_div {sz} (hi lo dv: word sz) : exec values:=
   ok (rflags_of_div ++ [:: Vword (wrepr sz q); Vword (wrepr sz r)]).
 
 Definition x86_idiv {sz} (hi lo dv: word sz) : exec values :=
+  Let _  := check_size_16_64 sz in
   let dd := wdwords hi lo in
   let dv := wsigned dv in
   let q  := (Z.quot dd dv)%Z in
@@ -644,6 +651,7 @@ Definition add_carry sz (x y c: Z) : word sz :=
   wrepr sz (x + y + c).
 
 Definition x86_adc {sz} (v1 v2 : word sz) (c: bool) :=
+  Let _  := check_size_8_64 sz in
   let c := Z.b2z c in
   rflags_of_aluop_w
     (add_carry sz (wunsigned v1) (wunsigned v2) c)
@@ -654,6 +662,7 @@ Definition sub_borrow sz (x y c: Z) : word sz :=
   wrepr sz (x - y - c).
 
 Definition x86_sbb {sz} (v1 v2 : word sz) (c:bool) :=
+  Let _  := check_size_8_64 sz in
   let c := Z.b2z c in
   rflags_of_aluop_w
     (sub_borrow sz (wunsigned v1) (wunsigned v2) c)
@@ -661,6 +670,7 @@ Definition x86_sbb {sz} (v1 v2 : word sz) (c:bool) :=
     (wsigned   v1 - (wsigned   v2 + c))%Z.
 
 Definition x86_neg {sz} (w: word sz) :=
+  Let _  := check_size_8_64 sz in
   let vs := (- wsigned w)%Z in
   let v := (- w)%R in
   flags_w
@@ -669,11 +679,13 @@ Definition x86_neg {sz} (w: word sz) :=
   v.
 
 Definition x86_inc {sz} (w: word sz) :=
+  Let _  := check_size_8_64 sz in
   rflags_of_aluop_nocf_w
     (w + 1)
     (wsigned w + 1)%Z.
 
 Definition x86_dec {sz} (w: word sz) :=
+  Let _  := check_size_8_64 sz in
   rflags_of_aluop_nocf_w
     (w - 1)
     (wsigned w - 1)%Z.
@@ -681,37 +693,46 @@ Definition x86_dec {sz} (w: word sz) :=
 Definition x86_setcc (b:bool) : exec values := ok [:: Vword (wrepr U8 (Z.b2z b))].
 
 Definition x86_bt {sz} (x y: word sz) : exec values :=
+  Let _  := check_size_8_64 sz in
   ok [:: Vbool (wand x (wshl 1 (wunsigned y mod (wsize_bits sz))) != 0)%R ].
 
 Definition x86_lea {sz} (disp base scale offset: word sz) : exec values :=
+  Let _  := check_size_32_64 sz in
   if check_scale (wunsigned scale) then
     ok [::Vword (disp + base + scale * offset)]
   else type_error.
 
 Definition x86_test {sz} (x y: word sz) : exec values :=
+  Let _  := check_size_8_64 sz in
   vbools (rflags_of_bwop (wand x y)).
 
 Definition x86_cmp {sz} (x y: word sz) :=
+  Let _  := check_size_8_64 sz in
   vbools
     (rflags_of_aluop (x - y)
        (wunsigned x - wunsigned y)%Z (wsigned x - wsigned y)%Z).
 
 Definition x86_and {sz} (v1 v2: word sz) :=
+  Let _  := check_size_8_64 sz in
   rflags_of_bwop_w
     (wand v1 v2).
 
 Definition x86_or {sz} (v1 v2: word sz) :=
+  Let _  := check_size_8_64 sz in
   rflags_of_bwop_w
     (wor v1 v2).
 
 Definition x86_xor {sz} (v1 v2: word sz) :=
+  Let _  := check_size_8_64 sz in
   rflags_of_bwop_w
     (wxor v1 v2).
 
 Definition x86_not {sz} (v: word sz) : exec values:=
+  Let _  := check_size_8_64 sz in
   ok [:: Vword (wnot v)].
 
 Definition x86_ror {sz} (v: word sz) (i: u8) : exec values :=
+  Let _  := check_size_8_64 sz in
   let i := wunsigned i mod wsize_bits sz in
   if i == 0 then
     let u := Vundef sbool in
@@ -726,6 +747,7 @@ Definition x86_ror {sz} (v: word sz) (i: u8) : exec values :=
     ok [:: OF; Vbool CF; Vword r ].
 
 Definition x86_rol {sz} (v: word sz) (i: u8) : exec values :=
+  Let _  := check_size_8_64 sz in
   let i := wunsigned i mod wsize_bits sz in
   if i == 0 then
     let u := Vundef sbool in
@@ -740,6 +762,7 @@ Definition x86_rol {sz} (v: word sz) (i: u8) : exec values :=
     ok [:: OF; Vbool CF; Vword r ].
 
 Definition x86_shl {sz} (v: word sz) (i: u8) : exec values :=
+  Let _  := check_size_8_64 sz in
   let i := wand i (x86_shift_mask sz) in
   if i == 0%R then
     let u := Vundef sbool in
@@ -756,7 +779,28 @@ Definition x86_shl {sz} (v: word sz) (i: u8) : exec values :=
     let ZF := Vbool (ZF_of_word r) in
     ok [:: OF; CF; SF; PF; ZF; Vword r].
 
+Definition x86_shld {sz} (v1 v2: word sz) (i: u8) : exec values :=
+  Let _  := check_size_16_64 sz in
+  let i := wand i (x86_shift_mask sz) in
+  if i == 0%R then
+    let u := Vundef sbool in
+    ok [:: u; u; u; u; u; Vword v1]
+  else
+    let rc := msb (wshl v1 (wunsigned i - 1)) in
+    let r1 := wshl v1 (wunsigned i) in
+    let r2 := wsar v2 (wsize_bits sz - (wunsigned i)) in
+    let r  := wor r1 r2 in
+    let OF :=
+      if i == 1%R then Vbool (msb r (+) rc)
+      else undef_b in
+    let CF := Vbool rc in
+    let SF := Vbool (SF_of_word r) in
+    let PF := Vbool (PF_of_word r) in
+    let ZF := Vbool (ZF_of_word r) in
+    ok [:: OF; CF; SF; PF; ZF; Vword r].
+
 Definition x86_shr {sz} (v: word sz) (i: u8) : exec values :=
+  Let _  := check_size_8_64 sz in
   let i := wand i (x86_shift_mask sz) in
   if i == 0%R then
     let u := Vundef sbool in
@@ -775,6 +819,7 @@ Definition x86_shr {sz} (v: word sz) (i: u8) : exec values :=
     ok [:: OF; CF; SF; PF; ZF; Vword r].
 
 Definition x86_sar {sz} (v: word sz) (i: u8) : exec values :=
+  Let _ := check_size_8_64 sz in
   let i := wand i (x86_shift_mask sz) in
   if i == 0%R then
     let u := Vundef sbool in
@@ -784,25 +829,6 @@ Definition x86_sar {sz} (v: word sz) (i: u8) : exec values :=
     let r  := wsar v (wunsigned i) in
     let OF :=
       if i == 1%R then Vbool false
-      else undef_b in
-    let CF := Vbool rc in
-    let SF := Vbool (SF_of_word r) in
-    let PF := Vbool (PF_of_word r) in
-    let ZF := Vbool (ZF_of_word r) in
-    ok [:: OF; CF; SF; PF; ZF; Vword r].
-
-Definition x86_shld {sz} (v1 v2: word sz) (i: u8) : exec values :=
-  let i := wand i (x86_shift_mask sz) in
-  if i == 0%R then
-    let u := Vundef sbool in
-    ok [:: u; u; u; u; u; Vword v1]
-  else
-    let rc := msb (wshl v1 (wunsigned i - 1)) in
-    let r1 := wshl v1 (wunsigned i) in
-    let r2 := wsar v2 (wsize_bits sz - (wunsigned i)) in
-    let r  := wor r1 r2 in
-    let OF :=
-      if i == 1%R then Vbool (msb r (+) rc)
       else undef_b in
     let CF := Vbool rc in
     let SF := Vbool (SF_of_word r) in

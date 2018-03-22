@@ -190,6 +190,7 @@ Definition neq_f v1 v2 := Pif (Pvar v1) (Papp1 Onot (Pvar v2)) (Pvar v2).
 Definition lower_condition vi (pe: pexpr) : seq instr_r * pexpr :=
   match lower_cond_classify vi pe with
   | Some (l, sz, r, x, y) =>
+    if (sz ≤ U64)%CMP then
     ([:: Copn l AT_none (Ox86_CMP sz) [:: x; y] ],
     match r with
     | Cond1 CondVar v => Pvar v
@@ -201,6 +202,7 @@ Definition lower_condition vi (pe: pexpr) : seq instr_r * pexpr :=
     | Cond3 CondOrNeq v1 v2 v3 => Papp2 Oor v1 (neq_f v2 v3)
     | Cond3 CondAndNotEq v1 v2 v3 => Papp2 Oand (Papp1 Onot v1) (eq_f v2 v3)
     end)
+    else ([::], pe)
   | None => ([::], pe)
   end.
 
@@ -354,7 +356,10 @@ Definition is_lea sz x e :=
 
 Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
   let chk (b: bool) r := if b then r else LowerAssgn in
-  let k sz := chk (sz == sz') in
+  let kb b sz := chk (b && (sz == sz')) in
+  let k8 sz := kb (sz ≤ U64)%CMP sz in
+  let k16 sz := kb ((U16 ≤ sz) && (sz ≤ U64))%CMP sz in
+  let k32 sz := kb ((U32 ≤ sz) && (sz ≤ U64))%CMP sz in
   match e with
   | Pcast sz (Pconst _) => chk (sz ≤ U64)%CMP (LowerMov false)
   | Pget ({| v_var := {| vtype := sword sz |} |} as v) _
@@ -362,13 +367,13 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
     chk (sz ≤ U64)%CMP (LowerMov (if is_var_in_memory v then is_lval_in_memory x else false))
   | Pload sz _ _ => chk (sz ≤ U64)%CMP (LowerMov (is_lval_in_memory x))
 
-  | Papp1 (Olnot sz) a => k sz (LowerCopn (Ox86_NOT sz) a)
-  | Papp1 (Oneg (Op_w sz)) a => k sz (LowerFopn (Ox86_NEG sz) [:: a] 0)
+  | Papp1 (Olnot sz) a => k8 sz (LowerCopn (Ox86_NOT sz) a)
+  | Papp1 (Oneg (Op_w sz)) a => k8 sz (LowerFopn (Ox86_NEG sz) [:: a] 0)
 
   | Papp2 op a b =>
     match op with
     | Oadd (Op_w sz) =>
-      k sz
+      k8 sz
       match is_lea sz x e with
       | Some l => LowerLea sz l
       | None   => 
@@ -379,7 +384,7 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
         end
       end
     | Osub (Op_w sz) =>
-      k sz
+      k8 sz
       match is_lea sz x e with
       | Some l => LowerLea sz l
       | None   => 
@@ -390,7 +395,7 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
         end
       end
     | Omul (Op_w sz) =>
-      k sz
+      k16 sz
       match is_lea sz x e with
       | Some l => LowerLea sz l
       | _      => 
@@ -403,20 +408,20 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
         end
         end
       end
-    | Oland sz => k sz (LowerFopn (Ox86_AND sz) [:: a ; b ] (wbase U32))
-    | Olor sz => k sz (LowerFopn (Ox86_OR sz) [:: a ; b ] (wbase U32))
-    | Olxor sz => k sz (LowerFopn (Ox86_XOR sz) [:: a ; b ] (wbase U32))
-    | Olsr sz => k sz (LowerFopn (Ox86_SHR sz) [:: a ; b ] (wbase U8))
-    | Olsl sz => k sz (LowerFopn (Ox86_SHL sz) [:: a ; b ] (wbase U8))
-    | Oasr sz => k sz (LowerFopn (Ox86_SAR sz) [:: a ; b ] (wbase U8))
-    | Oeq (Op_w sz) => LowerEq sz a b
-    | Olt (Cmp_w _ sz) => LowerLt sz a b
+    | Oland sz => k8 sz (LowerFopn (Ox86_AND sz) [:: a ; b ] (wbase U32))
+    | Olor sz => k8 sz (LowerFopn (Ox86_OR sz) [:: a ; b ] (wbase U32))
+    | Olxor sz => k8 sz (LowerFopn (Ox86_XOR sz) [:: a ; b ] (wbase U32))
+    | Olsr sz => k8 sz (LowerFopn (Ox86_SHR sz) [:: a ; b ] (wbase U8))
+    | Olsl sz => k8 sz (LowerFopn (Ox86_SHL sz) [:: a ; b ] (wbase U8))
+    | Oasr sz => k8 sz (LowerFopn (Ox86_SAR sz) [:: a ; b ] (wbase U8))
+    | Oeq (Op_w sz) => k8 sz (LowerEq sz a b)
+    | Olt (Cmp_w _ sz) => k8 sz (LowerLt sz a b)
     | _ => LowerAssgn
     end
 
   | Pif e e1 e2 =>
     if stype_of_lval x is sword _ then
-      k (wsize_of_lval x) (LowerIf e e1 e2)
+      kb true (wsize_of_lval x) (LowerIf e e1 e2)
     else
       LowerAssgn
   | _ => LowerAssgn
@@ -534,14 +539,15 @@ Definition lower_addcarry_classify (sub: bool) (xs: lvals) (es: pexprs) :=
   end.
 
 Definition lower_addcarry sz (sub: bool) (xs: lvals) tg (es: pexprs) : seq instr_r :=
+  if (sz ≤ U64)%CMP then
   match lower_addcarry_classify sub xs es with
   | Some (vi, o, es, cf, r) => opn_5flags (wbase U32) vi cf r tg (o sz) es
   | None => [:: Copn xs tg ((if sub then Osubcarry else Oaddcarry) sz) es ]
-  end.
+  end
+  else [:: Copn xs tg ((if sub then Osubcarry else Oaddcarry) sz) es ].
 
 Definition lower_mulu sz (xs: lvals) tg (es: pexprs) : seq instr_r :=
-  (* TODO: is multiplication of large values (above 64 bits) possible? *)
-  if (sz ≤ U64)%CMP then
+  if check_size_16_64 sz is Ok _ then
   match xs, es with
   | [:: r1; r2 ], [:: x ; y ] =>
     let vi := var_info_of_lval r2 in

@@ -558,25 +558,6 @@ Implicit Types (ct : condt) (s : x86_mem) (o : oprd) (ir : ireg).
 Implicit Types (lbl : label).
 
 (* -------------------------------------------------------------------- *)
-Definition check_size_8_64 sz : result error unit:= 
-  match sz with
-  | U8 | U16 | U32 | U64 => ok tt
-  | U128 | U256 => type_error
-  end.
-
-Definition check_size_16_64 sz : result error unit:= 
-  match sz with
-  | U16 | U32 | U64 => ok tt
-  | U8 | U128 | U256 => type_error
-  end.
-
-Definition check_size_32_64 sz : result error unit:= 
-  match sz with
-  | U32 | U64 => ok tt
-  | U8 | U16 | U128 | U256 => type_error
-  end.
-
-(* -------------------------------------------------------------------- *)
 Definition eval_MOV sz o1 o2 s : x86_result :=
   Let _ := check_size_8_64 sz in
   Let v := read_oprd sz o2 s in
