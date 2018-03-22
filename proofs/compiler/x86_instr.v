@@ -1,7 +1,7 @@
 Require Import asmgen.
 Import Utf8.
-Import all_ssreflect.
-Import compiler_util sem x86_sem x86_variables x86_variables_proofs.
+Import all_ssreflect all_algebra.
+Import compiler_util psem x86_sem x86_variables x86_variables_proofs.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -16,7 +16,8 @@ Definition implicit_flags :=
 Definition implicit_flags_noCF :=
   map (ADImplicit \o var_of_flag) [::OF; SF; PF; ZF].
 
-Local Coercion E n := ADExplicit n None.
+Local Coercion Eb n := ADExplicit None n None.
+Local Definition E w n := ADExplicit (Some w) n None.
 Local Coercion F f := ADImplicit (var_of_flag f).
 Local Coercion R f := ADImplicit (var_of_register f).
 
@@ -31,15 +32,40 @@ Corollary x86_mem_eq_equiv m m' :
   m = m' → x86_mem_equiv m m'.
 Proof. move => ->; reflexivity. Qed.
 
-(* ----------------------------------------------------------------------------- *)
-Lemma MOV_gsc :
-  gen_sem_correct [:: TYoprd; TYoprd] Ox86_MOV [:: E 0] [:: E 1] [::] MOV.
+Definition arg_of_oprd_sz sz o :=
+  match o with
+  | Imm_op x => Aimm x
+  | Glo_op x => Aglob x
+  | Reg_op x => Areg x
+  | Adr_op x => Aaddr sz x
+  end.
+
+Lemma arg_of_oprdE sz o :
+  arg_of_oprd (Some sz) o = Some (arg_of_oprd_sz sz o).
+Proof. by case: o. Qed.
+
+Lemma eval_low_read gd m sz sz' (w: word sz') x :
+  (sz ≤ sz')%CMP →
+  eval_low gd m (arg_of_oprd_sz sz x) = ok (Vword w) →
+  read_oprd gd sz x m = ok (zero_extend sz w) (* ∧ (sz ≤ U64)%CMP *).
 Proof.
-  move=> [] // => [ x | x] y; split => // gd m m';rewrite /low_sem_aux /= /eval_MOV /=;
-  t_xrbindP => ???? -> <- <- [<-] h; exists m' => /=; split => //; reflexivity.
+move => hle; case: x => /=.
+- by move => n /ok_word_inj [??]; subst.
+- by rewrite /get_global => g; case: get_global_word => // ? /ok_word_inj [??]; subst.
+- by move => r /ok_word_inj [??]; subst.
+by move => a; apply: rbindP => ? -> /ok_word_inj [??]; subst; rewrite /= zero_extend_u.
 Qed.
 
-Definition MOV_desc := make_instr_desc MOV_gsc.
+(* ----------------------------------------------------------------------------- *)
+Lemma MOV_gsc sz :
+  gen_sem_correct [:: TYoprd; TYoprd] (Ox86_MOV sz) [:: E sz 0] [:: E sz 1] [::] (MOV sz).
+Proof.
+move => /= x y; split => // gd m m'.
+rewrite /low_sem_aux /= arg_of_oprdE /= /sets_low /eval_MOV /x86_MOV.
+case: x => // [ x | x ]; t_xrbindP => ??? h <-; t_xrbindP => w' /of_val_word [sz'] [w] [hle ??] ?; subst => -> <- /=; rewrite ?truncate_word_u /=; [ case | ]; rewrite (eval_low_read _ h) //= => ->; eexists; split; reflexivity.
+Qed.
+
+Definition MOV_desc sz := make_instr_desc (MOV_gsc sz).
 
 (* ----------------------------------------------------------------------------- *)
 
@@ -97,17 +123,19 @@ Ltac update_set' :=
 
 Ltac update_set := know_it; update_set'.
 
-Lemma ADD_gsc :
-   gen_sem_correct [:: TYoprd; TYoprd] Ox86_ADD
-     (implicit_flags ++ [:: E 0])
-     [:: E 0; E 1] [::] ADD.
+Lemma ADD_gsc sz :
+   gen_sem_correct [:: TYoprd; TYoprd] (Ox86_ADD sz)
+     (implicit_flags ++ [:: E sz 0])
+     [:: E sz 0; E sz 1] [::] (ADD sz).
 Proof.
-  move=> [] // => [ x | x] y; split => // gd m m'; rewrite /low_sem_aux /= /eval_ADD /=.
-  + t_xrbindP => vs ??? vy -> <- <- <- [<-] [<-]; update_set.
-  t_xrbindP => vs ??? -> <- ?? vy -> <- <- <-[<-] /= h; update_set.
+move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_add /eval_ADD.
+case: x => // [ x | x ] /=; t_xrbindP => ???? h <-; [ | move => ?? h' <- ] => <-; t_xrbindP => ? /truncate_wordP [hle ->] ? /of_val_word [sz'] [?] [hle' ??]; subst => _ -> /= [<-].
++ by case => <-; rewrite (eval_low_read _ h) //; update_set.
+apply: rbindP => /= m'' [<-] {m''}; rewrite truncate_word_u /= h (eval_low_read _ h') //= !zero_extend_u.
+move => ?; update_set.
 Qed.
 
-Definition ADD_desc := make_instr_desc ADD_gsc.
+Definition ADD_desc sz := make_instr_desc (ADD_gsc sz).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma SUB_gsc :
