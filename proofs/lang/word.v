@@ -378,9 +378,6 @@ Proof. Admitted.
 Lemma wsar0 sz (w: word sz) : wsar w 0 = w.
 Proof. Admitted.
 
-Lemma wmulE sz (x y: word sz) : (x * y)%R = wrepr sz (wunsigned x * wunsigned y).
-Proof. Admitted.
-
 Lemma wmulhuE sz (x y: word sz) : wmulhu x y = wrepr sz (wunsigned x * wunsigned y ÷ wbase sz).
 Proof. (* I64.mulhu w1 w2 = I64.repr (w1 * w2 ÷ I64.modulus).
 Proof.
@@ -432,6 +429,8 @@ Definition wumul sz (x y: word sz) :=
 Definition zero_extend sz sz' (w: word sz') : word sz :=
   wrepr sz (wunsigned w).
 
+Parameter sign_extend : ∀ sz sz', word sz'  → word sz.
+
 Definition wbit sz (w i: word sz) : bool :=
   wbit_n w (Z.to_nat (wunsigned i mod wsize_bits sz)).
 
@@ -442,6 +441,10 @@ Definition wror sz (w:word sz) (z:Z) :=
 Definition wrol sz (w:word sz) (z:Z) := 
   let i := z mod wsize_bits sz in
   wor (wshl w i) (wshr w (wsize_bits sz - i)).
+
+(* -------------------------------------------------------------------*)
+Lemma msb0 sz : @msb sz 0 = false.
+Proof. by case: sz. Qed.
 
 (* -------------------------------------------------------------------*)
 
@@ -474,6 +477,14 @@ Proof. by case: sz sz' => -[]; vm_compute. Qed.
 Lemma zero_extend_u sz (w:word sz) : zero_extend sz w = w.
 Proof. by rewrite /zero_extend wrepr_unsigned. Qed.
 
+Lemma zero_extend_sign_extend sz sz' s (w: word s) :
+  (s ≤ sz')%CMP → (sz ≤ sz')%CMP →
+  zero_extend sz (sign_extend sz' w) = sign_extend sz w.
+Admitted.
+
+Lemma sign_zero_sign_extend sz sz' (w: word sz') :
+  sign_extend sz (zero_extend sz' (sign_extend sz w)) = sign_extend sz w.
+Admitted.
 
 Ltac elim_div :=
    unfold Zdiv, Zmod;
@@ -538,11 +549,28 @@ Lemma wxor_zero_extend sz sz' (x y: word sz') :
 Proof.
 Admitted.
 
-Lemma wand0 sz (x: word sz) : wand 0 x == 0%R.
-Proof. done. Qed.
+Lemma wrepr0 sz : wrepr sz 0 = 0%R.
+Proof. by apply/eqP. Qed.
 
-Lemma wxor0 sz (x: word sz) : wxor 0 x == x.
-Proof. by apply/eq_from_wbit. Qed.
+Lemma wand0 sz (x: word sz) : wand 0 x = 0%R.
+Proof. by apply/eqP. Qed.
+
+Lemma wxor0 sz (x: word sz) : wxor 0 x = x.
+Proof. by apply/eqP/eq_from_wbit. Qed.
+
+Lemma wxor_xx sz (x: word sz) : wxor x x = 0%R.
+Proof. by apply/eqP/eq_from_wbit; rewrite /= Z.lxor_nilpotent. Qed.
+
+Lemma wrepr_add sz (x y: Z) :
+  wrepr sz (x + y) = (wrepr sz x + wrepr sz y)%R.
+Proof. by apply: word_ext; rewrite /wrepr !mkwordK Zplus_mod. Qed.
+
+Lemma wmulE sz (x y: word sz) : (x * y)%R = wrepr sz (wunsigned x * wunsigned y).
+Proof. by rewrite /wunsigned /wrepr; apply: word_ext. Qed.
+
+Lemma wrepr_mul sz (x y: Z) :
+  wrepr sz (x * y) = (wrepr sz x * wrepr sz y)%R.
+Proof. by apply: word_ext; rewrite /wrepr !mkwordK Zmult_mod. Qed.
 
 (* -------------------------------------------------------------------*)
 
