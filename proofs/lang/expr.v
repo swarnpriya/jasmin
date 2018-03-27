@@ -160,46 +160,53 @@ Qed.
 Definition sopn_eqMixin     := Equality.Mixin sopn_eq_axiom.
 Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 
-Parameter string_of_sopn : sop2 -> string.
-(*
+Definition string_of_wsize (sz: wsize) : string :=
+  match sz with
+  | U8 => "U8"
+  | U16 => "U16"
+  | U32 => "U32"
+  | U64 => "U64"
+  | U128 => "U128"
+  | U256 => "U256"
+  end.
+
 Definition string_of_sopn o : string :=
   match o with
-  | Omulu  => "Omulu"
-  | Oaddcarry => "Oaddcarry"
-  | Osubcarry => "Osubcarry"
-  | Oset0 => "Oset0"
-  | Ox86_MOV => "Ox86_MOV"
-  | Ox86_CMOVcc => "Ox86_CMOVcc"
-  | Ox86_ADD => "Ox86_ADD"
-  | Ox86_SUB => "Ox86_SUB"
-  | Ox86_MUL => "Ox86_MUL"
-  | Ox86_IMUL => "Ox86_IMUL"
-  | Ox86_IMUL64 => "Ox86_IMUL64"
-  | Ox86_IMUL64imm => "Ox86_IMUL64imm"
-  | Ox86_DIV => "Ox86_DIV"
-  | Ox86_IDIV => "Ox86_IDIV"
-  | Ox86_ADC => "Ox86_ADC"
-  | Ox86_SBB => "Ox86_SBB"
-  | Ox86_NEG => "Ox86_NEG"
-  | Ox86_INC => "Ox86_INC"
-  | Ox86_DEC => "Ox86_DEC"
+  | Omulu sz => "Omulu " ++ string_of_wsize sz
+  | Oaddcarry sz => "Oaddcarry " ++ string_of_wsize sz
+  | Osubcarry sz => "Osubcarry " ++ string_of_wsize sz
+  | Oset0 sz => "Oset0 " ++ string_of_wsize sz
+  | Ox86_MOV sz => "Ox86_MOV " ++ string_of_wsize sz
+  | Ox86_CMOVcc sz => "Ox86_CMOVcc " ++ string_of_wsize sz
+  | Ox86_ADD sz => "Ox86_ADD " ++ string_of_wsize sz
+  | Ox86_SUB sz => "Ox86_SUB " ++ string_of_wsize sz
+  | Ox86_MUL sz => "Ox86_MUL " ++ string_of_wsize sz
+  | Ox86_IMUL sz => "Ox86_IMUL " ++ string_of_wsize sz
+  | Ox86_IMULt sz => "Ox86_IMULt " ++ string_of_wsize sz
+  | Ox86_IMULtimm sz => "Ox86_IMULtimm " ++ string_of_wsize sz
+  | Ox86_DIV sz => "Ox86_DIV " ++ string_of_wsize sz
+  | Ox86_IDIV sz => "Ox86_IDIV " ++ string_of_wsize sz
+  | Ox86_ADC sz => "Ox86_ADC " ++ string_of_wsize sz
+  | Ox86_SBB sz => "Ox86_SBB " ++ string_of_wsize sz
+  | Ox86_NEG sz => "Ox86_NEG " ++ string_of_wsize sz
+  | Ox86_INC sz => "Ox86_INC " ++ string_of_wsize sz
+  | Ox86_DEC sz => "Ox86_DEC " ++ string_of_wsize sz
   | Ox86_SETcc => "Ox86_SETcc"
-  | Ox86_BT => "Ox86_BT"
-  | Ox86_LEA => "Ox86_LEA"
-  | Ox86_TEST => "Ox86_TEST"
-  | Ox86_CMP => "Ox86_CMP"
-  | Ox86_AND => "Ox86_AND"
-  | Ox86_OR => "Ox86_OR"
-  | Ox86_XOR => "Ox86_XOR"
-  | Ox86_NOT => "Ox86_NOT"
-  | Ox86_ROR => "Ox86_ROR"
-  | Ox86_ROL => "Ox86_ROL"
-  | Ox86_SHL => "Ox86_SHL"
-  | Ox86_SHR => "Ox86_SHR"
-  | Ox86_SAR => "Ox86_SAR"
-  | Ox86_SHLD => "Ox86_SHLD"
+  | Ox86_BT sz => "Ox86_BT " ++ string_of_wsize sz
+  | Ox86_LEA sz => "Ox86_LEA " ++ string_of_wsize sz
+  | Ox86_TEST sz => "Ox86_TEST " ++ string_of_wsize sz
+  | Ox86_CMP sz => "Ox86_CMP " ++ string_of_wsize sz
+  | Ox86_AND sz => "Ox86_AND " ++ string_of_wsize sz
+  | Ox86_OR sz => "Ox86_OR " ++ string_of_wsize sz
+  | Ox86_XOR sz => "Ox86_XOR " ++ string_of_wsize sz
+  | Ox86_NOT sz => "Ox86_NOT " ++ string_of_wsize sz
+  | Ox86_ROR sz => "Ox86_ROR " ++ string_of_wsize sz
+  | Ox86_ROL sz => "Ox86_ROL " ++ string_of_wsize sz
+  | Ox86_SHL sz => "Ox86_SHL " ++ string_of_wsize sz
+  | Ox86_SHR sz => "Ox86_SHR " ++ string_of_wsize sz
+  | Ox86_SAR sz => "Ox86_SAR " ++ string_of_wsize sz
+  | Ox86_SHLD sz => "Ox86_SHLD " ++ string_of_wsize sz
   end.
-*)
 
 (* ** Expressions
  * -------------------------------------------------------------------- *)
