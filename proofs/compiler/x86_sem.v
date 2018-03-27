@@ -558,16 +558,19 @@ Implicit Types (ct : condt) (s : x86_mem) (o : oprd) (ir : ireg).
 Implicit Types (lbl : label).
 
 (* -------------------------------------------------------------------- *)
+Definition eval_MOV_nocheck sz o1 o2 s : x86_result :=
+  Let v := read_oprd sz o2 s in
+  write_oprd o1 v s.
+
 Definition eval_MOV sz o1 o2 s : x86_result :=
   Let _ := check_size_8_64 sz in
-  Let v := read_oprd sz o2 s in
-  write_oprd o1 v s. 
+  eval_MOV_nocheck sz o1 o2 s.
 
 (* -------------------------------------------------------------------- *)
 Definition eval_CMOVcc sz ct o1 o2 s : x86_result :=
   Let _ := check_size_16_64 sz in
   Let b := eval_cond ct s.(xrf) in
-  if b then eval_MOV sz o1 o2 s else ok s.
+  eval_MOV_nocheck sz o1 (if b then o2 else o1) s.
 
 (* -------------------------------------------------------------------- *)
 Definition eval_ADD sz o1 o2 s : x86_result :=
@@ -616,8 +619,7 @@ Definition eval_IMUL sz o1 (o2 : option (oprd * option u32)) s : x86_result :=
       Let v2 := read_oprd sz o1 s in
       let lo := (v1 * v2)%R in
       let hi := wmulhs v1 v2 in
-      let z  := (wsigned v1 * wsigned v2)%Z in
-      let ov := wsigned lo == z in
+      let ov := x86_imul_overflow hi lo in
       let s  := mem_update_rflags (rflags_of_mul ov) s in
       let s  := mem_write_reg RDX hi s in
       let s  := mem_write_reg RAX lo s in
@@ -627,16 +629,17 @@ Definition eval_IMUL sz o1 (o2 : option (oprd * option u32)) s : x86_result :=
       Let v1 := read_oprd sz o1 s in
       Let v2 := read_oprd sz o2 s in
       let lo := (v1 * v2)%R in
-      let z  := (wsigned v1 * wsigned v2)%Z in
-      let ov := wsigned lo == z in
+      let hi := wmulhs v1 v2 in
+      let ov := x86_imul_overflow hi lo in
       let s  := mem_update_rflags (rflags_of_mul ov) s in
       write_oprd o1 lo s
 
    | Some (o2, Some v2) =>
       Let v1 := read_oprd sz o2 s in
-      let lo := (v1 * zero_extend sz v2)%R in
-      let z  := (wsigned v1 * wsigned v2)%Z in
-      let ov := wsigned lo == z in
+      let v2 := sign_extend sz v2 in
+      let lo := (v1 * v2)%R in
+      let hi := wmulhs v1 v2 in
+      let ov := x86_imul_overflow hi lo in
       let s  := mem_update_rflags (rflags_of_mul ov) s in
       write_oprd o1 lo s
   end.
@@ -820,12 +823,14 @@ Definition eval_ROR sz o ir s : x86_result :=
   Let _  := check_size_8_64 sz in
   Let v := read_oprd sz o s in
   let i := wand (read_ireg U8 ir s) (x86_shift_mask sz) in
-  if i == 0%R then ok s else
+  if i == 0%R
+  then write_oprd o v s
+  else
     let r := wror v (wunsigned i) in
     let cf := msb r in
     let s :=
         if i == 1%R then
-          let ro := msb r != msb v in 
+          let ro := cf != msb v in
           mem_set_rflags OF ro s
         else mem_unset_rflags OF s
     in
@@ -837,7 +842,9 @@ Definition eval_ROL sz o ir s : x86_result :=
   Let _  := check_size_8_64 sz in
   Let v := read_oprd sz o s in
   let i := wand (read_ireg U8 ir s) (x86_shift_mask sz) in
-  if i == 0%R then ok s else
+  if i == 0%R
+  then write_oprd o v s
+  else
     let r := wrol v (wunsigned i) in 
     let cf := lsb r in
     let s :=
@@ -855,7 +862,8 @@ Definition eval_SHL sz o ir s : x86_result :=
   Let v := read_oprd sz o s in
   let i := wand (read_ireg U8 ir s) (x86_shift_mask sz) in
 
-  if i == 0%R then ok (mem_update_rflags all_undef s) (* FIXME preserve the flags *)
+  if i == 0%R
+  then write_oprd o v s
   else
     let rc := msb (wshl v (wunsigned i - 1)) in
     let r  := wshl v (wunsigned i) in
@@ -869,11 +877,12 @@ Definition eval_SHLD sz o1 r2 ir s : x86_result :=
   let v2 := zero_extend sz (s.(xreg) r2) in 
   let i := wand (read_ireg U8 ir s) (x86_shift_mask sz) in (* FIXME: enforce ir is CL or immediate *)
 
-  if i == 0%R then ok (mem_update_rflags all_undef s) (* FIXME preserve the flags *)
+  if i == 0%R
+  then write_oprd o1 v1 s
   else
     let rc := msb (wshl v1 (wunsigned i - 1)) in
     let r1 := wshl v1 (wunsigned i) in
-    let r2 := wshr v2 (wsize_bits sz - wunsigned i) in
+    let r2 := wsar v2 (wsize_bits sz - wunsigned i) in
     let r  := wor r1 r2 in
     let s  := mem_update_rflags (rflags_of_sh i (msb r (+) rc) r rc) s in
     write_oprd o1 r s.
@@ -884,8 +893,9 @@ Definition eval_SHR sz o ir s : x86_result :=
   Let v := read_oprd sz o s in
   let i := wand (read_ireg U8 ir s) (x86_shift_mask sz) in
 
-  if i == 0%R then ok (mem_update_rflags all_undef s) (* FIXME preserve the flags *)
-  else 
+  if i == 0%R
+  then write_oprd o v s
+  else
     let rc := lsb (wshr v (wunsigned i - 1)) in
     let r  := wshr v (wunsigned i) in
     let s  := mem_update_rflags (rflags_of_sh i (msb r) r rc) s in
@@ -901,7 +911,9 @@ Definition eval_SAR sz o ir s : x86_result :=
   Let v := read_oprd sz o s in
   let i := wand (read_ireg U8 ir s) (x86_shift_mask sz) in
 
-  if i == 0%R then ok (mem_update_rflags all_undef s) else
+  if i == 0%R
+  then write_oprd o v s
+  else
     let rc := lsb (wsar v (wunsigned i - 1)) in
     let r  := wsar v (wunsigned i) in
     let s  := mem_update_rflags (rflags_of_sh i false r rc) s
