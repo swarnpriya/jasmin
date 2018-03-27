@@ -84,6 +84,7 @@ rewrite /assemble_c /linear.find_label /x86_sem.find_label => ok_i.
 by rewrite (mapM_size ok_i) (assemble_c_find_is_label lbl ok_i).
 Qed.
 
+(*
 Lemma write_oprd_of_lval ii gd lv x y es xs es' v (w: word) :
   lom_eqv es xs →
   pexpr_of_lval ii lv = ok x →
@@ -117,6 +118,7 @@ rewrite /= /mem_write_mem ha -eqm ok_m' /=.
 eexists; split; first by reflexivity.
 by constructor.
 Qed.
+*)
 
 Lemma assemble_iP gd i j ls ls' xs :
   match_state ls xs →
@@ -215,6 +217,7 @@ Section PROG.
 
 Context (p: lprog) (p': xprog) (ok_p': assemble_prog p = ok p') (gd: glob_defs).
 
+(*
 Lemma write_vars_mem_write_regs ii xs vs s1 s2 rs m1 :
   write_vars xs vs s1 = ok s2 →
   reg_of_vars ii xs = ok rs →
@@ -294,6 +297,7 @@ split; first exact: ok_wr.
 econstructor; eauto => /=.
 by case: eqm' => /= ->.
 Qed.
+*)
 
 Lemma assemble_fd_stk_size fd xfd :
   assemble_fd fd = ok xfd →
