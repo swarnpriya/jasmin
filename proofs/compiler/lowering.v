@@ -421,7 +421,7 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
 
   | Pif e e1 e2 =>
     if stype_of_lval x is sword _ then
-      kb true (wsize_of_lval x) (LowerIf e e1 e2)
+      k16 (wsize_of_lval x) (LowerIf e e1 e2)
     else
       LowerAssgn
   | _ => LowerAssgn

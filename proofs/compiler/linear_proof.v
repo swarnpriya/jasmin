@@ -466,7 +466,7 @@ Section PROOF.
     move => -[m1 vm1] s2 /S.sem_iE [v] [v'] [ok_v].
     apply: rbindP => w /of_val_word [sz'] [w'] [hle ? ?]; subst v w => - [<-] {v'} ok_s2.
     apply: LSem_step.
-    by rewrite /lsem1 /step /= /eval_instr /= !to_of_estate /sem_sopn /sem_pexprs /= ok_v /= /truncate_word hle /x86_MOV hsz /= ok_s2.
+    by rewrite /lsem1 /step /= /eval_instr /= !to_of_estate /sem_sopn /sem_pexprs /= ok_v /= /truncate_word hle /x86_MOV /check_size_8_64 hsz /= ok_s2.
   Qed.
 
   Let Hopn : forall xs t o es, Pi_r (Copn xs t o es).

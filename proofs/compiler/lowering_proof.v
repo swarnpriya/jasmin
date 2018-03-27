@@ -981,7 +981,8 @@ Ltac elim_div :=
       exists b1 b2 b3 b4, sem_pexprs gd s [:: a; b] >>= exec_sopn (Ox86_CMP sz) = ok [:: Vbool b1; Vbool b2; Vbool b3; Vbool b4; v']
     | LowerLt sz a b =>
       exists b1 b2 b3 b4, sem_pexprs gd s [:: a; b] >>= exec_sopn (Ox86_CMP sz) = ok [:: Vbool b1; v'; Vbool b2; Vbool b3; Vbool b4]
-    | LowerIf a e1 e2 => e = Pif a e1 e2 ∧ wsize_of_lval l = wsize_of_stype ty ∧ ∃ sz', stype_of_lval l = sword sz'
+    | LowerIf a e1 e2 =>
+      check_size_16_64 (wsize_of_lval l) = ok tt ∧ e = Pif a e1 e2 ∧ wsize_of_lval l = wsize_of_stype ty ∧ ∃ sz', stype_of_lval l = sword sz'
     | LowerLea sz l =>
       sz = Uptr ∧ check_scale (wunsigned (lea_scale l)) ∧
       exists w: word sz,
@@ -1196,7 +1197,8 @@ Ltac elim_div :=
          eexists _, _, _, _; repeat f_equal.
          by rewrite wltE.
        (* Pif *)
-       by case: stype_of_lval => //= w hv; case: eqP => // ->; eauto.
+       rewrite /check_size_16_64.
+       by case: stype_of_lval => //= w hv; case: andP => // - [] -> /eqP ->; eauto.
   Qed.
 
   Lemma vars_I_assgn ii l tag ty e:
@@ -1294,7 +1296,8 @@ Ltac elim_div :=
           by rewrite /sem_sopn /= /sem_pexprs /= Hv' /= /truncate_word hle /x86_MOV /check_size_8_64 hle' /= Hw'.
         subst e;apply: sem_seq1; apply: EmkI; apply: Eopn.
         case/Vword_inj: (ok_inj Hv') => ?; subst => /= ?; subst.
-        by rewrite /sem_sopn /sem_pexprs /= Hw'.
+        rewrite zero_extend_u wrepr0 in Hw'.
+        by rewrite /sem_sopn /sem_pexprs /= /check_size_8_64 hle' /= Hw'.
     (* LowerCopn *)
     + move=> o e' H.
       exists s2'; split=> //.
@@ -1370,7 +1373,7 @@ Ltac elim_div :=
       exists s2'; split=> //; apply: sem_seq1; apply: EmkI; apply: Eopn.
       by rewrite /sem_sopn H /= Hw'.
     (* LowerIf *)
-    + move=> cond e1 e2 [He] [Hsz] [sz' Ht]; subst e.
+    + move=> cond e1 e2 [Hsz64] [He] [Hsz] [sz' Ht]; subst e.
       set x := lower_condition _ _ _.
       have Hcond: x = lower_condition fv (var_info_of_lval l) cond by [].
       move: x Hcond=> [i e'] Hcond.
@@ -1399,6 +1402,7 @@ Ltac elim_div :=
       rewrite /= in Hsz; rewrite Hsz.
       case: (truncate_val_wordI hty) => sz'' [w'] [hw' hle].
       move: (hty); rewrite hw' /truncate_val /= /truncate_word hle /= => - [?]; subst w.
+      rewrite -[X in check_size_16_64 X]Hsz Hsz64.
       by case: ifP => hb; rewrite hb in hw'; subst; rewrite /= /truncate_word hle /= Hw'.
     (* LowerAssgn *)
     + move=> _.

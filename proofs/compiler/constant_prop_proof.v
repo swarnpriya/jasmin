@@ -932,7 +932,7 @@ Section PROOF.
     case: o; try by move=> ?;apply: app_sopn_uincl_a.
     move=> w /=;case: vs => //= v1 [// | v2 [// | v3 [|//]]] H H1.
     sinversion H1;sinversion H5;sinversion H6;sinversion H7.
-    move: H;t_xrbindP => b.
+    move: H;t_xrbindP => _ -> /= b.
     case: H3 => /value_uincl_bool h _ /h {h} [??];subst => /=.
     case: b;t_xrbindP => w'. 
     + by case: H2 => /value_uincl_word h _ /h -> <-.

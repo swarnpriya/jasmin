@@ -607,20 +607,22 @@ Definition x86_mul {sz} (v1 v2: word sz): exec values :=
   let ov := (ov >? wbase sz - 1)%Z in
   ok (rflags_of_mul ov ++ [::Vword hi; Vword lo]).
 
+Definition x86_imul_overflow sz (hi lo: word sz) : bool :=
+  let ov := wdwords hi lo in
+  (ov <? -wbase sz)%Z || (ov >? wbase sz - 1)%Z.
+
 Definition x86_imul {sz} (v1 v2: word sz) : exec values:=
   Let _  := check_size_16_64 sz in
   let lo := (v1 * v2)%R in
   let hi := wmulhs v1 v2 in
-  let ov := wdwords hi lo in
-  let ov := (ov <? -wbase sz)%Z || (ov >? wbase sz - 1)%Z in
+  let ov := x86_imul_overflow hi lo in
   ok (rflags_of_mul ov ++ [::Vword hi; Vword lo]).
 
 Definition x86_imult {sz} (v1 v2: word sz) : exec values:=
   Let _  := check_size_16_64 sz in
   let lo := (v1 * v2)%R in
   let hi := wmulhs v1 v2 in
-  let ov := wdwords hi lo in
-  let ov := (ov <? -wbase sz)%Z || (ov >? wbase sz - 1)%Z in
+  let ov := x86_imul_overflow hi lo in
   ok (rflags_of_mul ov ++ [::Vword lo]).
 
 Definition x86_div {sz} (hi lo dv: word sz) : exec values:=
@@ -629,7 +631,7 @@ Definition x86_div {sz} (hi lo dv: word sz) : exec values:=
   let dv := wunsigned dv in
   let q  := (dd  /  dv)%Z in
   let r  := (dd mod dv)%Z in
-  let ov := (q >? wbase sz -1)%Z in
+  let ov := (q >? wmax_unsigned sz)%Z in
 
   if (dv == 0)%Z || ov then type_error else
 
@@ -641,7 +643,7 @@ Definition x86_idiv {sz} (hi lo dv: word sz) : exec values :=
   let dv := wsigned dv in
   let q  := (Z.quot dd dv)%Z in
   let r  := (Z.rem  dd dv)%Z in
-  let ov := (q <? -wbase sz)%Z || (q >? wbase sz - 1)%Z in
+  let ov := (q <? wmin_signed sz)%Z || (q >? wmax_signed sz)%Z in
 
   if (dv == 0)%Z || ov then type_error else
 
@@ -694,7 +696,7 @@ Definition x86_setcc (b:bool) : exec values := ok [:: Vword (wrepr U8 (Z.b2z b))
 
 Definition x86_bt {sz} (x y: word sz) : exec values :=
   Let _  := check_size_8_64 sz in
-  ok [:: Vbool (wand x (wshl 1 (wunsigned y mod (wsize_bits sz))) != 0)%R ].
+  ok [:: Vbool (wbit x y) ].
 
 Definition x86_lea {sz} (disp base scale offset: word sz) : exec values :=
   Let _  := check_size_32_64 sz in
@@ -733,30 +735,30 @@ Definition x86_not {sz} (v: word sz) : exec values:=
 
 Definition x86_ror {sz} (v: word sz) (i: u8) : exec values :=
   Let _  := check_size_8_64 sz in
-  let i := wunsigned i mod wsize_bits sz in
-  if i == 0 then
+  let i := wand i (x86_shift_mask sz) in
+  if i == 0%R then
     let u := Vundef sbool in
     ok [:: u; u; Vword v]
   else
-    let r := wor (wshr v i) (wshl v (wsize_bits sz - i)) in
+    let r := wror v (wunsigned i) in
     let CF := msb r in
     let OF :=
-        if i == 1
-        then Vbool (CF != msb (r - 1)) else Vundef sbool
+        if i == 1%R
+        then Vbool (CF != msb v) else Vundef sbool
     in
     ok [:: OF; Vbool CF; Vword r ].
 
 Definition x86_rol {sz} (v: word sz) (i: u8) : exec values :=
   Let _  := check_size_8_64 sz in
-  let i := wunsigned i mod wsize_bits sz in
-  if i == 0 then
+  let i := wand i (x86_shift_mask sz) in
+  if i == 0%R then
     let u := Vundef sbool in
     ok [:: u; u; Vword v]
   else
-    let r := wor (wshl v i) (wshr v (wsize_bits sz - i)) in
+    let r := wrol v (wunsigned i) in
     let CF := lsb r in
     let OF :=
-        if i == 1
+        if i == 1%R
         then Vbool (msb r != CF) else Vundef sbool
     in
     ok [:: OF; Vbool CF; Vword r ].
@@ -852,13 +854,15 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
   | Oaddcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (waddcarry x y c)))
   | Osubcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (wsubcarry x y c)))
   | Oset0 sz => app_sopn [::]
-    (let vf := Vbool false in
-     ok [:: vf; vf; vf; vf; Vbool true; Vword (wrepr sz 0)])
+    (Let _ := check_size_8_64 sz in
+     let vf := Vbool false in
+     ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
 
   (* Low level x86 operations *)
   | Ox86_MOV sz => app_w sz (@x86_MOV sz)
   | Ox86_CMOVcc sz => (fun v => match v with
     | [:: v1; v2; v3] =>
+      Let _ := check_size_16_64 sz in
       Let b := to_bool v1 in
       if b then
         Let w2 := to_word sz v2 in ok [:: Vword w2]

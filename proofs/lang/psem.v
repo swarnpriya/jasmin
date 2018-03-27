@@ -1571,7 +1571,7 @@ case/List_Forall2_inv_l => vs'1 [?] [->] [H1].
 case/List_Forall2_inv_l => vs'2 [?] [->] [H2].
 case/List_Forall2_inv_l => vs'3 [?] [->] [H3].
 move/List_Forall2_inv_l => -> /=.
-t_xrbindP => b /(value_uincl_bool H1) [] _ -> /=.
+t_xrbindP => _ -> /= b /(value_uincl_bool H1) [] _ -> /=.
 by case: b; t_xrbindP => w hw <-;
 rewrite (value_uincl_word _ hw) /=; eauto.
 Qed.
