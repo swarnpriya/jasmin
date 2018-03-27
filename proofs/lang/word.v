@@ -486,6 +486,9 @@ Lemma sign_zero_sign_extend sz sz' (w: word sz') :
   sign_extend sz (zero_extend sz' (sign_extend sz w)) = sign_extend sz w.
 Admitted.
 
+Lemma sign_extend_u sz (w: word sz) : sign_extend sz w = w.
+Proof. Admitted.
+
 Ltac elim_div :=
    unfold Zdiv, Zmod;
      match goal with
@@ -537,18 +540,6 @@ Proof.
   by move=> hle;rewrite [X in (zero_extend _ X) = _]/zero_extend zero_extend_wrepr.
 Qed.
 
-Lemma wand_zero_extend sz sz' (x y: word sz') :
-  (sz ≤ sz')%CMP →
-  wand (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wand x y).
-Proof.
-Admitted.
-
-Lemma wxor_zero_extend sz sz' (x y: word sz') :
-  (sz ≤ sz')%CMP →
-  wxor (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wxor x y).
-Proof.
-Admitted.
-
 Lemma wrepr0 sz : wrepr sz 0 = 0%R.
 Proof. by apply/eqP. Qed.
 
@@ -565,12 +556,40 @@ Lemma wrepr_add sz (x y: Z) :
   wrepr sz (x + y) = (wrepr sz x + wrepr sz y)%R.
 Proof. by apply: word_ext; rewrite /wrepr !mkwordK Zplus_mod. Qed.
 
+Lemma wrepr_sub sz (x y: Z) :
+  wrepr sz (x - y) = (wrepr sz x - wrepr sz y)%R.
+Proof. by apply: word_ext; rewrite /wrepr !mkwordK -Zminus_mod_idemp_r -Z.add_opp_r Zplus_mod. Qed.
+
 Lemma wmulE sz (x y: word sz) : (x * y)%R = wrepr sz (wunsigned x * wunsigned y).
 Proof. by rewrite /wunsigned /wrepr; apply: word_ext. Qed.
 
 Lemma wrepr_mul sz (x y: Z) :
   wrepr sz (x * y) = (wrepr sz x * wrepr sz y)%R.
 Proof. by apply: word_ext; rewrite /wrepr !mkwordK Zmult_mod. Qed.
+
+Lemma wadd_zero_extend sz sz' (x y: word sz') :
+  (sz ≤ sz')%CMP →
+  (zero_extend sz x + zero_extend sz y)%R = zero_extend sz (x + y).
+Proof.
+Admitted.
+
+Lemma wmul_zero_extend sz sz' (x y: word sz') :
+  (sz ≤ sz')%CMP →
+  (zero_extend sz x * zero_extend sz y)%R = zero_extend sz (x * y).
+Proof.
+Admitted.
+
+Lemma wand_zero_extend sz sz' (x y: word sz') :
+  (sz ≤ sz')%CMP →
+  wand (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wand x y).
+Proof.
+Admitted.
+
+Lemma wxor_zero_extend sz sz' (x y: word sz') :
+  (sz ≤ sz')%CMP →
+  wxor (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wxor x y).
+Proof.
+Admitted.
 
 (* -------------------------------------------------------------------*)
 

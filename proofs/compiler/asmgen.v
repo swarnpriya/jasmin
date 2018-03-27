@@ -808,7 +808,7 @@ Lemma word_uincl_ze_mw sz sz' (w: word sz) (u: u64) :
   word_uincl (zero_extend sz' w) (merge_word u w).
 Proof.
 move => hle hle'.
-by rewrite /word_uincl hle' /= /merge_word -wxor_zero_extend // zero_extend_idem // -wand_zero_extend // zero_extend_mask_word // (eqP (wand0 _)) (eqP (wxor0 _)).
+by rewrite /word_uincl hle' /= /merge_word -wxor_zero_extend // zero_extend_idem // -wand_zero_extend // zero_extend_mask_word // wand0 wxor0.
 Qed.
 
 Lemma write_var_compile_var x y y0 m lom m1 rf :
