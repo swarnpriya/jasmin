@@ -344,6 +344,57 @@ Lemma sem_IE s i s' :
   sem_i s r s'.
 Proof. by case. Qed.
 
+Lemma sem_iE s i s' :
+  sem_i s i s' ->
+  match i with
+  | Cassgn lv _ ty e =>
+    ∃ v v',
+    [/\ sem_pexpr gd s e = ok v, truncate_val ty v = ok v' & write_lval gd lv v' s = ok s' ]
+  | Copn lvs _ op es => sem_sopn op s lvs es = ok s'
+  | Cif e th el =>
+    ∃ b, sem_pexpr gd s e = ok (Vbool b) ∧ sem s (if b then th else el) s'
+  | Cfor i (d, lo, hi) c =>
+    ∃ vlo vhi,
+    [/\ sem_pexpr gd s lo = ok (Vint vlo), sem_pexpr gd s hi = ok (Vint vhi) &
+        sem_for i (wrange d vlo vhi) s c s' ]
+  | Cwhile c e c' =>
+    ∃ si b,
+       [/\ sem s c si, sem_pexpr gd si e = ok (Vbool b) &
+                       if b then ∃ sj, sem si c' sj ∧ sem_i sj (Cwhile c e c') s' else si = s' ]
+  | Ccall _ xs f es =>
+    ∃ vs m2 rs,
+    [/\ sem_pexprs gd s es = ok vs, sem_call s.(emem) f vs m2 rs &
+       write_lvals gd {|emem:= m2; evm := s.(evm) |} xs rs = ok s' ]
+  end.
+Proof.
+  case => {s i s'} //.
+  - by move => s s' x _ ty e v v' hv hv' hw; exists v, v'.
+  - by move => s s' e th el he hth; exists true.
+  - by move => s s' e th el he hel; exists false.
+  - by move => s si sj s' c e c' hc he hc' hrec; exists si, true; constructor => //; exists sj.
+  - by move => s s' c e c' hc he; exists s', false.
+  - by move => s s' i d lo hi c vlo vhi hlo hhi hc; exists vlo, vhi.
+  by move => s m s' _ xs f es vs rs hvs h hrs; exists vs, m, rs.
+Qed.
+
+Lemma sem_callE m1 fn vargs' m2 vres' :
+  sem_call m1 fn vargs' m2 vres' ->
+  ∃ f,
+    get_fundef P fn = Some f ∧
+  ∃ vargs s1 vm2 vres,
+  [/\
+    mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs,
+    write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1,
+    sem s1 f.(f_body) (Estate m2 vm2),
+    mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres &
+    mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ].
+Proof.
+  case => { m1 fn vargs' m2 vres' } m1 m2 fn f vargs vargs' s1 vm2 vres vres'.
+  move => hf ha hw hc hr ht.
+  exists f; split => //.
+  by exists vargs, s1, vm2, vres.
+Qed.
+
 (* -------------------------------------------------------------------- *)
 (* The generated scheme is borring to use *)
 (*
