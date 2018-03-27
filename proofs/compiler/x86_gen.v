@@ -1,7 +1,7 @@
 Require Import x86_instr linear_sem.
 Import Utf8 Relation_Operators.
 Import all_ssreflect.
-Import compiler_util expr sem x86_sem linear x86_variables x86_variables_proofs asmgen.
+Import compiler_util expr psem x86_sem linear x86_variables x86_variables_proofs asmgen.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -57,9 +57,6 @@ Lemma assemble_i_is_label a b lbl :
   linear.is_label lbl a = x86_sem.is_label lbl b.
 Proof.
 rewrite /assemble_i /linear.is_label ; case a =>  ii [] /=.
-- move => lv _ e h.
-  have := assemble_sopn_is_sopn h => {h}.
-  by case b.
 - move => lvs op es h.
   have := assemble_sopn_is_sopn h => {h}.
   by case b.
@@ -131,13 +128,6 @@ Lemma assemble_iP gd i j ls ls' xs :
 Proof.
 rewrite /linear_sem.eval_instr /x86_sem.eval_instr; case => eqm eqc eqpc.
 case: i => ii [] /=.
-- move => lv _ e. rewrite /assemble_sopn /= /compile_hi_sopn /= /compile_low_args /=.
-  t_xrbindP => ?? x ok_x <- [] ok_args <- /=; t_xrbindP => ?? y ok_y <- ?? f ok_f <- <- <- /= [<-] v ok_v es ok_es <- {ls'}.
-  rewrite /= /eval_MOV.
-  have [w -> ok_w /=] := eval_oprd_of_pexpr eqm ok_f ok_v.
-  have [xs' [-> eqm'] /=] := write_oprd_of_lval eqm ok_x ok_y ok_es ok_w.
-  eexists; split; first by reflexivity.
-  by constructor => //=; rewrite ?to_estate_of_estate ?eqpc.
 - move => lvs op pes ok_j; t_xrbindP => es ok_es <- {ls'} /=.
   have [m2 [-> eqm2 /=]] := assemble_sopnP eqm ok_j ok_es.
   have := assemble_sopn_is_sopn ok_j.
