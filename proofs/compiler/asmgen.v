@@ -43,7 +43,7 @@ Definition destination_eqMixin := comparableClass destination_eq_dec.
 Canonical destination_eqType := EqType _ destination_eqMixin.
 
 (* -------------------------------------------------------------------- *)
-Variant arg_ty := TYcondt | TYoprd | TYreg | TYireg | TYimm.
+Variant arg_ty := TYcondt | TYoprd | TYreg | TYireg | TYimm of wsize.
 
 Scheme Equality for arg_ty.
 
@@ -56,7 +56,7 @@ Definition string_of_arg_ty (ty: arg_ty) : string :=
   | TYoprd => "TYoprd"
   | TYreg => "TYreg"
   | TYireg => "TYireg"
-  | TYimm => "TYimm"
+  | TYimm _ => "TYimm"
   end.
 
 Definition interp_ty (ty : arg_ty) : Type :=
@@ -65,7 +65,7 @@ Definition interp_ty (ty : arg_ty) : Type :=
   | TYoprd  => oprd
   | TYreg   => register
   | TYireg  => ireg
-  | TYimm   => u64
+  | TYimm sz => word sz
   end.
 
 Fixpoint interp_tys (tys : seq arg_ty) :=
@@ -120,6 +120,12 @@ Definition string_of_garg (g: garg) : string :=
 Definition typed_apply_garg_error {T} ii ty arg : ciexec T :=
   cierror ii (Cerr_assembler (AsmErr_string ("TAG " ++ string_of_garg arg ++ ": "++ string_of_arg_ty ty))).
 
+Definition check_immediate ii sz (w: u64) : ciexec (word sz) :=
+  let r := zero_extend sz w in
+  if sign_extend U64 r == w
+  then ok r
+  else typed_apply_garg_error ii (TYimm sz) (Goprd (Imm_op w)).
+
 Definition typed_apply_garg ii {T} (ty: arg_ty) (arg: garg) :
   (interp_ty ty → T) → ciexec T :=
     match ty, arg return (interp_ty ty → T) → ciexec T with
@@ -128,7 +134,8 @@ Definition typed_apply_garg ii {T} (ty: arg_ty) (arg: garg) :
     | TYreg  , Goprd  (Reg_op r) => λ op, ok (op r)
     | TYireg , Goprd  (Reg_op r) => λ op, ok (op (Reg_ir r))
     | TYireg , Goprd  (Imm_op w) => λ op, ok (op (Imm_ir w))
-    | TYimm  , Goprd  (Imm_op w) => λ op, ok (op w)
+    | TYimm sz, Goprd  (Imm_op w) =>
+      λ op, Let r := check_immediate ii sz w in ok (op r)
     | _      , _                 => λ _, typed_apply_garg_error ii ty arg
     end.
 
@@ -170,7 +177,7 @@ Qed.
 Definition arg_desc_eqMixin := Equality.Mixin arg_desc_beq_axiom .
 Canonical arg_desc_eqType := EqType _ arg_desc_eqMixin.
 
-Definition any_ty : arg_ty := TYimm.
+Definition any_ty : arg_ty := TYimm U64.
 Definition any_garg : garg := Goprd (Imm_op 0%R).
 Definition any_pexpr : pexpr := 0%Z.
 Definition any_ty_pexpr : arg_ty * pexpr := (any_ty, any_pexpr).
@@ -316,7 +323,7 @@ Definition mk_garg ty : interp_ty ty -> garg :=
   | TYoprd => Goprd
   | TYreg  => fun r => Goprd (Reg_op r)
   | TYireg => fun ir => Goprd (match ir with Imm_ir i => Imm_op i | Reg_ir r => Reg_op r end)
-  | TYimm => fun i => Goprd (Imm_op i)
+  | TYimm sz => fun i => Goprd (Imm_op (sign_extend _ i))
   end.
 
 Fixpoint seq_of_tys_t_rec ty tys : (ty -> list garg) -> tys_t_rec ty tys -> list garg :=
