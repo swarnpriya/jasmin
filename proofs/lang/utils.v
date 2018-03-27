@@ -612,6 +612,25 @@ Section LEX.
 
 End LEX.
 
+Section MIN.
+  Context T (cmp: T → T → comparison) (O: Cmp cmp).
+  Definition cmp_min (x y: T) : T :=
+    if (x ≤ y)%CMP then x else y.
+
+  Lemma cmp_minP x y (P: T → T → T → Prop) :
+    ((x ≤ y)%CMP → P x y x) →
+    ((y < x)%CMP → P x y y) →
+    P x y (cmp_min x y).
+  Proof.
+    rewrite /cmp_min; case: ifP.
+    - by move => _ /(_ erefl).
+    by rewrite -cmp_nle_lt => -> _ /(_ erefl).
+  Qed.
+
+End MIN.
+
+Arguments cmp_min {T cmp O} x y.
+
 Definition bool_cmp b1 b2 := 
   match b1, b2 with
   | false, true  => Lt
