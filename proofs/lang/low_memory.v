@@ -166,3 +166,16 @@ Parameter free_stackP : forall m sz,
   free_stack_spec m sz (free_stack m sz).
 
 End Memory.
+
+Lemma write_mem_valid_pointer m ptr sz w m' :
+  Memory.write_mem m ptr sz w = ok m' ->
+  Memory.valid_pointer m ptr sz.
+Proof.
+  move => hw.
+  have := Memory.writeV m ptr w; rewrite hw {hw}; case => // - []; eauto.
+Qed.
+
+Lemma write_mem_can_read m ptr sz w m' :
+  Memory.write_mem m ptr sz w = ok m' ->
+  exists w', Memory.read_mem m ptr sz = ok w'.
+Proof. by move => /write_mem_valid_pointer /Memory.readV. Qed.
