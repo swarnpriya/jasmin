@@ -918,10 +918,11 @@ Section PROOF.
     app_sopn ts op vs' = ok vres.
   Proof.
     elim: ts op vs vs' => /=.
-    + by move=> ? [] //= [] //= ???? h;inversion h.
-    move=> t ts hrec op [] //= v vs vs' /andP [ ht hts];t_xrbindP => w hw hop h.  
-    sinversion h. rewrite (of_val_uincl_a H1 hw) /=.
-    by apply: hrec H3.
+    + by move=> ? [] //= [] //= ???? /List_Forall2_inv_l.
+    move=> t ts hrec op [] //= v vs vs'' /andP [ ht hts];t_xrbindP => w hw hop.
+    case/List_Forall2_inv_l => v' [vs'] [->] {vs''} [hv hvs].
+    rewrite (of_val_uincl_a hv hw) /=.
+    by apply: hrec hvs.
   Qed.
 
   Lemma exec_sopn_uincl_a o vs vs' vres : 
@@ -930,13 +931,12 @@ Section PROOF.
     exec_sopn o vs' = ok vres.
   Proof.
     case: o; try by move=> ?;apply: app_sopn_uincl_a.
-    move=> w /=;case: vs => //= v1 [// | v2 [// | v3 [|//]]] H H1.
-    sinversion H1;sinversion H5;sinversion H6;sinversion H7.
-    move: H;t_xrbindP => _ -> /= b.
-    case: H3 => /value_uincl_bool h _ /h {h} [??];subst => /=.
-    case: b;t_xrbindP => w'. 
-    + by case: H2 => /value_uincl_word h _ /h -> <-.
-    by case: H4 => /value_uincl_word h _ /h -> <-.
+    move=> w /=;case: vs => //= v1 [// | v2 [// | v3 [|//]]] H.
+    case/List_Forall2_inv_l => v1' [vs''] [->] {vs'} [hv1] /List_Forall2_inv_l [v2'] [vs'] [->] {vs''} [hv2] /List_Forall2_inv_l [v3'] [vs''] [->] {vs'} [hv3] /List_Forall2_inv_l -> {vs''}.
+    move: H hv1;t_xrbindP => _ -> /= b /value_uincl_bool h H [] /h {h} [??] _; subst => /=.
+    case: b H; t_xrbindP => w'.
+    + by case: hv2 => /value_uincl_word h _ /h -> <-.
+    by case: hv3 => /value_uincl_word h _ /h -> <-.
   Qed.
 
   Local Lemma Hopn s1 s2 t o xs es : 
@@ -983,8 +983,8 @@ Section PROOF.
   Lemma sem_seq1_iff (P : prog) GD (i : instr) (s1 s2 : estate):
      sem_I P GD s1 i s2 <-> sem P GD s1 [:: i] s2.
   Proof.
-    split=> [ | H]; first by apply sem_seq1.
-    by sinversion H;sinversion H5. 
+    split; first by apply sem_seq1.
+    by case/semE => ? [?] /semE ->.
   Qed.
 
   Local Lemma Hwhile_true s1 s2 s3 s4 c e c':
@@ -1023,9 +1023,8 @@ Section PROOF.
       sem_pexpr gd s2 e0 = ok (Vbool true) ->
       sem p' gd s3 [:: MkI ii (Cwhile c0 e0 c0')] s4 ->
       sem p' gd s1 [:: MkI ii (Cwhile c0 e0 c0')] s4.
-    + move=> e0 He0 /sem_seq1_iff Hsw;apply:sem_seq1;constructor.
-      sinversion Hsw.
-      by apply: (Ewhile_true Hc0 _ Hc0' H4).
+    + move=> e0 He0 /sem_seq1_iff /sem_IE Hsw;apply:sem_seq1;constructor.
+      by apply: (Ewhile_true Hc0 _ Hc0' Hsw).
     have [v' [Hv' []/=]]:= const_prop_eP Hm'' He.
     case: v' Hv' => // ? Hv' ? _;subst.
     by case:is_boolP Hv' => [? [->]| e0 He0]; apply H.

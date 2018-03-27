@@ -230,7 +230,7 @@ Lemma assgn_tuple_Lvar p gd ii (xs:seq var_i) flag tys es vs vs' s s' :
 Proof.
   rewrite /disjoint /assgn_tuple /is_true Sv.is_empty_spec.
   elim: xs es tys vs vs' s s' => [ | x xs Hrec] [ | e es] [ | ty tys] [ | v vs] vs' s s' //=;
-   try by move=> _ _ h;inversion h.
+    try by move => _ _ /(@ok_inj _ _ _ _) <-.
   + by move=> _ _ [<-] [<-];constructor.
   + by move=> _; apply: rbindP => ??;apply:rbindP.
   + by move=> _ _;t_xrbindP => ? _ ? _ <-.
@@ -342,16 +342,16 @@ Section WF.
              (fun i => forall s1 s2, sem_I p gd s1 i s2 -> wf_vm (evm s1) -> wf_vm (evm s2))
              (fun c => forall s1 s2, sem   p gd s1 c s2 -> wf_vm (evm s1) -> wf_vm (evm s2)))=>
       {s1 s2 c}.
-    + by move=> i ii Hrec s1 s2 H;sinversion H;apply Hrec.
-    + by move=> s1 s2 H;sinversion H.
-    + by move=> i c Hi Hc s1 s2 H;sinversion H => /(Hi _ _ H3);apply Hc.
-    + move=> x t ty e s1 s2 H;sinversion H => hw.
-      by apply: wf_write_lval H8.
-    + move=> xs t o es s1 s2 H;sinversion H. 
-      by apply:rbindP H6 => ?? Hw ?;apply: wf_write_lvals Hw.
-    + by move=> e c1 c2 Hc1 Hc2 s1 s2 H;sinversion H;[apply Hc1 | apply Hc2].
-    + move=> i dir lo hi c Hc s1 s2 H;sinversion H.
-      elim: H9 Hc => // ???? ???? Hw Hsc Hsf Hrec Hc.
+    + by move=> i ii Hrec s1 s2 /sem_IE; apply: Hrec.
+    + by move => s1 s2 /semE ->.
+    + by move=> i c Hi Hc s1 s2 /semE [si] [] /Hi {Hi} Hi ? /Hi; apply: Hc.
+    + move=> x t ty e s1 s2 /sem_iE [v] [v'] [hv hv' ok_s2] hw.
+      by apply: wf_write_lval ok_s2.
+    + move=> xs t o es s1 s2 /sem_iE.
+      by apply:rbindP => ?? Hw ?;apply: wf_write_lvals Hw.
+    + move=> e c1 c2 Hc1 Hc2 s1 s2 /sem_iE [b] [_]; case: b; [apply Hc1 | apply Hc2].
+    + move=> i dir lo hi c Hc s1 s2 /sem_iE [vlo] [vhi] [hlo hhi hfor].
+      elim: hfor Hc => // ???? ???? Hw Hsc Hsf Hrec Hc.
       by move=> /wf_write_var -/(_ _ _ _ Hw) -/(Hc _ _ Hsc);apply: Hrec Hc.
     + move=> c e c' Hc Hc' s1 s2 H.
       move: {1 2}(Cwhile c e c') H (refl_equal (Cwhile c e c'))=> i;elim=> //=.
@@ -360,9 +360,9 @@ Section WF.
       by move=> /(Hc' _ _ Hsc'); apply Hrec.
     + move=> ????? Hsc ? [???];subst.
       exact: (Hc _ _ Hsc).
-    move=> i xs f es s1 s2 H;sinversion H=> Hwf.
-    by apply: wf_write_lvals H8.
-  Qed. 
+    move=> i xs f es s1 s2 /sem_iE [vs] [m2] [rs] [_ _ ok_s2] hw.
+    by apply: wf_write_lvals ok_s2.
+  Qed.
 
   Lemma wf_vm_uincl vm : wf_vm vm -> vm_uincl vmap0 vm.
   Proof.
@@ -633,8 +633,8 @@ Section PROOF.
       by rewrite /X3 read_i_while;SvD.fsetdec.
     have [vm4 [Hwf4 Hvm4 Hsw]]:= Hw _ _ _ _ Hi _ Hwf3 Hvm3.
     exists vm4;split => //;apply sem_seq1;constructor.
-    sinversion Hsw; sinversion H4;sinversion H2.
-    apply: (Ewhile_true Hsc1) Hsc2 H4.
+    case/semE: Hsw => si [] /sem_IE Hsw /semE ?; subst si.
+    apply: (Ewhile_true Hsc1) Hsc2 Hsw.
     have /sem_pexpr_uincl_on : (evm s2) <=[read_e e] vm2. 
     + by apply: vm_uincl_onI Hvm2;rewrite /X3 read_i_while;SvD.fsetdec.
     by case: (s2) Hse => ?? he /(_ _ _ he) [? [-> /value_uincl_bool1 ->]].
@@ -782,10 +782,12 @@ Section PROOF.
     have /(_ Sv.empty vm1) [|vargs' /= [Hvargs' Huargs]]:= sem_pexprs_uincl_on _ Hes.
     + by apply: vm_uincl_onI Hvm1;rewrite read_i_call;SvD.fsetdec.
     have [vres1 [Hscall Hvres]]:= Hfun _ Huargs.
-    sinversion Hscall;move: H;rewrite Hfd' => -[?];subst f.
-    have [s1' [vm2' [vres2 [vres' [Htin Hwv Hbody Hvs [Hall Htout]]]]]] := 
-      CheckAllocReg.alloc_funP_eq Hcheckf H0 H1 H2 H3 H4. 
-    move=> {H0 H1 H2 Hfd' Hfd Hcheckf Hsc Hinline}.
+    case/sem_callE: Hscall => f [].
+    rewrite Hfd' => /(@Some_inj _ _ _) <- {f}.
+    case => vargs0 [s1] [vm2] [vres] [hvs' hs1 hvm2 hvres hvres1].
+    have [s1' [vm2' [vres2 [vres' [Htin Hwv Hbody Hvs [Hall Htout]]]]]] :=
+      CheckAllocReg.alloc_funP_eq Hcheckf hvs' hs1 hvm2 hvres hvres1.
+    move=> {hvs' hs1 hvm2 Hfd' Hfd Hcheckf Hsc Hinline}.
     move: Hdisj Hvm1;rewrite read_i_call.
     move: Htin Htout Hvs Hwv Hbody;set rfd := rename_fd _ _ => Htin Htout Hvs Hwv Hbody Hdisjoint Hvm1.
     rewrite (write_vars_lvals gd) in Hwv.
@@ -1026,7 +1028,7 @@ Section REMOVE_INIT.
     have [vm3 [H4 Hvm3 ]]:= Hc' _ Hvm2 Hwf2.
     move=> /(Hw ii _ Hvm3)  [vm4 [Hsem ??]]; exists vm4;split => //=.
     apply sem_seq1;constructor;eapply Ewhile_true;eauto.
-    by move: Hsem => /= H;sinversion H; sinversion H7;sinversion H5.
+    by case/semE: Hsem => si [] /sem_IE ? /semE ?; subst si.
   Qed.
   
   Local Lemma Rwhile_false s1 s2 c e c' :

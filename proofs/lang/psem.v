@@ -712,7 +712,7 @@ Lemma is_wconstP gd s sz e w:
   sem_pexpr gd s e >>= to_word sz = ok w.
 Proof.
   case: e => // sz' e;rewrite /is_wconst;case:ifP => // hle /oseq.obindI [z] [h] [<-].
-  have := is_constP e; rewrite h => {h} h; inversion h => {h}; subst.
+  have := is_constP e; rewrite h => {h} /is_reflect_some_inv -> {e}.
   by rewrite /= /truncate_word hle. 
 Qed.
 
@@ -860,9 +860,9 @@ Lemma sem_app P gd l1 l2 s1 s2 s3:
   sem P gd s1 l1 s2 -> sem P gd s2 l2 s3 ->
   sem P gd s1 (l1 ++ l2) s3.
 Proof.
-  elim: l1 s1;first by move=> s1 H1;inversion H1.
-  move=> a l Hrec s1 H1;inversion H1;subst;clear H1 => /= Hl2.
-  by apply (Eseq H3);apply Hrec.
+  elim: l1 s1;first by move => s1 /semE ->.
+  move=> a l Hrec s1 /semE [si] [h1 hi] h.
+  by apply (Eseq h1);apply Hrec.
 Qed.
 
 Lemma sem_seq1 P gd i s1 s2:

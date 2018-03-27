@@ -399,11 +399,11 @@ Section PROOF.
     have := Hc' sv1;rewrite Hc2=> /(_ Hwf2 vm2') [|vm3' [Hvm3'1 Hvm3'2]].
     + apply: eq_onI Hvm2'1;rewrite /sv4 read_eE;SvD.fsetdec.
     have Hwf3 := wf_sem Hsc' Hwf2.
-    have /= := Hw ii sv0;rewrite Hloop /= => /(_ Hwf3 _ Hvm3'1) [vm4' [Hvm4'1 Hvm4'2]].
+    have /= := Hw ii sv0;rewrite Hloop /= => /(_ Hwf3 _ Hvm3'1) [vm4' [Hvm4'1 /semE Hvm4'2]].
     exists vm4';split => //.
-    sinversion Hvm4'2;sinversion H6;sinversion H4.
+    case: Hvm4'2 => si [/sem_IE Hvm4'2 /semE ?]; subst si.
     apply sem_seq1;constructor.
-    apply: (Ewhile_true Hvm2'2) Hvm3'2 H6.
+    apply: (Ewhile_true Hvm2'2) Hvm3'2 Hvm4'2.
     have Hvm': vm2' =[read_e_rec sv0 e] evm s2.
     + by apply: eq_onI (eq_onS Hvm2'1);rewrite /sv4 !read_eE; SvD.fsetdec.
     by rewrite (read_e_eq_on _ (emem s2) Hvm');case: (s2) H.
