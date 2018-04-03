@@ -463,6 +463,18 @@ Definition x86_shift_mask (s:wsize) : u8 :=
 Definition wbit_n sz (w:word sz) (n:nat) : bool := 
    wbit (wunsigned w) n.
 
+Lemma eq_from_wbit_n s (w1 w2: word s) :
+  reflect (∀ i : 'I_(wsize_size_minus_1 s).+1, wbit_n w1 i = wbit_n w2 i) (w1 == w2).
+Proof. apply/eq_from_wbit. Qed.
+
+Lemma wandE s (w1 w2: word s) i :
+  wbit_n (wand w1 w2) i = wbit_n w1 i && wbit_n w2 i.
+Proof. by rewrite /wbit_n /wand wandE. Qed.
+
+Lemma wxorE s (w1 w2: word s) i :
+  wbit_n (wxor w1 w2) i = wbit_n w1 i (+) wbit_n w2 i.
+Proof. by rewrite /wbit_n /wxor wxorE. Qed.
+
 Definition lsb {s} (w: word s) : bool := wbit_n w 0.
 Definition msb {s} (w: word s) : bool := wbit_n w (wsize_size_minus_1 s).
 
@@ -563,6 +575,21 @@ Proof.
   by move=> hle;rewrite [X in (zero_extend _ X) = _]/zero_extend zero_extend_wrepr.
 Qed.
 
+Lemma wbit_zero_extend s s' (w: word s') i :
+  wbit_n (zero_extend s w) i = (i <=? wsize_size_minus_1 s) && wbit_n w i.
+Proof.
+rewrite /zero_extend /wbit_n /wunsigned /wrepr.
+move: (urepr w) => {w} z.
+rewrite mkwordK.
+set m := wsize_size_minus_1 _.
+rewrite /xword.wbit /=.
+move: (Z.of_nat i) => {i} i.
+rewrite /modulus two_power_nat_equiv.
+case: Z.leb_spec => hi.
++ rewrite Z.mod_pow2_bits_low //; lia.
+rewrite Z.mod_pow2_bits_high //; lia.
+Qed.
+
 Lemma wrepr0 sz : wrepr sz 0 = 0%R.
 Proof. by apply/eqP. Qed.
 
@@ -594,25 +621,47 @@ Lemma wadd_zero_extend sz sz' (x y: word sz') :
   (sz ≤ sz')%CMP →
   (zero_extend sz x + zero_extend sz y)%R = zero_extend sz (x + y).
 Proof.
-Admitted.
+move => hle; apply: word_ext.
+rewrite /wrepr !mkwordK -Zplus_mod.
+rewrite /wunsigned /urepr /=.
+change (x + y)%R with (add_word x y).
+rewrite /add_word /= /urepr /=.
+case: (modulus_m (wsize_size_m hle)) => n -> {hle}.
+by rewrite mod_pq_mod_q.
+Qed.
 
 Lemma wmul_zero_extend sz sz' (x y: word sz') :
   (sz ≤ sz')%CMP →
   (zero_extend sz x * zero_extend sz y)%R = zero_extend sz (x * y).
 Proof.
-Admitted.
+move => hle; apply: word_ext.
+rewrite /wrepr !mkwordK -Zmult_mod.
+rewrite /wunsigned /urepr /=.
+change (x * y)%R with (mul_word x y).
+rewrite /mul_word /= /urepr /=.
+case: (modulus_m (wsize_size_m hle)) => n -> {hle}.
+by rewrite mod_pq_mod_q.
+Qed.
 
 Lemma wand_zero_extend sz sz' (x y: word sz') :
   (sz ≤ sz')%CMP →
   wand (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wand x y).
 Proof.
-Admitted.
+move => hle.
+apply/eqP/eq_from_wbit_n => i.
+rewrite !(wbit_zero_extend, wandE).
+by case: (_ <=? _).
+Qed.
 
 Lemma wxor_zero_extend sz sz' (x y: word sz') :
   (sz ≤ sz')%CMP →
   wxor (zero_extend sz x) (zero_extend sz y) = zero_extend sz (wxor x y).
 Proof.
-Admitted.
+move => hle.
+apply/eqP/eq_from_wbit_n => i.
+rewrite !(wbit_zero_extend, wxorE).
+by case: (_ <=? _).
+Qed.
 
 (* -------------------------------------------------------------------*)
 
