@@ -40,6 +40,37 @@ Unset Printing Implicit Defensive.
 
 Local Open Scope Z_scope.
 
+Ltac elim_div :=
+   unfold Zdiv, Zmod;
+     match goal with
+       |  H : context[ Zdiv_eucl ?X ?Y ] |-  _ =>
+          generalize (Z_div_mod_full X Y) ; destruct (Zdiv_eucl X Y)
+       |  |-  context[ Zdiv_eucl ?X ?Y ] =>
+          generalize (Z_div_mod_full X Y) ; destruct (Zdiv_eucl X Y)
+     end; unfold Remainder.
+
+Lemma mod_pq_mod_q x p q :
+  0 < p → 0 < q →
+  (x mod (p * q)) mod q = x mod q.
+Proof.
+move => hzp hzq.
+have hq : q ≠ 0 by nia.
+have hpq : p * q ≠ 0 by nia.
+elim_div => /(_ hq); elim_div => /(_ hpq) => [] [?] hr1 [?] hr2; subst.
+elim_div => /(_ hq) [heq hr3].
+intuition (try nia).
+suff : p * z1 + z = z2; nia.
+Qed.
+
+Lemma modulus_m a b :
+  a ≤ b →
+  ∃ n, modulus b.+1 = modulus n * modulus a.+1.
+Proof.
+move => hle.
+exists (b - a)%nat; rewrite /modulus !two_power_nat_equiv -Z.pow_add_r; try lia.
+rewrite (Nat2Z.inj_sub _ _ hle); f_equal; lia.
+Qed.
+
 (* ** Machine word representation for proof 
  * -------------------------------------------------------------------- *)
 
@@ -313,6 +344,17 @@ Lemma wsize_size_pos sz :
   0 < wsize_size sz.
 Proof. by case sz. Qed.
 
+Lemma wsize_cmpP sz sz' :
+  wsize_cmp sz sz' = Nat.compare (wsize_size_minus_1 sz) (wsize_size_minus_1 sz').
+Proof. by case: sz sz' => -[]; vm_compute. Qed.
+
+Lemma wsize_size_m s s' :
+  (s ≤ s')%CMP →
+  wsize_size_minus_1 s ≤ wsize_size_minus_1 s'.
+Proof.
+by move=> /eqP; rewrite /cmp_le /gcmp wsize_cmpP Nat.compare_ge_iff.
+Qed.
+
 Definition word : wsize -> comRingType :=
   λ sz, word_comRingType (wsize_size_minus_1 sz).
 
@@ -348,8 +390,20 @@ Definition wsigned {s} (w: word s) : Z :=
 Definition wrepr s (z: Z) : word s :=
   mkword (wsize_size_minus_1 s).+1 z.
 
+Lemma word_ext n x y h h' :
+  x = y →
+  @mkWord n x h = @mkWord n y h'.
+Proof. by move => e; apply/val_eqP/eqP. Qed.
+
+Lemma wunsigned_inj sz : injective (@wunsigned sz).
+Proof. by move => x y /eqP /val_eqP. Qed.
+
 Lemma wrepr_unsigned s (w: word s) : wrepr s (wunsigned w) = w.
 Proof. by rewrite /wrepr /wunsigned ureprK. Qed.
+
+Lemma wunsigned_repr s z :
+  wunsigned (wrepr s z) = z mod modulus (wsize_size_minus_1 s).+1.
+Proof. done. Qed.
 
 Lemma wunsigned_range sz (p: word sz) :
   0 <= wunsigned p < wbase sz.
@@ -429,7 +483,8 @@ Definition wumul sz (x y: word sz) :=
 Definition zero_extend sz sz' (w: word sz') : word sz :=
   wrepr sz (wunsigned w).
 
-Parameter sign_extend : ∀ sz sz', word sz'  → word sz.
+Definition sign_extend sz sz' (w: word sz') : word sz :=
+  wrepr sz (wsigned w).
 
 Definition wbit sz (w i: word sz) : bool :=
   wbit_n w (Z.to_nat (wunsigned i mod wsize_bits sz)).
@@ -470,17 +525,19 @@ Proof. Admitted.
 
 (* -------------------------------------------------------------------*)
 
-Lemma wsize_cmpP sz sz' :
-  wsize_cmp sz sz' = Nat.compare (wsize_size_minus_1 sz) (wsize_size_minus_1 sz').
-Proof. by case: sz sz' => -[]; vm_compute. Qed.
-
 Lemma zero_extend_u sz (w:word sz) : zero_extend sz w = w.
 Proof. by rewrite /zero_extend wrepr_unsigned. Qed.
 
 Lemma zero_extend_sign_extend sz sz' s (w: word s) :
-  (s ≤ sz')%CMP → (sz ≤ sz')%CMP →
+ (sz ≤ sz')%CMP →
   zero_extend sz (sign_extend sz' w) = sign_extend sz w.
-Admitted.
+Proof.
+move => hsz; rewrite /sign_extend; apply: word_ext.
+move: (wsigned w) => {w} z.
+rewrite wunsigned_repr.
+case: (modulus_m (wsize_size_m hsz)) => n hn.
+by rewrite hn mod_pq_mod_q.
+Qed.
 
 Lemma sign_zero_sign_extend sz sz' (w: word sz') :
   sign_extend sz (zero_extend sz' (sign_extend sz w)) = sign_extend sz w.
@@ -489,48 +546,14 @@ Admitted.
 Lemma sign_extend_u sz (w: word sz) : sign_extend sz w = w.
 Proof. Admitted.
 
-Ltac elim_div :=
-   unfold Zdiv, Zmod;
-     match goal with
-       |  H : context[ Zdiv_eucl ?X ?Y ] |-  _ =>
-          generalize (Z_div_mod_full X Y) ; destruct (Zdiv_eucl X Y)
-       |  |-  context[ Zdiv_eucl ?X ?Y ] =>
-          generalize (Z_div_mod_full X Y) ; destruct (Zdiv_eucl X Y)
-     end; unfold Remainder.
-
-Lemma mod_pq_mod_q x p q :
-  0 < p → 0 < q →
-  (x mod (p * q)) mod q = x mod q.
-Proof.
-move => hzp hzq.
-have hq : q ≠ 0 by nia.
-have hpq : p * q ≠ 0 by nia.
-elim_div => /(_ hq); elim_div => /(_ hpq) => [] [?] hr1 [?] hr2; subst.
-elim_div => /(_ hq) [heq hr3].
-intuition (try nia).
-suff : p * z1 + z = z2; nia.
-Qed.
-
-Lemma word_ext n x y h h' :
-  x = y →
-  @mkWord n x h = @mkWord n y h'.
-Proof. by move => e; apply/val_eqP/eqP. Qed.
-
-Lemma wunsigned_inj sz : injective (@wunsigned sz).
-Proof. by move => x y /eqP /val_eqP. Qed.
-
 Lemma zero_extend_wrepr sz sz' z :
   (sz <= sz')%CMP →
   zero_extend sz (wrepr sz' z) = wrepr sz z.
 Proof.
-move=> /eqP; rewrite /cmp_le /gcmp wsize_cmpP Nat.compare_ge_iff => hle.
+move/wsize_size_m => hle.
 apply: word_ext.
 rewrite /wunsigned /urepr /wrepr /=.
-move: hle. set a := wsize_size_minus_1 sz; set b := wsize_size_minus_1 sz' => hle.
-have : ∃ n, modulus b.+1 = modulus n * modulus a.+1.
-- exists (b - a)%nat; rewrite /modulus !two_power_nat_equiv -Z.pow_add_r; try lia.
-  rewrite (Nat2Z.inj_sub _ _ hle); f_equal; lia.
-case => n -> {hle b}.
+case: (modulus_m hle) => n -> {hle}.
 exact: mod_pq_mod_q.
 Qed.
 
