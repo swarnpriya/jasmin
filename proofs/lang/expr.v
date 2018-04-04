@@ -430,7 +430,7 @@ Definition inline_info_eqMixin     := Equality.Mixin inline_info_eq_axiom.
 Canonical  inline_info_eqType      := Eval hnf in EqType inline_info inline_info_eqMixin.
 
 (* -------------------------------------------------------------------- *)
-
+Local Unset Elimination Schemes.
 
 Inductive instr_r :=
 | Cassgn : lval -> assgn_tag -> stype -> pexpr -> instr_r
