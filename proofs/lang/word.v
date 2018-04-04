@@ -30,6 +30,7 @@
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import xword.
 Require ssrring.
+Require Zquot.
 Require Import Psatz ZArith utils type.
 Import Utf8.
 Import ssrZ.
@@ -364,8 +365,6 @@ Definition wand {s} (x y: word s) : word s := wand x y.
 Definition wor {s} (x y: word s) : word s := wor x y.
 Definition wxor {s} (x y: word s) : word s := wxor x y.
 
-Parameters wmulhu wmulhs : forall {s}, word s -> word s -> word s.
-
 Parameter wshr wshl wsar : forall {s}, word s -> Z -> word s.
 
 Definition wlt {sz} (sg: signedness) : word sz → word sz → bool :=
@@ -424,8 +423,13 @@ rewrite Zplus_mod_idemp_r.
 exact: Zmod_small.
 Qed.
 
-Axiom wlt_irrefl : ∀ sz sg (w: word sz), wlt sg w w = false.
-Axiom wle_refl : ∀ sz sg (w: word sz), wle sg w w = true.
+Lemma wlt_irrefl sz sg (w: word sz) :
+  wlt sg w w = false.
+Proof. case: sg; exact: Z.ltb_irrefl. Qed.
+
+Lemma wle_refl sz sg (w: word sz) :
+  wle sg w w = true.
+Proof. case: sg; exact: Z.leb_refl. Qed.
 
 Lemma wshr0 sz (w: word sz) : wshr w 0 = w.
 Proof. Admitted.
@@ -436,14 +440,17 @@ Proof. Admitted.
 Lemma wsar0 sz (w: word sz) : wsar w 0 = w.
 Proof. Admitted.
 
+Definition wmulhu sz (x y: word sz) : word sz :=
+  wrepr sz ((wunsigned x * wunsigned y) / wbase sz).
+
+Definition wmulhs sz (x y: word sz) : word sz :=
+  wrepr sz ((wsigned x * wsigned y) / wbase sz).
+
 Lemma wmulhuE sz (x y: word sz) : wmulhu x y = wrepr sz (wunsigned x * wunsigned y ÷ wbase sz).
-Proof. (* I64.mulhu w1 w2 = I64.repr (w1 * w2 ÷ I64.modulus).
 Proof.
-    rewrite /I64.mulhu.
-    case: w1 w2 => [z1 h1] [z2 h2] /=.
-    rewrite Zquot.Zquot_Zdiv_pos //.
-    apply: Z.mul_nonneg_nonneg; lia. *)
-Admitted.
+    rewrite /wmulhu Zquot.Zquot_Zdiv_pos //.
+    apply: Z.mul_nonneg_nonneg; apply: (proj1 (wunsigned_range _)).
+Qed.
 
 Definition wmax_unsigned sz := wbase sz - 1.
 Definition wmin_signed (sz: wsize) : Z := - modulus (wsize_size_minus_1 sz).
@@ -482,7 +489,11 @@ Proof. by rewrite /wbit_n /wxor wxorE. Qed.
 Definition lsb {s} (w: word s) : bool := wbit_n w 0.
 Definition msb {s} (w: word s) : bool := wbit_n w (wsize_size_minus_1 s).
 
-Parameters wdwordu wdwords : ∀ s, word s → word s → Z.
+Definition wdwordu sz (hi lo: word sz) : Z :=
+  wunsigned hi * wbase sz + wunsigned lo.
+
+Definition wdwords sz (hi lo: word sz) : Z :=
+  wsigned hi * wbase sz + wunsigned lo.
 
 Definition waddcarry sz (x y: word sz) (c: bool) :=
   let n := wunsigned x + wunsigned y + Z.b2z c in
