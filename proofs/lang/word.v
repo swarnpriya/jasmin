@@ -374,7 +374,11 @@ Definition wlt {sz} (sg: signedness) : word sz → word sz → bool :=
   | Signed => λ x y, (srepr x < srepr y)%R
   end.
 
-Parameter wle : forall {s}, signedness -> word s -> word s -> bool.
+Definition wle sz (sg: signedness) : word sz → word sz → bool :=
+  match sg with
+  | Unsigned => λ x y, (urepr x <= urepr y)%R
+  | Signed => λ x y, (srepr x <= srepr y)%R
+  end.
 
 Parameter wnot : forall {s}, word s -> word s.
 
@@ -442,8 +446,8 @@ Proof.
 Admitted.
 
 Definition wmax_unsigned sz := wbase sz - 1.
-Parameter wmin_signed   : wsize -> Z.
-Parameter wmax_signed   : wsize -> Z.
+Definition wmin_signed (sz: wsize) : Z := - modulus (wsize_size_minus_1 sz).
+Definition wmax_signed (sz: wsize) : Z := modulus (wsize_size_minus_1 sz) - 1.
 
 Notation u8   := (word U8).
 Notation u16  := (word U16).

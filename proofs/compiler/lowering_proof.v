@@ -647,7 +647,7 @@ Ltac elim_div :=
       rewrite /x86_cmp /check_size_8_64 Hsz /=.
       eexists _, _; split; first by reflexivity.
       do 2 split => //.
-      by rewrite negbK wleuE.
+      by rewrite negbK -wleuE.
     (* Cond2 CondEq *)
     + case: o He => // -[] // => [] [] sz' // He []??????; subst.
       case/sem_op2_wb_dec: He => w1 [z1] [w2] [z2] [Hz1z2] [Hw1] [Hw2->].
