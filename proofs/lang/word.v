@@ -379,7 +379,10 @@ Definition wle sz (sg: signedness) : word sz → word sz → bool :=
   | Signed => λ x y, (srepr x <= srepr y)%R
   end.
 
-Parameter wnot : forall {s}, word s -> word s.
+Definition wnot sz (w: word sz) : word sz :=
+  wxor w (-1)%R.
+
+Arguments wnot {sz} w.
 
 Definition wbase (s: wsize) : Z :=
   modulus (wsize_size_minus_1 s).+1.
@@ -485,6 +488,18 @@ Proof. by rewrite /wbit_n /wand wandE. Qed.
 Lemma wxorE s (w1 w2: word s) i :
   wbit_n (wxor w1 w2) i = wbit_n w1 i (+) wbit_n w2 i.
 Proof. by rewrite /wbit_n /wxor wxorE. Qed.
+
+Lemma wN1E sz i :
+  @wbit_n sz (-1)%R i = leq (S i) (wsize_size_minus_1 sz).+1.
+Admitted.
+
+Lemma wnotE sz (w: word sz) (i: 'I_(wsize_size_minus_1 sz).+1) :
+  wbit_n (wnot w) i = ~~ wbit_n w i.
+Proof.
+  rewrite /wnot wxorE wN1E.
+  case: i => i /= ->.
+  exact: addbT.
+Qed.
 
 Definition lsb {s} (w: word s) : bool := wbit_n w 0.
 Definition msb {s} (w: word s) : bool := wbit_n w (wsize_size_minus_1 s).
