@@ -307,6 +307,14 @@ Context (gd: glob_defs).
 
 Definition word_extend_reg (r: register) sz (w: word sz) (m: x86_mem) := 
   merge_word (m.(xreg) r) w.
+
+Lemma word_extend_reg_id r sz (w: word sz) m :
+  (U32 ≤ sz)%CMP →
+  word_extend_reg r w m = zero_extend U64 w.
+Proof.
+rewrite /word_extend_reg /merge_word.
+by case: sz w => //= w _; rewrite wand0 wxor0.
+Qed.
     
 Definition mem_write_reg (r: register) sz (w: word sz) (m: x86_mem) :=  
   {|

@@ -537,6 +537,10 @@ Proof. Admitted.
 
 (* -------------------------------------------------------------------*)
 
+Lemma zero_extend0 sz sz' :
+  @zero_extend sz sz' 0%R = 0%R.
+Proof. by apply/eqP/eq_from_wbit. Qed.
+
 Lemma zero_extend_u sz (w:word sz) : zero_extend sz w = w.
 Proof. by rewrite /zero_extend wrepr_unsigned. Qed.
 
