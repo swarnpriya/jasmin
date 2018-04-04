@@ -87,8 +87,6 @@ Parameter write_valid : forall m m' p s (v :word s) p' s',
 
 Parameter is_align : pointer -> wsize -> bool.
 
-Parameter valid_align : forall m p s, valid_pointer m p s -> is_align p s.
-
 Parameter is_align_array :
   forall ptr sz j, is_align ptr sz -> is_align (wrepr _ (wsize_size sz * j) + ptr) sz.
 
@@ -167,6 +165,43 @@ Parameter free_stackP : forall m sz,
 
 End Memory.
 
+Module UnsafeMemory.
+
+Parameter mem : Type.
+
+Parameter read_mem : mem -> pointer -> forall (s:wsize), word s.
+Parameter write_mem : mem -> pointer -> forall (s:wsize), word s -> mem.
+
+Parameter writeP_eq : forall m m' p s (v :word s),
+  write_mem m p v = m' ->
+  read_mem m' p s = v.
+
+
+Parameter writeP_neq : forall m m' p s (v :word s) p' s',
+  write_mem m p v = m' ->
+  read_mem m' p' s' = read_mem m p' s'. 
+
+Parameter alloc_stack : mem -> Z -> (pointer * mem).
+
+Parameter free_stack : mem -> pointer -> Z -> mem.
+
+Parameter alloc_stackP : forall m m' sz pstk,
+   alloc_stack m sz = (pstk, m') ->
+   [/\ (wunsigned pstk + sz < wbase Uptr)%Z,
+      (forall w, read_mem m w = read_mem m' w) &
+      (forall w, ~(wunsigned pstk <= w < wunsigned pstk + sz)%Z)].
+
+Parameter free_stackP : forall m m' pstk sz,
+   free_stack m pstk sz = m' ->
+   forall w,
+     read_mem m' w = read_mem m w.
+
+Parameter eq_memP : forall m m',
+    (forall w, read_mem m w = read_mem m' w) -> m = m'.
+
+
+End UnsafeMemory.
+
 Lemma write_mem_valid_pointer m ptr sz w m' :
   Memory.write_mem m ptr sz w = ok m' ->
   Memory.valid_pointer m ptr sz.
@@ -179,3 +214,13 @@ Lemma write_mem_can_read m ptr sz w m' :
   Memory.write_mem m ptr sz w = ok m' ->
   exists w', Memory.read_mem m ptr sz = ok w'.
 Proof. by move => /write_mem_valid_pointer /Memory.readV. Qed.
+
+Parameter mem_to_smem: Memory.mem -> UnsafeMemory.mem.
+
+Parameter mem2smem_read: forall m s w w',
+  Memory.read_mem m w s = ok w' ->
+  UnsafeMemory.read_mem (mem_to_smem m) w s = w'.
+
+Parameter mem2smem_write: forall m s w1 m' w,
+  Memory.write_mem m w1 s w = ok m' ->
+  mem_to_smem m' = UnsafeMemory.write_mem (mem_to_smem m) w1 w.
