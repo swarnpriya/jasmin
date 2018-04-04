@@ -97,15 +97,9 @@ Definition sto_arr sz (v: svalue) : exec (FArray.array (word sz)) :=
     else type_error
   else type_error.
 
-Definition ensure_wsize (s s':wsize) (w:word s') : exec (word s) := 
-   if (s == s')%CMP then ok (zero_extend s w) else type_error.
-
-Lemma ensure_wsize_u s (a : word s): ensure_wsize s a = ok a.
-Proof. rewrite /ensure_wsize. rewrite zero_extend_u. rewrite /if_trueP. heck cmp_refl. auto. cmp_le_refl zero_extend_u. Qed.
-
 Definition sto_word sz v :=
   match v with
-  | SVword sz' w => ensure_wsize sz w
+  | SVword sz' w => truncate_word sz w
   | _            => type_error
   end.
 
@@ -534,9 +528,8 @@ Lemma sval_sstype_of_sval sst (z : svalue) y :
 Proof.
   case: sst y z;[by move => y []| by move => y [] | |] => s; [by destruct s => y [] [] |]; (try by move => y [] ).
   simpl => w. move => []; (try by move).
-  move => s' w'. simpl. rewrite /truncate_word. case (s<=s')%CMP; [|admit].
+  move => s' w'. simpl. rewrite /truncate_word. case (s<=s')%CMP. 
   move => H. apply ok_inj in H.
-  Check truncate_word.
   simpl. move => H. 
 Qed.
 
