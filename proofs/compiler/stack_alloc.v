@@ -26,7 +26,7 @@
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
 Require Import Coq.Logic.Eqdep_dec.
-Require Import strings word utils type var expr low_memory.
+Require Import strings word utils type var expr low_memory sem.
 Require Import constant_prop.
 Require Import compiler_util.
 Require Import ZArith.
@@ -118,6 +118,7 @@ Definition check_var_stk (m:map) sz (x1 x2:var_i) (e2:pexpr) :=
     | _ => false
     end.
 
+(* TODO: MOVE *)
 Definition is_arr_type (t:stype) :=
   if t is sarr sz _ then Some sz else None.
 
@@ -156,23 +157,36 @@ Fixpoint check_e (m:map) (e1 e2: pexpr) :=
 
 Definition check_arr_stk := check_arr_stk' (* check_e *). 
 
-Definition check_lval (m:map) (r1 r2:lval) := 
+Definition check_lval (m:map) (r1 r2:lval) ty := 
   match r1, r2 with
   | Lnone _ t1, Lnone _ t2 => t1 == t2
   | Lvar x1, Lvar x2 => check_var m x1 x2
-  | Lvar x1, Lmem w2 x2 e2 => check_var_stk m w2 x1 x2 e2
+  | Lvar x1, Lmem w2 x2 e2 => (ty == sword w2) && check_var_stk m w2 x1 x2 e2
   | Lmem w1 x1 e1, Lmem w2 x2 e2 => (w1 == w2) && check_var m x1 x2 && check_e m e1 e2
   | Laset x1 e1, Laset x2 e2 => check_var m x1 x2 && check_e m e1 e2
   | Laset x1 e1, Lmem w2 x2 e2 => check_arr_stk m w2 x1 e1 x2 e2
   | _, _ => false
   end.
 
+Section ALL3.
+
+ Context (A B C:Type) (f:A -> B -> C -> bool).
+
+ Fixpoint all3 l1 l2 l3 := 
+   match l1, l2, l3 with
+   | [::], [::], [::] => true
+   | a::l1, b::l2, c::l3 => f a b c && all3 l1 l2 l3
+   | _, _, _ => false
+   end.
+
+End ALL3.
+
 Fixpoint check_i (m: map) (i1 i2: instr) : bool :=
   let (_, ir1) := i1 in
   let (_, ir2) := i2 in
   match ir1, ir2 with
-  | Cassgn r1 _ ty1 e1, Cassgn r2 _ ty2 e2 => check_lval m r1 r2 && (ty1 == ty2) && check_e m e1 e2
-  | Copn rs1 _ o1 e1, Copn rs2 _ o2 e2 => all2 (check_lval m) rs1 rs2 && (o1 == o2) && all2 (check_e m) e1 e2
+  | Cassgn r1 _ ty1 e1, Cassgn r2 _ ty2 e2 => check_lval m r1 r2 ty1 && (ty1 == ty2) && check_e m e1 e2
+  | Copn rs1 _ o1 e1, Copn rs2 _ o2 e2 => all3 (check_lval m) rs1 rs2 (sopn_tout o1) && (o1 == o2) && all2 (check_e m) e1 e2
   | Cif e1 c1 c1', Cif e2 c2 c2' => check_e m e1 e2 && all2 (check_i m) c1 c2 && all2 (check_i m) c1' c2'
   | Cwhile c1 e1 c1', Cwhile c2 e2 c2' => all2 (check_i m) c1 c2 && check_e m e1 e2 && all2 (check_i m) c1' c2'
   | _, _ => false
