@@ -50,6 +50,9 @@ Arguments write_mem : clear implicits.
 
 Parameter valid_pointer : mem -> pointer -> wsize -> bool.
 
+Parameter eq_memP : forall m m',
+    (forall ptr sz, read_mem m ptr sz = read_mem m' ptr sz) -> m = m'.
+
 Definition no_overflow (p: pointer) (sz: Z) : bool :=
   (wunsigned p + sz <? wbase Uptr)%Z.
 
@@ -146,7 +149,7 @@ Section SPEC.
     fss_read_old : forall p s, valid_pointer m' p s -> read_mem m p s = read_mem m' p s;
     fss_valid    : forall p s, 
       valid_pointer m' p s <-> 
-      (valid_pointer m p s /\ (disjoint_zrange pstk sz p (wsize_size s)));
+      (valid_pointer m p s /\ (disjoint_zrange (top_stack m) sz p (wsize_size s)));
     fss_top      : caller m (top_stack m) = Some (top_stack m');
     fss_caller   : forall p, caller m' p = if p == top_stack m then None else caller m p;
     fss_size     : forall p, 
@@ -199,10 +202,17 @@ Parameter free_stackP : forall m m' pstk sz,
      read_mem m' w = read_mem m w.
 
 Parameter eq_memP : forall m m',
-    (forall w, read_mem m w = read_mem m' w) -> m = m'.
-
+    (forall ptr sz, read_mem m ptr sz = read_mem m' ptr sz) -> m = m'.
 
 End UnsafeMemory.
+
+Lemma read_mem_valid_pointer m ptr sz w :
+  Memory.read_mem m ptr sz = ok w ->
+  Memory.valid_pointer m ptr sz.
+Proof.
+  move => hr.
+  have := Memory.readV m ptr sz; rewrite hr {hr}; case => // - []; eauto.
+Qed.
 
 Lemma write_mem_valid_pointer m ptr sz w m' :
   Memory.write_mem m ptr sz w = ok m' ->
