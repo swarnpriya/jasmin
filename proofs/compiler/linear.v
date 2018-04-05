@@ -69,8 +69,10 @@ Definition find_label (lbl : label) (c : seq linstr) :=
 Record lfundef := LFundef {
  lfd_stk_size : Z;
  lfd_nstk : Ident.ident;
+ lfd_tyin : seq stype;
  lfd_arg  : seq var_i;
  lfd_body : lcmd;
+ lfd_tyout : seq stype;
  lfd_res  : seq var_i;  (* /!\ did we really want to have "seq var_i" here *)
 }.
 
@@ -178,7 +180,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
 
 Definition linear_fd (fd: sfundef) :=
   Let fd' := linear_c linear_i (sf_body fd) 1%positive [::] in
-  ok (LFundef (sf_stk_sz fd) (sf_stk_id fd) (sf_params fd) fd'.2 (sf_res fd)).
+  ok (LFundef (sf_stk_sz fd) (sf_stk_id fd) (sf_tyin fd) (sf_params fd) fd'.2 (sf_tyout fd) (sf_res fd)).
 
 Definition linear_prog (p: sprog) : cfexec lprog :=
   map_cfprog linear_fd p.
