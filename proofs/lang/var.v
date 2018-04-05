@@ -320,7 +320,7 @@ Module MvMake (I:IDENT).
 
 End MvMake.
 
-(* ** Types for idents 
+(* ** Types for idents
  * -------------------------------------------------------------------- *)
 
 Module Ident.
@@ -349,6 +349,12 @@ Notation "vm .[ x ]" := (@Mv.get _ vm x) : mvar_scope.
 Notation "vm .[ x  <- v ]" := (@Mv.set _ vm x v) : mvar_scope.
 Arguments Mv.get to m%mvar_scope x.
 Arguments Mv.set to m%mvar_scope x v.
+
+Lemma vtype_diff x x': vtype x != vtype x' -> x != x'.
+Proof. by apply: contra => /eqP ->. Qed.
+
+Lemma vname_diff x x': vname x != vname x' -> x != x'.
+Proof. by apply: contra => /eqP ->. Qed.
 
 (* ** Variables function: to be not used if computation is needed, 
  *                       but extentianality is permited 

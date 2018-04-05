@@ -104,6 +104,15 @@ Proof.
   case: Sumbool.sumbool_of_bool h; t_xrbindP => // _ w'' -> <-; eauto.
 Qed.
 
+Lemma type_of_val_to_pword sz v w :
+  type_of_val v = sword sz →
+  to_pword sz v = ok w →
+  ∃ w' : word sz, w = pword_of_word w' ∧ v = Vword w'.
+Proof.
+  case: v => //= [ s w' [?]| []//]; subst.
+  by rewrite sumbool_of_boolET => - [<-]; exists w'.
+Qed.
+
 (* ** Variable map
  * -------------------------------------------------------------------- *)
 
