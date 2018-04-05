@@ -87,6 +87,8 @@ Parameter write_valid : forall m m' p s (v :word s) p' s',
 
 Parameter is_align : pointer -> wsize -> bool.
 
+Parameter valid_align : forall m p s, valid_pointer m p s -> is_align p s.
+
 Parameter is_align_array :
   forall ptr sz j, is_align ptr sz -> is_align (wrepr _ (wsize_size sz * j) + ptr) sz.
 
