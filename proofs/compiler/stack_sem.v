@@ -29,9 +29,10 @@ From mathcomp Require Import choice fintype eqtype div seq zmodp finset.
 Require Import Coq.Logic.Eqdep_dec.
 Require Import strings word utils type var expr low_memory psem stack_alloc.
 
-Require Import compiler_util.
-Require Import ZArith.
-Require Import Psatz.
+Import compiler_util.
+Import ZArith.
+Import Psatz.
+Import Memory.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -47,8 +48,6 @@ Module S.
 
   Variable P:sprog.
   Context (gd: glob_defs).
-
-  Import Memory.
 
   Inductive sem : estate -> cmd -> estate -> Prop :=
   | Eskip s : sem s [::] s
@@ -101,16 +100,17 @@ Module S.
     sem_i s1 (Ccall ii xs f args) s2
 
   with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
-  | EcallRun m1 m2 fn sf vargs s1 s2 m2' vm2 vres m1':
+  | EcallRun m1 m2 fn sf vargs vargs' s1 s2 m2' vm2 vres vres' m1':
     get_fundef P fn = Some sf ->
     alloc_stack m1 (sf_stk_sz sf) = ok m1' ->
     write_var  (vstk (sf_stk_id sf)) (Vword (top_stack m1')) (Estate m1' vmap0) = ok s1 ->
+    mapM2 ErrType truncate_val sf.(sf_tyin) vargs' = ok vargs ->
     write_vars (sf_params sf) vargs s1 = ok s2 ->
     sem s2 (sf_body sf) {| emem := m2'; evm := vm2 |} ->
     mapM (fun (x:var_i) => get_var vm2 x) sf.(sf_res) = ok vres ->
+    mapM2 ErrType truncate_val sf.(sf_tyout) vres = ok vres' ->
     m2 = free_stack m2' (sf_stk_sz sf) ->
-    List.Forall is_full_array vres ->
-    sem_call m1 fn vargs m2 vres.
+    sem_call m1 fn vargs' m2 vres'.
 
   End SEM.
 
@@ -164,4 +164,3 @@ Module S.
   Qed.
 
 End S.
-

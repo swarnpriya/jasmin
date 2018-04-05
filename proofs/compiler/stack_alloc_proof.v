@@ -23,14 +23,12 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ----------------------------------------------------------------------- *)
 
-(* * Prove properties about semantics of dmasm input language *)
-
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
 Require Import psem compiler_util constant_prop_proof.
 Require Export stack_alloc stack_sem.
-
 Require Import Psatz.
+Import Memory.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -46,8 +44,6 @@ Lemma size_of_pos t s : size_of t = ok s -> (1 <= s).
 Proof.
   case: t=> //= [sz p [] <-| sz [] <-]; have hsz := wsize_size_pos sz; nia.
 Qed.
-
-  Import Memory.
 
 Definition stk_ok (w: pointer) (z:Z) :=
   wunsigned w + z < wbase Uptr /\
@@ -297,8 +293,6 @@ Section PROOF.
     rewrite /is_addr_ofs;case:is_constP => // i.
     by case: is_wconst_of_sizeP => // z /eqP <-; eauto.
   Qed.
-
-(*  Opaque Z.mul. *)
 
   Lemma check_arr_stkP s1 s2 sz x1 e1 x2 e2 v:
     check_arr_stk m sz x1 e1 x2 e2 ->
@@ -1343,8 +1337,6 @@ Proof.
   case :(Hv x px Hx) => //= sx [] Hsx [] H1 H2 H3.
   by exists sx;split=>//;split=>//;omega.
 Qed.
-
-Import Memory.
 
 Lemma check_fdP (P: prog) (gd: glob_defs) (SP: sprog) l fn fn' fd fd':
   get_fundef P fn = Some fd ->
