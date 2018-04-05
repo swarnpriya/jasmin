@@ -129,6 +129,7 @@ Section PROOF.
       (eq_vm (evm s1) (evm s2)) &
       (get_var (evm s2) (vstk m) = ok (Vword pstk)) &
       (top_stack (emem s2) = pstk) &
+      (frame_size (emem s2) pstk = Some stk_size) &
       (valid_stk (evm s1) (emem s2) pstk)
   .
 
@@ -174,7 +175,7 @@ Section PROOF.
      Mvar.get m.1 {| vtype := sword sz; vname := x |} = Some p ->
      valid_pointer (emem m2) (pstk + wrepr _ p) sz.
   Proof.
-    case => _ _ _ _ _ _ H Hget.
+    case => _ _ _ _ _ _ _ H Hget.
     by have := H {| vtype := sword sz; vname := x |}; rewrite Hget /= => -[-> _].
   Qed.
 
@@ -184,7 +185,7 @@ Section PROOF.
      0 <= p1 < Zpos n ->
      valid_pointer (emem m2) (pstk + wrepr _ (wsize_size sz * p1 + p)) sz.
   Proof.
-    case => _ _ _ _ _ _ H Hget Hp1.
+    case => _ _ _ _ _ _ _ H Hget Hp1.
     by have := H {| vtype := sarr sz n; vname := x |}; rewrite Hget => /(_ _ Hp1) [].
   Qed.
 
@@ -278,7 +279,7 @@ Section PROOF.
   Proof.
     case/andP => /andP [] /eqP Hvstk /eqP Htype.
     case Hget: (Mvar.get _ _) => [ ofs |] // /eqP -> {e}.
-    case => _ _ _ _; rewrite - Hvstk => Hpstk _ /(_ x1).
+    case => _ _ _ _; rewrite - Hvstk => Hpstk _ _ /(_ x1).
     rewrite Hget Htype => -[] /= H H' Hvar.
     rewrite Hpstk /=.
     case: x1 Htype Hget Hvar H'=> [[x1t x1n] vi1] /= Htype Hget Hvar H'; subst.
@@ -308,7 +309,7 @@ Section PROOF.
     case: xt1 => // sz1 n /andP [] /eqP -> {sz1}.
     case Hget: (Mvar.get m.1 _)=> [ofs|//] /is_addr_ofsP [i [??]];subst e1 e2.
     set x1 := {| vname := xn1 |}.
-    case => H1 H2 H3 H4 H5 _ H6.
+    case => H1 H2 H3 H4 H5 _ _ H6.
     apply: on_arr_varP=> sz' n' t /= [_ ?] Harr; subst n'.
     apply: rbindP => z Hgeti [<-].
     rewrite Hvstk H5 /=.
@@ -696,7 +697,7 @@ Section PROOF.
       evm := (evm s1).[{| vtype := sword sz; vname := xn |} <- ok (pword_of_word w)] |}
       {| emem := m'; evm := evm s2 |}.
   Proof.
-    move=> [] H1 H2 H3 H4 H5 Hpstk H6 Hm' vi Hget.
+    move=> [] H1 H2 H3 H4 H5 Hpstk Hssz H6 Hm' vi Hget.
     have Hmem : valid_pointer (emem s2) (pstk + wrepr _ ofs) sz.
     + by apply/writeV; eauto.
     split=> //=.
@@ -718,6 +719,7 @@ Section PROOF.
       apply/negP=> /eqP ?; subst x.
       by rewrite /is_in_stk Hget in Hx1.
     + by have [<- _ _] := write_mem_stable Hm'.
+    + by have [_ _ <-] := write_mem_stable Hm'.
     exact: (valid_stk_var_stk Hget Hm').
   Qed.
 
@@ -730,7 +732,7 @@ Section PROOF.
   Proof.
   case: vi => -[] xt xn ii /andP [] /andP [] /eqP Hisvstk /= /eqP -> {xt}.
   case Hget: (Mvar.get _ _) => [ ofs | ] // /eqP -> {e} Hv.
-  case: (Hv) => H1 H2 H3 H4 H5 Hpstk H6 Hu hty s1'.
+  case: (Hv) => H1 H2 H3 H4 H5 Hpstk Hssz H6 Hu hty s1'.
   rewrite Hisvstk H5 /=.
   apply: rbindP=> /= vm'; apply: set_varP => //= w h.
   have [{h} w' [??] ]:= type_of_val_to_pword hty h; subst v w.
@@ -900,6 +902,7 @@ Section PROOF.
       apply/negP=> /eqP Habs.
       by rewrite -Habs /is_in_stk Hget in Hx1.
     + by have [<- _ _] := write_mem_stable Hm'.
+    + by have [_ _ <-] := write_mem_stable Hm'.
     exact: (valid_stk_arr_stk Hget Ha Hvmem Hm' Ht).
   Qed.
 
@@ -923,7 +926,7 @@ Section PROOF.
     case/andP=> /eqP hvi' /=.
     case: vi => -[] //= sz' n vi /andP[] /eqP -> {sz'}.
     case Hget: Mvar.get => [ ofs | // ] /is_addr_ofsP [i] [? ?]; subst e e' => Hval Hu s1'.
-    case: (Hval); rewrite -hvi' => H1 H2 H3 H4 H5 Hpstk H6.
+    case: (Hval); rewrite -hvi' => H1 H2 H3 H4 H5 Hpstk Hssz H6.
     apply on_arr_varP => sz' n' t' [] ??; subst sz' n' => Ha /=.
     t_xrbindP => v0 Hv0 t Ht vm.
     apply: set_varP => [ varr /to_arr_ok /Varr_inj1 <- {varr} <- <- | _] /=; last first.
@@ -989,7 +992,7 @@ Section PROOF.
     valid s1 s2 ->
     valid {| emem := m'; evm := evm s1 |} {| emem := m'2; evm := evm s2 |}.
   Proof.
-    move=> Hm' Hm'2 [H1 H2 H3 H4 H5 Hpstk H6].
+    move=> Hm' Hm'2 [H1 H2 H3 H4 H5 Hpstk Hssz H6].
     split=> //=.
     + move=> sz' w Hw.
       rewrite (write_valid _ _ Hm') in Hw.
@@ -998,6 +1001,7 @@ Section PROOF.
       admit.
     + by move=> w sz'; rewrite (write_valid w sz' Hm') (write_valid w sz' Hm'2).
     + by have [<- _ _] := write_mem_stable Hm'2.
+    + by have [_ _ <-] := write_mem_stable Hm'2.
     apply: (valid_stk_mem Hm') (Hm'2) (H6).
     have Hvalid1: valid_pointer (emem s1) (ptr + off) sz.
     + apply/writeV; exists m'; exact: Hm'.
@@ -1014,7 +1018,7 @@ Section PROOF.
     exists s2', write_lval gd (Lmem sz vi' e') v' s2 = ok s2' /\ valid s1' s2'.
   Proof.
     move => Hvar He Hv Hu s1'.
-    case: (Hv) => H1 H2 H3 H4 H5 Hpstk H6.
+    case: (Hv) => H1 H2 H3 H4 H5 Hpstk Hssz H6.
     rewrite /write_lval; t_xrbindP => ptr wi hwi hwiptr ofs we he heofs w hvw.
     move => m' Hm' <- {s1'}.
     have [wi' [-> hwi']] := check_varP Hvar H4 hwi.
@@ -1035,7 +1039,7 @@ Section PROOF.
     case: vi vi' => vi ivi [vi' ivi'].
     move=> Hvar He Hv Hu s1'.
     have Hv' := Hv.
-    move: Hv'=> [] H1 H2 H3 H4 H5 Hpstk H6.
+    move: Hv'=> [] H1 H2 H3 H4 H5 Hpstk Hssz H6.
     apply: rbindP=> [[]] // sz n a Ha.
     t_xrbindP => i vali Hvali Hi v0 Hv0 t Ht vm.
     rewrite /set_var;apply: set_varP => //=;last first.
@@ -1363,6 +1367,7 @@ Proof.
         apply/eqP=> Habs.
         by rewrite Habs eq_refl in Heq.
       + by rewrite /vstk Hestk /= /get_var Fv.setP_eq.
+      + by rewrite Ha7 eq_refl.
       move=> x.
       case Hget: (Mvar.get m.1 x)=> [a|//].
       case Htype: (vtype x)=> [| |sz n| sz] //.
@@ -1399,7 +1404,7 @@ Proof.
   have := check_varsW Hp Hval'' _ hs1.
   move=> /(_ vargs) [ |s2 [Hs2 Hv2]];first by apply List_Forall2_refl.
   have [[m2' vm2'] [Hs2' Hv2']] := check_cP SP Hstk Hv hbody Hi Hv2.
-  case: Hv2' => /= Hdisj Hmem Hval Heqvm _ Htopstack _.
+  case: Hv2' => /= Hdisj Hmem Hval Heqvm _ Htopstack Hstacksize _.
   have [vr' [/= hvr' hvruincl]] := check_varsP Hr Heqvm hvres.
   have [vr'' [hvr'' hvruincl']] := mapM2_truncate_val hvr hvruincl.
   exists vr''. split; first exact: hvruincl'.
@@ -1415,7 +1420,7 @@ Proof.
   + apply: eq_memP=> w sz.
     pose stk_sz := sf_stk_sz fd'.
     have hts : frame_size m2' (top_stack m2') = Some stk_sz.
-    + admit.
+    + by rewrite Htopstack Hstacksize.
     have [hrd hvld hcllr hcllstk hfs] := free_stackP hts.
     move: (Hdisj w sz) (Hmem w sz) (Hval w sz)=> {Hdisj Hmem Hval} Hdisjw Hmemw Hvalw.
     case Heq1: (read_mem m1' w sz) => [w'| err].
