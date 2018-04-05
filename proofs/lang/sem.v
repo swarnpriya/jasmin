@@ -581,6 +581,8 @@ Definition rflags_of_bwop_w sz (w : word sz) : exec values :=
 Definition vbools bs : exec values := ok (List.map Vbool bs).
 
 (* -------------------------------------------------------------------- *)
+
+
 Definition x86_MOV sz (x: word sz) : exec values :=
   Let _ := check_size_8_64 sz in
   ok [:: Vword x].
@@ -898,6 +900,42 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
   | Ox86_SAR sz => app_w8 sz x86_sar
   | Ox86_SHLD sz => app_ww8 sz x86_shld
   end.
+
+Ltac app_sopn_t := 
+  match goal with
+  | |- forall (_:wsize), _     => move=> ?;app_sopn_t
+  | |- forall (_:value), _     => move=> ?;app_sopn_t
+  | |- forall (_:seq value), _ => move=> ?;app_sopn_t
+  | |- (match ?vs with
+       | [::] => type_error
+       | _ :: _ => _ end = ok _) -> _ =>
+    case: vs => // ??; app_sopn_t
+  | |- ((Let _ := _ in _) = ok _) -> _ =>
+    t_xrbindP => ??;app_sopn_t
+  | |- (match ?vs with
+       | [::] => _ 
+       | _ :: _ => _ end = ok _) -> _ =>
+       case: vs => //; app_sopn_t 
+  | |- (ok _ = ok _) -> _ => move=> [<-];app_sopn_t
+  | _ => idtac
+  end.
+
+Lemma sopn_toutP o vs vs' : exec_sopn o vs = ok vs' ->
+  List.map type_of_val vs' = sopn_tout o.
+Proof.
+  rewrite /exec_sopn ;case: o => /=;app_sopn_t => //;
+   try ((by apply rbindP => ?? -[<-]) || by move=> -[<-]).
+  + by move=> ?;case: ifP => ??;t_xrbindP => ?? <-.
+  + by rewrite /x86_div;t_xrbindP => ??;case: ifP => // ? [<-].
+  + by rewrite /x86_idiv;t_xrbindP => ??;case: ifP => // ? [<-].
+  + by rewrite /x86_lea;t_xrbindP => ??;case: ifP => // ? [<-].
+  + by rewrite /x86_ror;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
+  + by rewrite /x86_rol;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
+  + by rewrite /x86_shl;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
+  + by rewrite /x86_shr;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
+  + by rewrite /x86_sar;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
+  by rewrite /x86_shld;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
+Qed.
 
 Section SEM.
 

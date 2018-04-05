@@ -208,6 +208,38 @@ Definition string_of_sopn o : string :=
   | Ox86_SHLD sz => "Ox86_SHLD " ++ string_of_wsize sz
   end.
 
+Definition b_ty := [::sbool].
+Definition b5_ty := [:: sbool;sbool;sbool;sbool;sbool].
+Definition w_ty sz:= [::sword sz].
+Definition b2w_ty sz := [::sbool;sbool;sword sz].
+Definition b4w_ty sz := [:: sbool;sbool;sbool;sbool;sword sz].
+Definition b5w_ty sz := [:: sbool;sbool;sbool;sbool;sbool;sword sz].
+Definition b5ww_ty sz := [:: sbool;sbool;sbool;sbool;sbool;sword sz;sword sz].
+
+Definition sopn_tout (o:sopn) :  list stype :=
+  match o with
+  | Omulu sz => [::sword sz; sword sz]
+  | Oaddcarry sz | Osubcarry sz => [:: sbool; sword sz]
+  | Oset0 sz => b5w_ty sz
+  | Ox86_MOV sz | Ox86_CMOVcc sz  => w_ty sz
+  | Ox86_ADD sz | Ox86_SUB sz     => b5w_ty sz
+  | Ox86_MUL sz | Ox86_IMUL sz    => b5ww_ty sz
+  | Ox86_IMULt sz | Ox86_IMULtimm sz => b5w_ty sz
+  | Ox86_DIV sz | Ox86_IDIV sz    => b5ww_ty sz
+  | Ox86_ADC sz | Ox86_SBB sz     => b5w_ty sz
+  | Ox86_NEG sz                   => b5w_ty sz
+  | Ox86_INC sz | Ox86_DEC sz     => b4w_ty sz
+  | Ox86_SETcc                    => w_ty U8
+  | Ox86_BT sz                    => b_ty 
+  | Ox86_LEA sz                   => w_ty sz
+  | Ox86_TEST sz | Ox86_CMP sz    => b5_ty
+  | Ox86_AND sz | Ox86_OR sz | Ox86_XOR sz => b5w_ty sz
+  | Ox86_NOT sz                   => w_ty sz
+  | Ox86_ROL sz | Ox86_ROR sz     => b2w_ty sz
+  | Ox86_SHL sz | Ox86_SHR sz     => b5w_ty sz 
+  | Ox86_SAR sz | Ox86_SHLD sz    => b5w_ty sz 
+  end.
+
 (* ** Expressions
  * -------------------------------------------------------------------- *)
 (* Used only by the ocaml compiler *)

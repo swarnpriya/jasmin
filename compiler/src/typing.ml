@@ -541,6 +541,7 @@ let u64_2    = [P.u64; P.u64]
 let u64_3    = [P.u64; P.u64; P.u64]
 let u64_4    = [P.u64; P.u64; P.u64; P.u64]
 
+(* TODO out put type are already defined in Coq: sopn_tout *)
 let prim_sig p =
   let open P in
   let open Expr in
