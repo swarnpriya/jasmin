@@ -916,15 +916,16 @@ Ltac app_sopn_t :=
        | [::] => _ 
        | _ :: _ => _ end = ok _) -> _ =>
        case: vs => //; app_sopn_t 
-  | |- (ok _ = ok _) -> _ => move=> [<-];app_sopn_t
+  | |- _ = ok ?a -> _ => move => /(@ok_inj _ _ _ _); app_sopn_t
+  | |- ?a = ?b -> _ => (move => ?; subst a || subst b); app_sopn_t
   | _ => idtac
   end.
 
 Lemma sopn_toutP o vs vs' : exec_sopn o vs = ok vs' ->
   List.map type_of_val vs' = sopn_tout o.
 Proof.
-  rewrite /exec_sopn ;case: o => /=;app_sopn_t => //;
-   try ((by apply rbindP => ?? -[<-]) || by move=> -[<-]).
+  rewrite /exec_sopn ;case: o => /=; app_sopn_t => //;
+  try (by apply: rbindP => _ _; app_sopn_t).
   + by move=> ?;case: ifP => ??;t_xrbindP => ?? <-.
   + by rewrite /x86_div;t_xrbindP => ??;case: ifP => // ? [<-].
   + by rewrite /x86_idiv;t_xrbindP => ??;case: ifP => // ? [<-].
