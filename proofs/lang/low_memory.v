@@ -98,6 +98,14 @@ Parameter is_align_array :
 Parameter is_align_no_overflow :
   forall ptr sz, is_align ptr sz -> no_overflow ptr (wsize_size sz).
 
+Parameter read_write_any_mem :
+  forall m1 m1' pr szr pw szw vw m2 m2',
+    valid_pointer m1 pr szr ->
+    read_mem m1 pr szr = read_mem m1' pr szr ->
+    write_mem m1 pw szw vw = ok m2 ->
+    write_mem m1' pw szw vw = ok m2' ->
+    read_mem m2 pr szr = read_mem m2' pr szr.
+
 (* -------------------------------------------------------------------- *)
 Parameter top_stack  : mem -> pointer.
 Parameter caller     : mem -> pointer -> option pointer.

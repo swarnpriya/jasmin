@@ -880,7 +880,7 @@ Section PROOF.
     move => vi Hget Ha Hm' Ht.
     have Hvmem : valid_pointer (emem s2) (pstk + wrepr _ (wsize_size sz * i + ofs)) sz.
     + by apply/writeV; eauto.
-    case => H1 H2 H3 H4 [H5 H6].
+    case => H1 H2 H3 H4 H5 Hpstk Hssz H6.
     split => //=.
     + move=> w sz' Hvmem'. 
       rewrite (H2 _ _ Hvmem') //.
@@ -997,8 +997,9 @@ Section PROOF.
     + move=> sz' w Hw.
       rewrite (write_valid _ _ Hm') in Hw.
       exact: H1.
-    + move=> w sz' Hw. 
-      admit.
+    + move=> w sz'.
+      rewrite (write_valid _ _ Hm') => Hw.
+      exact: read_write_any_mem Hw (H2 _ _ Hw) Hm' Hm'2.
     + by move=> w sz'; rewrite (write_valid w sz' Hm') (write_valid w sz' Hm'2).
     + by have [<- _ _] := write_mem_stable Hm'2.
     + by have [_ _ <-] := write_mem_stable Hm'2.
@@ -1009,7 +1010,7 @@ Section PROOF.
     + by case: pstk_add => /ZltP.
     + apply: is_align_no_overflow; exact: (valid_align Hvalid1).
     case/negP/nandP: (H1 _ _ Hvalid1) => /ZltP; lia.
-  Admitted.
+  Qed.
 
   Lemma check_memW sz (vi vi': var_i) (s1 s2: estate) v v' e e':
     check_var m vi vi' -> check_e m e e' -> valid s1 s2 -> 
@@ -1044,7 +1045,7 @@ Section PROOF.
     t_xrbindP => i vali Hvali Hi v0 Hv0 t Ht vm.
     rewrite /set_var;apply: set_varP => //=;last first.
     + by have [xn /= ?] := get_var_arr Ha;subst vi => /= _; rewrite eq_dec_refl pos_dec_n_n.
-    move=> varr Hvarr <- [] <- /=.
+    move=> varr Hvarr <- <- /=.
     have Hv'0 := value_uincl_word Hu Hv0.
     have [w [-> U]] := check_eP He Hv Hvali.
     have [??]:= value_uincl_int U Hi; subst vali w => /=.
