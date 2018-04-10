@@ -140,6 +140,23 @@ move=>->; case: s => /=; eauto.
 by move => sz w; exists w; split; [rewrite truncate_word_u |].
 Qed.
 
+(* ** Traduction of Arrays into Farrays & Truncation of Farrays
+ * -------------------------------------------------------------------- *)
+
+Definition word_array_to_farray {n} {s} (a : Array.array n (word s)) : FArray.array (word s):=
+  fun i => match Array.get a i with
+           |Ok z => z
+           |_    => sdflt_val (ssword s)
+           end.
+
+
+Definition truncate_farray {s} s' (a : FArray.array (word s)) : FArray.array (word s'):=
+  fun i => match truncate_word s' (a i) with
+           |Ok z => z
+           |_    => sdflt_val (ssword s')
+           end.
+
+
 (* ** Variable map
  * -------------------------------------------------------------------- *)
 Delimit Scope svmap_scope with svmap.
@@ -523,7 +540,7 @@ Lemma sval_sstype_to_sval sst (z : ssem_t sst) :
   sval_sstype (to_sval z) = sst.
 Proof. by case: sst z. Qed.
 
-Lemma sval_sstype_of_sval sst (z : svalue) y :
+(*Lemma sval_sstype_of_sval sst (z : svalue) y :
   of_sval sst z = ok y -> sval_sstype z = sst.
 Proof.
   case: sst y z;[by move => y []| by move => y [] | |] => s; [by destruct s => y [] [] |]; (try by move => y [] ).
@@ -657,3 +674,4 @@ Proof.
     exists vi, w;split=> //;split=>//=;f_equal;f_equal.
     by case: x Tx L=>  -[ty x] xi /= ?;subst ty => /= -[] <-.
 Qed.
+*)

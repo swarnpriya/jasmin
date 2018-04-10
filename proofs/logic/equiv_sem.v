@@ -38,7 +38,7 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 (* -------------------------------------------------------------------- *)
-Fixpoint st2sst_ty {t : stype} :=
+(*Fixpoint st2sst_ty {t : stype} :=
   match t return sem_t t -> ssem_t t with
   | sword     => fun v => v
   | sint      => fun v => v
@@ -50,14 +50,14 @@ Fixpoint st2sst_ty {t : stype} :=
           | _      => n2w 0
           end)
   end.
-
+*)
 (* -------------------------------------------------------------------- *)
 Definition sval_uincl (t:stype) : sem_t t -> ssem_t t -> Prop :=
   match t as t0 return sem_t t0 -> ssem_t t0 -> Prop with
-  | sbool => fun b1 b2 => b1 = b2
-  | sint  => fun i1 i2 => i1 = i2
-  | sword => fun w1 w2 => w1 = w2
-  | sarr n => fun (t1:Array.array n word) (t2:FArray.array word) =>
+  | sbool     => fun b1 b2 => b1 = b2
+  | sint      => fun i1 i2 => i1 = i2
+  | sword _   => fun w1 w2 => w1 = w2
+  | sarr sz n => fun (t1:Array.array n (word sz)) (t2:FArray.array (word sz)) =>
       (forall i v, Array.get t1 i = ok v -> FArray.get t2 i = v)
   end.
 
@@ -78,13 +78,13 @@ Definition svalue_uincl (v: value) (sv: svalue) :=
   match v, sv with
   | Vbool b1, SVbool b2 => b1 = b2
   | Vint n1, SVint n2   => n1 = n2
-  | Varr _ t1, SVarr t2 =>
-    forall i v, Array.get t1 i = ok v -> FArray.get t2 i = v
-  | Vword w1, SVword w2 => w1 = w2
+  | Varr s _ t1, SVarr s' t2 =>
+    forall i v, Array.get t1 i = ok v -> if s == s' then truncate_word s' (FArray.get t2 i) = truncate_word s' v else False
+  | Vword s w1, SVword s' w2  => if s == s' then truncate_word s' w1 = truncate_word s' w2 else False
   | Vundef ty, _ => sstype_of_stype ty = sval_sstype sv
   | _, _ => False
   end.
-
+(*
 Lemma to_int_inv x i :
   to_int x = ok i →
   x = i.
@@ -111,22 +111,78 @@ Proof.
     apply ok_inj in H; congruence.
   elim (@of_val_undef_ok sbool _ _ H).
 Qed.
+ *)
+
+Require psem.
 
 Lemma of_sval_uincl v v' t z:
   svalue_uincl v v' ->
   of_val t v = ok z ->
-  exists z', of_sval t v' = ok z' /\ sval_uincl z z' ∧ sval_sstype v' = t.
+  exists z', of_sval t v' = ok z' /\ sval_uincl z z' ∧ sval_sstype v' = t. (* Subtype ?*)
 Proof.
-  case: v v'=> [b | n | n a | w | ty] [b' | n' | a' | w'] //=;
-    try (by case: t z=> //= z -> []->; exists z);
-    try (move=> _ H; elim (of_val_undef_ok H); fail);
-  move=> H.
-  case: t z => //= p z.
-  case: (CEDecStype.pos_dec n p)=> // H' [<-].
+  case: v  => [b | n  | s n a | s  w | ty];
+  case: v' => [b'| n' | s' a' | s' w'] //=;
+  try (by case: t z=> //= z -> []->; exists z);
+  try (move=> _ H; elim (of_val_undef_ok H); fail); last first.
+
+  case: ifP => //=.  admit.
+
+
+
+  move => H //=. (*case: (s =P s'). move /eqP. *)
+  simpl.
+  Search _ "wsize_eq_dec".
+  Check eq_refl.
+  case: (s == s') => //=.
+  rewrite /truncate_word.
+  (*move => //= H2 H;
+  apply of_vword in H;
+  move: H => [] s'' [le_s t_def]; subst t.*)
+
+  admit.
+  
+  move=> h1.
+  have h3 := of_varr h1. subst t;simpl in z. 
+  exists  (truncate_farray s (word_array_to_farray z));split;last split. Focus 3. simpl. 
+
+ (* simpl.
+  case: (wsize_eq_dec s' s).
+  move => eq_ss'. congr ok => //=. admit. admit.
+
+
+  simpl => i w H.
+  by rewrite /truncate_farray /FArray.get /word_array_to_farray H /truncate_word cmp_le_refl zero_extend_u.
+  
+  have:s=s'.
+  
+  rewrite /eq_rect.
+  rewrite /truncate_farray.
+  rewrite /truncate_word.
+  simpl.
+  case: (s <= s)%CMP => //=.
+  rewrite /word_array_to_farray.
+
+  rewrite /eq_ss'.
+  
+  Search _ "eq_rect_".
+  move:eq_->.
+  eq_rect
+  simpl. => //=.
+  
+  Search _ "wsize_eq".
+  case: (CEDecStype.pos_dec s' s).
+  
+
+  case: (s =P s') => [eq_ss'|ne_ss']; last first.
+  + move/(_ 0%Z).
+
+
+    
   exists a'; split=> //.
   by case: _ / H'.
-Qed.
-
+Admitted.
+Qed.*)
+(*
 Lemma svalue_uincl_int ve ve' z :
   svalue_uincl ve ve' -> to_int ve = ok z -> ve = z /\ ve' = z.
 Proof.
@@ -291,13 +347,13 @@ Section FORALL2.
     Forall2 (λ b a, P a b) mb ma.
   Proof. elim => //; eauto. Defined.
 
-End FORALL2.
+End FORALL2.*)
 
 Section GLOB_DEFS.
 
 Context (gd: glob_defs).
 
-Lemma ssem_pexpr_uincl s ss e v1:
+(*Lemma ssem_pexpr_uincl s ss e v1:
   sestate_uincl s ss ->
   sem_pexpr gd s e = ok v1 ->
   exists v2, ssem_pexpr gd ss e = ok v2 /\ svalue_uincl v1 v2.
@@ -539,6 +595,7 @@ Lemma sset_vm_uincl vm vm' x z z' :
 Proof.
   move=> Hvm Hz y; case( x =P y) => [<- | /eqP Hneq];by rewrite ?Fv.setP_eq ?Fv.setP_neq.
 Qed.
+ 
 
 Lemma sset_var_uincl vm1 vm1' vm2 x v v' :
   svm_uincl vm1 vm1' ->
@@ -558,7 +615,8 @@ Proof.
   rewrite ! Fv.setP_eq.
   case: (vtype x) w ht {Hv} => //.
   move=> p w _ i v h; elim (Array.getP_empty h).
-Qed.
+Qed. Admitted.
+
 
 Lemma SArray_set_uincl n (a1:Array.array n word) (a2: FArray.array word) (a1':Array.array n word) i v:
   @sval_uincl (sarr n) a1 a2 ->
@@ -648,7 +706,7 @@ Proof.
   by move=> /(Hrec _ _ _ _ Hz Hforall).
 Qed.
 
-(* -------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------- *)*)
 Section SEM.
 
 Variable (p:prog).
@@ -675,7 +733,7 @@ Let Pfun m1 fd vargs m2 vres :=
     ssem_call p gd (mem_to_smem m1) fd vargs' (mem_to_smem m2) vres' /\
     List.Forall2 svalue_uincl vres vres'.
 
-Local Lemma Hnil s : Pc s [::] s.
+(*Local Lemma Hnil s : Pc s [::] s.
 Proof. by move=> vm1 Hvm1;exists vm1;split=> //;constructor. Qed.
 
 Local Lemma Hcons s1 s2 s3 i c :
@@ -808,8 +866,8 @@ Proof.
   rewrite (proj1 Hs) /= in Hvres'1.
   exact: Hvres'1.
 Qed.
-
-Local Lemma Hproc m1 m2 fn fd vargs s1 vm2 vres:
+*)
+(*Local Lemma Hproc m1 m2 fn fd vargs s1 vm2 vres:
   get_fundef p fn = Some fd ->
   write_vars (f_params fd) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
   sem p gd s1 (f_body fd) {| emem := m2; evm := vm2 |} ->
@@ -824,7 +882,7 @@ Proof.
     rewrite /vmap0 /svmap0 /svm_uincl.
     move=> [vi v] /=.
     rewrite /sval_uincl.
-    elim: vi=> // p0 i v0.
+    case: vi => // p0 i v0.
     rewrite /Array.get /FArray.get.
     case: ifP=> //.
   have [ss1 [Hargs' Hss1]]:= swrite_vars_uincl Hss0 Uargs Hargs.
