@@ -80,7 +80,7 @@ Definition svalue_uincl (v: value) (sv: svalue) :=
   | Vint n1, SVint n2   => n1 = n2
   | Varr s _ t1, SVarr s' t2 =>
     forall i v, Array.get t1 i = ok v -> if s == s' then truncate_word s' (FArray.get t2 i) = truncate_word s' v else False
-  | Vword s w1, SVword s' w2  => if s == s' then truncate_word s' w1 = truncate_word s' w2 else False
+  | Vword s w1, SVword s' w2  => if s == s' then truncate_word s' w1 = ok w2 else False
   | Vundef ty, _ => sstype_of_stype ty = sval_sstype sv
   | _, _ => False
   end.
