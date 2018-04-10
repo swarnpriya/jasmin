@@ -585,8 +585,7 @@ Proof.
   + by move=> H;split=>//;apply: remove_cpm1P H Hv.
   + apply: rbindP => z Hz;rewrite Hz /=.
     apply: rbindP => z'.
-    apply: rbindP => z'' /(@const_prop_eP p _ _ Hv) [] z3 [] -> /=.
-    rewrite /to_pointer => -[/value_uincl_word h _] /h {h} ->.
+    apply: rbindP => z'' /(@const_prop_eP p _ _ Hv) [] z3 [] -> /= [/value_uincl_word h _] /h {h} ->.
     by apply: rbindP => w -> /=;apply: rbindP => m' -> [<-].
   apply: on_arr_varP;rewrite /on_arr_var => ? n t Htx -> /=.
   apply: rbindP => z;apply: rbindP => z'' /(@const_prop_eP p _ _ Hv) [] z3 [] ->.

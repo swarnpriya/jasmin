@@ -50,6 +50,9 @@ Arguments write_mem : clear implicits.
 
 Parameter valid_pointer : mem -> pointer -> wsize -> bool.
 
+Parameter eq_memP : forall m m',
+    (forall ptr sz, read_mem m ptr sz = read_mem m' ptr sz) -> m = m'.
+
 Definition no_overflow (p: pointer) (sz: Z) : bool :=
   (wunsigned p + sz <? wbase Uptr)%Z.
 
@@ -85,7 +88,14 @@ Parameter write_valid : forall m m' p s (v :word s) p' s',
   write_mem m p s v = ok m' ->
   valid_pointer m' p' s' = valid_pointer m p' s'.
 
-Parameter is_align : pointer -> wsize -> bool.
+(* Waiting for a full implementation of the memory model
+    here is an example alignment check:
+    addresses must be multiples of the size. *)
+Definition is_align : pointer -> wsize -> bool.
+  exact: (fun ptr ws =>
+  let w := wunsigned ptr in
+  w mod wsize_size ws == 0)%Z.
+Qed.
 
 Parameter valid_align : forall m p s, valid_pointer m p s -> is_align p s.
 
@@ -94,6 +104,14 @@ Parameter is_align_array :
 
 Parameter is_align_no_overflow :
   forall ptr sz, is_align ptr sz -> no_overflow ptr (wsize_size sz).
+
+Parameter read_write_any_mem :
+  forall m1 m1' pr szr pw szw vw m2 m2',
+    valid_pointer m1 pr szr ->
+    read_mem m1 pr szr = read_mem m1' pr szr ->
+    write_mem m1 pw szw vw = ok m2 ->
+    write_mem m1' pw szw vw = ok m2' ->
+    read_mem m2 pr szr = read_mem m2' pr szr.
 
 (* -------------------------------------------------------------------- *)
 Parameter top_stack  : mem -> pointer.
@@ -146,7 +164,7 @@ Section SPEC.
     fss_read_old : forall p s, valid_pointer m' p s -> read_mem m p s = read_mem m' p s;
     fss_valid    : forall p s, 
       valid_pointer m' p s <-> 
-      (valid_pointer m p s /\ (disjoint_zrange pstk sz p (wsize_size s)));
+      (valid_pointer m p s /\ (disjoint_zrange (top_stack m) sz p (wsize_size s)));
     fss_top      : caller m (top_stack m) = Some (top_stack m');
     fss_caller   : forall p, caller m' p = if p == top_stack m then None else caller m p;
     fss_size     : forall p, 
@@ -199,10 +217,17 @@ Parameter free_stackP : forall m m' pstk sz,
      read_mem m' w = read_mem m w.
 
 Parameter eq_memP : forall m m',
-    (forall w, read_mem m w = read_mem m' w) -> m = m'.
-
+    (forall ptr sz, read_mem m ptr sz = read_mem m' ptr sz) -> m = m'.
 
 End UnsafeMemory.
+
+Lemma read_mem_valid_pointer m ptr sz w :
+  Memory.read_mem m ptr sz = ok w ->
+  Memory.valid_pointer m ptr sz.
+Proof.
+  move => hr.
+  have := Memory.readV m ptr sz; rewrite hr {hr}; case => // - []; eauto.
+Qed.
 
 Lemma write_mem_valid_pointer m ptr sz w m' :
   Memory.write_mem m ptr sz w = ok m' ->

@@ -41,24 +41,26 @@ Local Open Scope seq_scope.
 Record sfundef := MkSFun {
   sf_iinfo  : instr_info;
   sf_stk_sz : Z;
-  sf_stk_id : Ident.ident; 
+  sf_stk_id : Ident.ident;
+  sf_tyin  : seq stype;
   sf_params : seq var_i;
   sf_body   : cmd;
+  sf_tyout : seq stype;
   sf_res    : seq var_i;
 }.
 
 Definition sfundef_beq fd1 fd2 :=
   match fd1, fd2 with
-  | MkSFun ii1 sz1 id1 p1 c1 r1, MkSFun ii2 sz2 id2 p2 c2 r2 =>
+  | MkSFun ii1 sz1 id1 ti1 p1 c1 to1 r1, MkSFun ii2 sz2 id2 ti2 p2 c2 to2 r2 =>
     (ii1 == ii2) && (sz1 == sz2) && (id1 == id2) &&
-    (p1 == p2) && (c1 == c2) && (r1 == r2)
+    (ti1 == ti2) && (p1 == p2) && (c1 == c2) && (to1 == to2) && (r1 == r2)
   end.
 
 Lemma sfundef_eq_axiom : Equality.axiom sfundef_beq.
 Proof.
-  move=> [i1 s1 id1 p1 c1 r1] [i2 s2 id2 p2 c2 r2] /=.
-  apply (@equivP ((i1 == i2) && (s1 == s2) && (id1 == id2) && (p1 == p2) && (c1 == c2) && (r1 == r2)));first by apply idP.
-  by split=> [/andP[]/andP[]/andP[]/andP[]/andP[] | []] /eqP->/eqP->/eqP->/eqP->/eqP->/eqP->.
+  move=> [i1 s1 id1 ti1 p1 c1 to1 r1] [i2 s2 id2 ti2 p2 c2 to2 r2] /=.
+  apply (@equivP ((i1 == i2) && (s1 == s2) && (id1 == id2) && (ti1 == ti2) && (p1 == p2) && (c1 == c2) && (to1 == to2) && (r1 == r2)));first by apply idP.
+  by split=> [ /andP[] /andP[] /andP[] /andP[] /andP[] /andP[] /andP[] | [] ] /eqP -> /eqP->/eqP->/eqP->/eqP->/eqP->/eqP-> /eqP ->.
 Qed.
 
 Definition sfundef_eqMixin   := Equality.Mixin sfundef_eq_axiom.
@@ -196,6 +198,8 @@ Definition check_fd (l:list (var * Z))
     (fd: fundef) (fd': sfundef) :=
   match init_map (sf_stk_sz fd') (sf_stk_id fd') l with 
   | Ok m =>
+    (f_tyin fd == sf_tyin fd') &&
+    (f_tyout fd == sf_tyout fd') &&
      all2 (check_var m) (f_params fd) (sf_params fd') &&
      all2 (check_var m) (f_res fd) (sf_res fd') &&
      all2 (check_i m) (f_body fd) (sf_body fd')

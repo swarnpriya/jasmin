@@ -104,6 +104,15 @@ Proof.
   case: Sumbool.sumbool_of_bool h; t_xrbindP => // _ w'' -> <-; eauto.
 Qed.
 
+Lemma type_of_val_to_pword sz v w :
+  type_of_val v = sword sz →
+  to_pword sz v = ok w →
+  ∃ w' : word sz, w = pword_of_word w' ∧ v = Vword w'.
+Proof.
+  case: v => //= [ s w' [?]| []//]; subst.
+  by rewrite sumbool_of_boolET => - [<-]; exists w'.
+Qed.
+
 (* ** Variable map
  * -------------------------------------------------------------------- *)
 
@@ -1560,7 +1569,6 @@ Proof.
     apply: rbindP=> w /Htt' Hget [] <- /=; rewrite Hget /=.
     by exists (Vword w); split => //; exists erefl.
   + apply: rbindP => w1;apply: rbindP => vx /(get_var_uincl Hu) [vx' [->]].
-    rewrite /to_pointer.
     move=> /value_uincl_word H/H{H} /= -> /=.
     apply: rbindP => wp;apply: rbindP => vp /Hp [] vp' [] ->.
     by move=> /value_uincl_word Hvu/Hvu {Hvu} /= -> /= ->; eauto.
@@ -1885,8 +1893,7 @@ Proof.
     by rewrite (uincl_write_none _ Hv H);exists vm1.
   + by apply write_var_uincl.
   + apply: rbindP => vx1; apply: rbindP => vx /(get_var_uincl Hvm1) [vx2 [-> Hvx]].
-    rewrite /to_pointer /=.
-    move=> /(value_uincl_word Hvx) -> {Hvx vx} /=.
+    move=> /= /(value_uincl_word Hvx) -> {Hvx vx} /=.
     apply: rbindP => ve; apply: rbindP => ve' /(sem_pexpr_uincl Hvm1) [ve''] [] -> Hve.
     move=> /(value_uincl_word Hve) /= -> /=.
     apply: rbindP => w /(value_uincl_word Hv) -> /=.

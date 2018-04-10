@@ -823,11 +823,11 @@ Section PROOF.
     forall fn m1 va m2 vr,
     S.sem_call p gd m1 fn va m2 vr -> lsem_fd p' gd m1 fn va m2 vr.
   Proof.
-    move=> fn m1 va m2 vr H.
-    sinversion H.
+    move=> fn m1 va m2 vr [] {fn m1 va m2 vr}
+      m1 m2 fn sf vargs vargs' s1 s2 m2' vm2 vres vres' m1' Hsf Halloc Hs1 Htyi Hs2 Hbody Hres Htyo Hfree.
     have H0' := linear_ok.
     rewrite /linear_prog in H0'.
-    have [f' [Hf'1 Hf'2]] := (get_map_cfprog H0' H0).
+    have [f' [Hf'1 Hf'2]] := (get_map_cfprog H0' Hsf).
     have Hf'3 := Hf'1.
     apply: rbindP Hf'3=> [l Hc] [] Hf'3.
     rewrite /add_finfo in Hc.
@@ -835,14 +835,13 @@ Section PROOF.
     rewrite linear_c_nil in Heq.
     apply: rbindP Heq=> [[lblc' lc']] Heq [] Hz1 Hz2.
     have [_ _ H] := linear_cP Heq.
-    move: H4=> /H /(@lsem_cat_tl [::]) Hs.
+    move: Hbody=> /H /(@lsem_cat_tl [::]) Hs.
     rewrite -Hf'3 in Hf'2.
     apply: LSem_fd; eauto=> /=.
     rewrite -Hl /=.
     move: Hs; rewrite /= Hz2 !setc_of_estate.
     have -> // : size lc' = size lc.
-    by rewrite -Hz2 size_cat addn0.        
+    by rewrite -Hz2 size_cat addn0.
   Qed.
 
 End PROOF.
-

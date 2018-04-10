@@ -1343,7 +1343,7 @@ Module CBAreg.
       apply: rbindP => w;apply: rbindP => ve /Hse1 [v2 [-> U2 Hto]].
       have [_ -> /=]:= value_uincl_int U2 Hto.
       by apply: rbindP => w' /Ht -> [] <-;exists (Vword w').
-    + case: eqP => // ->; rewrite /to_pointer.
+    + case: eqP => // ->.
       apply: rbindP => r' Hcv Hce Hea.
       have [Hea' Hget]:= check_vP Hcv Hea.
       have [Hre Hse1]:= He1 _ _ _ _ Hce Hea';split=>// m v1.
@@ -1546,7 +1546,7 @@ Module CBAreg.
           by apply eval_uincl_undef.
         by move=> heq [?];subst;by move: htr;rewrite /truncate_val of_val_undef.
       by move=> ? hc;have [vm2' [-> /= ?]]:= check_varcP Hvm1 hc Hset Hv;eauto.
-    + case: eqP => // ->; rewrite /to_pointer /=.
+    + case: eqP => // -> /=.
       apply: rbindP => r2 Hcv Hce Hvm1 Hv Happ.
       apply: rbindP => wx;apply:rbindP => vx.
       have [Hr2 H/H{H} [vx' [-> Hvx /=]]]:= check_vP Hcv Hvm1.
