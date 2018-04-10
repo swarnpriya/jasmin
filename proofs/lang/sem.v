@@ -102,6 +102,7 @@ Module Array.
   Axiom eq_ext : forall T s (t1 t2:array s T), (forall x, get t1 x = get t2 x) -> t1 = t2.
 
 End Array.
+  
 
 (* ** Values
   * -------------------------------------------------------------------- *)
@@ -138,9 +139,9 @@ Definition truncate_word (s s':wsize) (w:word s') : exec (word s) :=
 
 Definition to_word (s: wsize) (v: value) : exec (word s) :=
   match v with
-  | Vword s' w       => truncate_word s w
+  | Vword s' w        => truncate_word s w
   | Vundef (sword s') => if (s <= s')%CMP then undef_error else type_error
-  | _                => type_error
+  | _                 => type_error
   end.
 
 Definition to_pointer : value → exec pointer :=
@@ -1170,5 +1171,43 @@ Section SEM_IND.
     end.
 
 End SEM_IND.
+
+
+Lemma of_val_undef t t':
+  of_val t (Vundef t') =
+    if subtype t t' then undef_error else type_error.
+Proof.
+  case: t t' => //= [  [] |  [] | | s []] //.
+  move=> s p [] // s' p';  case:eqP => [-> | ] /=; last by case: eqP => // -[] ->.
+  case: eqP => [-> | ] //=; first by rewrite eq_refl.
+  by case: eqP => // -[] ->.
+Qed.
+
+Lemma of_val_undef_ok t t' v:
+  of_val t (Vundef t') <> ok v.
+Proof. by rewrite of_val_undef;case:ifP. Qed.
+
+Lemma of_varr t s n (a:Array.array n (word s)) z :
+  of_val t (Varr a) = ok z -> t = sarr s n.
+Proof.
+  case: t z => //= s' n' z.
+  case: wsize_eq_dec => // eq1.
+  case: CEDecStype.pos_dec => // eq2 _.
+  by congr sarr.
+Qed.
+
+Lemma of_vword t s (w: word s) z :
+  of_val t (Vword w) = ok z -> exists s', (s' <= s)%CMP /\ t = sword s'.
+Proof.
+  case: t z => //= s' w'.
+  exists s';split => //=.
+  by move: H; rewrite /truncate_word;  case: (s' <= s)%CMP => //=.
+Qed.
+
+Lemma of_vint t n z :
+  of_val t (Vint n) = ok z -> t = sint.
+Proof.
+  case: t z => //= s' w'.
+Qed.
 
 End SEM.
