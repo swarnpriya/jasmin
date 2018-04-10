@@ -254,7 +254,7 @@ Module CBEA.
     + move=> /andP[] /andP[] /eqP <- Hcv /He1 Hce;apply: rbindP => w1.
       apply: rbindP => vx1 /(check_varP Hrn Hcv) [vx2 [->]].
       move=> /value_uincl_word H/H{H} H.
-      t_xrbindP => w2 ve1 /Hce [] ve2 [] -> /=. rewrite /to_pointer H /= => {H}.
+      t_xrbindP => w2 ve1 /Hce [] ve2 [] -> /=. rewrite H /= => {H}.
       by move=>  /value_uincl_word H/H{H} -> /= h2 -> <- /=;exists (Vword h2);split => //;exists erefl.
     + move=> /andP[]/eqP <- /He1 H;apply: rbindP => ve1 /H [ve2 [->]].
       by move=> /vuincl_sem_sop1 U /U;exists v1.
@@ -342,7 +342,7 @@ Module CBEA.
     + by case:ifP=>//= Hc [<-];apply check_rvarP.
     + case:ifP=>//= /andP[] /andP[] /eqP <- Hcx Hce [<-] Hea Hu.
       t_xrbindP => z1 vx1  /(check_varP Hea Hcx) [vx1' [->]] /=.  
-      move=> /value_uincl_word H/H{H} H;rewrite /to_pointer H => {H} we ve.
+      move=> /value_uincl_word H/H{H} -> we ve.
       case: s1 Hea=> sm1 svm1 Hea /(check_ebP Hea Hce) [ve2 [->]].
       move=> /value_uincl_word H/H{H} /= -> w /(value_uincl_word Hu) -> /=.
       by move=> m -> <- /=;eexists;eauto.

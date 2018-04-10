@@ -276,7 +276,7 @@ Section PROOF.
       apply: rbindP=> w Hw -[] <-.
       exists (Vword w);split => //.
       have [x1' [->]]:= check_varP Hv12 Hvm Hx1.
-      move=> /value_uincl_word -/(_ _ _ Hw1) /=; rewrite /to_pointer => -> /=.
+      move=> /value_uincl_word -/(_ _ _ Hw1) /= -> /=.
       have [v' [-> /= Hu]]:= IH _ _ He12 Hx2.
       rewrite (value_uincl_word Hu Hw2) /=.
       suff : read_mem (emem s2) (w1 + w2) sz = ok w by move => ->.
@@ -903,7 +903,7 @@ Section PROOF.
     rewrite /write_lval; t_xrbindP => ptr wi hwi hwiptr ofs we he heofs w hvw.
     move => m' Hm' <- {s1'}.
     have [wi' [-> hwi']] := check_varP Hvar H4 hwi.
-    rewrite /= /to_pointer (value_uincl_word hwi' hwiptr) /=.
+    rewrite /= (value_uincl_word hwi' hwiptr) /=.
     have [we' [-> hwe']] := check_eP He Hv he.
     rewrite /= (value_uincl_word hwe' heofs) /= (value_uincl_word Hu hvw) /=.
     have : exists m2', write_mem (emem s2) (ptr + ofs) sz w = ok m2'.

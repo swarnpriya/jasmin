@@ -143,8 +143,7 @@ Definition to_word (s: wsize) (v: value) : exec (word s) :=
   | _                => type_error
   end.
 
-Definition to_pointer : value → exec pointer :=
-  to_word _.
+Notation to_pointer := (to_word Uptr).
 
 Definition sem_t (t : stype) : Type :=
   match t with
