@@ -88,7 +88,14 @@ Parameter write_valid : forall m m' p s (v :word s) p' s',
   write_mem m p s v = ok m' ->
   valid_pointer m' p' s' = valid_pointer m p' s'.
 
-Parameter is_align : pointer -> wsize -> bool.
+(* Waiting for a full implementation of the memory model
+    here is an example alignment check:
+    addresses must be multiples of the size. *)
+Definition is_align : pointer -> wsize -> bool.
+  exact: (fun ptr ws =>
+  let w := wunsigned ptr in
+  w mod wsize_size ws == 0)%Z.
+Qed.
 
 Parameter valid_align : forall m p s, valid_pointer m p s -> is_align p s.
 

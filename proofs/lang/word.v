@@ -367,6 +367,12 @@ Definition wxor {s} (x y: word s) : word s := wxor x y.
 
 Parameter wshr wshl wsar : forall {s}, word s -> Z -> word s.
 
+(* Waiting for a true implementation *)
+Extract Constant wshr => "(fun _ _ _ -> failwith ""TODO: wshr"")".
+Extract Constant wshl => "(fun _ _ _ -> failwith ""TODO: wshl"")".
+Extract Constant wsar => "(fun _ _ _ -> failwith ""TODO: wsar"")".
+(* -------------------------------------------------------------------- *)
+
 Definition wlt {sz} (sg: signedness) : word sz → word sz → bool :=
   match sg with
   | Unsigned => λ x y, (urepr x < urepr y)%R
