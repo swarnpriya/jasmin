@@ -28,7 +28,7 @@
 From mathcomp Require Import all_ssreflect.
 From Coq.Unicode Require Import Utf8.
 Require Import ZArith Setoid Morphisms CMorphisms CRelationClasses.
-(* Require Integers. *)
+Require Psatz.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -756,23 +756,12 @@ Qed.
 Lemma inj_drop {T : Type} (s : seq T) (n m : nat) :
   (n <= size s)%nat -> (m <= size s)%nat -> drop n s = drop m s -> n = m.
 Proof.
-elim: s n m => [|x s ih] //= n m.
-+ by rewrite !leqn0 => /eqP-> /eqP->.
-case: n m => [|n] [|m] //=; rewrite ?ltnS; first last.
-- by move=> len lem eq; congr _.+1; apply/ih.
-- move=> _ _ /(congr1 size) /eqP; rewrite eqn_leq => /andP[_].
-  rewrite size_drop => h; have := leq_trans h (leq_subr _ _).
-  by rewrite ltnn.
-- move=> _ _ /(congr1 size) /eqP; rewrite eqn_leq => /andP[h _].
-  rewrite size_drop in h; have := leq_trans h (leq_subr _ _).
-  by rewrite ltnn.
+move => /leP hn /leP hm he; have := size_drop n s.
+rewrite he size_drop /subn /subn_rec; Psatz.lia.
 Qed.
 
-Lemma ZleP x y : reflect (x <= y) (x <=? y).
-Proof. by apply: (equivP idP);rewrite Zle_is_le_bool. Qed.
-
-Lemma ZltP x y : reflect (x < y) (x <? y).
-Proof. by apply: (equivP idP);rewrite Zlt_is_lt_bool. Qed.
+Definition ZleP : ∀ x y, reflect (x <= y) (x <=? y) := Z.leb_spec0.
+Definition ZltP : ∀ x y, reflect (x < y) (x <? y) := Z.ltb_spec0.
 
 Lemma eq_dec_refl
            (T: Type) (dec: ∀ x y : T, { x = y } + { x ≠ y })
