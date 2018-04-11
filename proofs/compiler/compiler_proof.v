@@ -29,7 +29,8 @@ Require Import allocation inline_proof dead_calls_proof
                unrolling_proof constant_prop_proof dead_code_proof
                array_expansion stack_alloc_proof
                lowering_proof
-               linear_proof compiler.
+               linear_proof
+               psem_of_sem_proof.
 Import Utf8.
 Import x86_sem x86_gen.
 
@@ -97,7 +98,7 @@ Let K' : ∀ vr (P Q: _ → Prop),
 Lemma compile_progP entries (p: prog) gd (lp: lprog) mem fn va mem' vr:
   compile_prog cparams entries p = cfok lp ->
   fn \in entries ->
-  sem_call p gd mem fn va mem' vr ->
+  sem.sem_call p gd mem fn va mem' vr ->
   (forall f, get_fundef lp fn = Some f -> 
      exists p, Memory.alloc_stack mem (lfd_stk_size f) = ok p) ->
   ∃ vr',
@@ -142,6 +143,7 @@ Proof.
   apply: Ki; first by move => vr'; exact: (unrollP Hp1).
   apply: Ki; first by move => vr'; exact: (dead_calls_err_seqP Hpca).
   apply: K'; first by move => vr' Hvr'; apply: (inline_call_errP Hp0 va_refl); exact: Hvr'.
+  apply: Ki; first by move => vr'; exact: psem_call.
   exists vr; split => //.
   exact: (List_Forall2_refl _ value_uincl_refl).
 Qed.

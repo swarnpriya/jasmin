@@ -561,6 +561,13 @@ Lemma truncate_wordP s1 s2 (w1:word s1) (w2:word s2) :
   (s1 <= s2)%CMP /\ w1 = zero_extend s1 w2.
 Proof. by rewrite /truncate_word;case:ifP => // Hle []. Qed.
 
+Lemma truncate_word_errP s1 s2 (w: word s2) e :
+  truncate_word s1 w = Error e →
+  e = ErrType ∧ (s2 < s1)%CMP.
+Proof.
+by rewrite /truncate_word; case: ifP => // /negbT; rewrite cmp_nle_lt => ? [].
+Qed.
+
 Lemma of_val_to_val vt (v: sem_t vt): of_val vt (to_val v) = ok v.
 Proof.
   case: vt v=> // [s p | s] v /=;last by apply truncate_word_u.
