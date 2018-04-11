@@ -190,15 +190,23 @@ Ltac clarify :=
   | H : ?a = _, K : ?a = _ |- _ => rewrite H in K
   end.
 
-Fixpoint mapM eT aT bT (f : aT -> result eT bT) (xs : seq aT) : result eT (seq bT) :=
+Definition mapM eT aT bT (f : aT -> result eT bT)  : seq aT → result eT (seq bT) :=
+  fix mapM xs :=
   match xs with
   | [::] =>
       Ok eT [::]
   | [:: x & xs] =>
       f x >>= fun y =>
-      mapM f xs >>= fun ys =>
+      mapM xs >>= fun ys =>
       Ok eT [:: y & ys]
   end.
+
+Instance mapM_ext eT aT bT :
+  Proper (@eqfun (result eT bT) aT ==> eq ==> eq) (@mapM eT aT bT).
+Proof.
+move => f g ext xs xs' <-{xs'}.
+by elim: xs => //= a xs ->; rewrite (ext a); case: (g a).
+Qed.
 
 Lemma mapM_size eT aT bT f xs ys :
   @mapM eT aT bT f xs = ok ys ->

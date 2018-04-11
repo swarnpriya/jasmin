@@ -235,14 +235,14 @@ Proof.
   + by move=> _; apply: rbindP => ??;apply:rbindP.
   + by move=> _ _;t_xrbindP => ? _ ? _ <-.
   rewrite vrvs_cons vrv_var read_es_cons=> Hempty.
-  rewrite /sem_pexprs /=;t_xrbindP => ve Hse ves Hves ??;subst => v1 htr vs1 htrs <-.
+  rewrite /=;t_xrbindP => ve Hse ves Hves ??;subst => v1 htr vs1 htrs <-.
   t_xrbindP => s1 Hw Hws.
   apply Eseq with s1. 
   + by constructor;econstructor;eauto.
   apply: Hrec htrs Hws;first by SvD.fsetdec.
   apply:rbindP Hw => vm;apply: on_vuP.
   + move=> z ? <- [<-] /=.
-    rewrite -Hves=> {Hse Hves};case:s => sm svm /=. 
+    rewrite -Hves=> {Hse Hves};case:s => sm svm /=.
     apply read_es_eq_on with Sv.empty.
     by rewrite read_esE => y Hy;rewrite Fv.setP_neq //;apply/eqP;SvD.fsetdec.
   case:ifP => //= _ ? [<-] [<-] /=. 
