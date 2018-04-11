@@ -252,7 +252,7 @@ Variant lower_cassgn_t : Type :=
   | LowerCopn of sopn & pexpr
   | LowerInc  of sopn & pexpr
   | LowerLea of wsize & lea
-  | LowerFopn of sopn & list pexpr & Z
+  | LowerFopn of sopn & list pexpr & option wsize
   | LowerEq   of wsize & pexpr & pexpr
   | LowerLt   of wsize & pexpr & pexpr
   | LowerIf   of pexpr & pexpr & pexpr
@@ -368,7 +368,7 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
   | Pload sz _ _ => chk (sz ≤ U64)%CMP (LowerMov (is_lval_in_memory x))
 
   | Papp1 (Olnot sz) a => k8 sz (LowerCopn (Ox86_NOT sz) a)
-  | Papp1 (Oneg (Op_w sz)) a => k8 sz (LowerFopn (Ox86_NEG sz) [:: a] 0)
+  | Papp1 (Oneg (Op_w sz)) a => k8 sz (LowerFopn (Ox86_NEG sz) [:: a] None)
 
   | Papp2 op a b =>
     match op with
@@ -380,7 +380,7 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
         match add_inc_dec_classify sz a b with
         | AddInc y => LowerInc (Ox86_INC sz) y
         | AddDec y => LowerInc (Ox86_DEC sz) y
-        | AddNone  => LowerFopn (Ox86_ADD sz) [:: a ; b ] (wbase U32)
+        | AddNone  => LowerFopn (Ox86_ADD sz) [:: a ; b ] (Some U32)
         end
       end
     | Osub (Op_w sz) =>
@@ -391,7 +391,7 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
         match sub_inc_dec_classify sz b with
         | SubInc => LowerInc (Ox86_INC sz) a
         | SubDec => LowerInc (Ox86_DEC sz) a
-        | SubNone => LowerFopn (Ox86_SUB sz) [:: a ; b ] (wbase U32)
+        | SubNone => LowerFopn (Ox86_SUB sz) [:: a ; b ] (Some U32)
         end
       end
     | Omul (Op_w sz) =>
@@ -400,20 +400,20 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
       | Some l => LowerLea sz l
       | _      => 
         match is_wconst sz a with
-        | Some _ => LowerFopn (Ox86_IMULtimm sz) [:: b ; a ] (wbase U32)
+        | Some _ => LowerFopn (Ox86_IMULtimm sz) [:: b ; a ] (Some U32)
         | _      =>
         match is_wconst sz b with
-        | Some _ => LowerFopn (Ox86_IMULtimm sz) [:: a ; b ] (wbase U32)
-        | _ => LowerFopn (Ox86_IMULt sz) [:: a ; b ] (wbase U32)
+        | Some _ => LowerFopn (Ox86_IMULtimm sz) [:: a ; b ] (Some U32)
+        | _ => LowerFopn (Ox86_IMULt sz) [:: a ; b ] (Some U32)
         end
         end
       end
-    | Oland sz => k8 sz (LowerFopn (Ox86_AND sz) [:: a ; b ] (wbase U32))
-    | Olor sz => k8 sz (LowerFopn (Ox86_OR sz) [:: a ; b ] (wbase U32))
-    | Olxor sz => k8 sz (LowerFopn (Ox86_XOR sz) [:: a ; b ] (wbase U32))
-    | Olsr sz => k8 sz (LowerFopn (Ox86_SHR sz) [:: a ; b ] (wbase U8))
-    | Olsl sz => k8 sz (LowerFopn (Ox86_SHL sz) [:: a ; b ] (wbase U8))
-    | Oasr sz => k8 sz (LowerFopn (Ox86_SAR sz) [:: a ; b ] (wbase U8))
+    | Oland sz => k8 sz (LowerFopn (Ox86_AND sz) [:: a ; b ] (Some U32))
+    | Olor sz => k8 sz (LowerFopn (Ox86_OR sz) [:: a ; b ] (Some U32))
+    | Olxor sz => k8 sz (LowerFopn (Ox86_XOR sz) [:: a ; b ] (Some U32))
+    | Olsr sz => k8 sz (LowerFopn (Ox86_SHR sz) [:: a ; b ] (Some U8))
+    | Olsl sz => k8 sz (LowerFopn (Ox86_SHL sz) [:: a ; b ] (Some U8))
+    | Oasr sz => k8 sz (LowerFopn (Ox86_SAR sz) [:: a ; b ] (Some U8))
     | Oeq (Op_w sz) => k8 sz (LowerEq sz a b)
     | Olt (Cmp_w _ sz) => k8 sz (LowerLt sz a b)
     | _ => LowerAssgn
@@ -429,21 +429,30 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
 
 Definition Lnone_b vi := Lnone vi sbool.
 
-Variant opn_5flags_cases_t (a: pexprs) (m: Z) : Type :=
+(* TODO: other sizes than U64 *)
+(* TODO: remove dependent types *)
+Variant opn_5flags_cases_t (a: pexprs) : Type :=
 | Opn5f_large_immed x y (n: Z) z `(a = x :: y :: z) `(y = Pcast U64 n)
 | Opn5f_other.
 
-Arguments Opn5f_large_immed [a m] {x y n z} _ _.
-Arguments Opn5f_other [a m].
+Arguments Opn5f_large_immed [a] {x y n z} _ _.
+Arguments Opn5f_other [a].
 
-Definition opn_5flags_cases (a: pexprs) (m: Z) : opn_5flags_cases_t a m :=
+Definition check_signed_range (m: option wsize) sz' (n: Z) : bool :=
+  if m is Some ws then (
+      let z := wsigned (wrepr sz' n) in
+      let h := (wbase ws) / 2 in
+      if -h <=? z then z <? h else false)%Z
+  else false.
+
+Definition opn_5flags_cases (a: pexprs) (m: option wsize) (sz: wsize) : opn_5flags_cases_t a :=
   match a with
-  | x :: y :: z =>
+  | x :: y :: _ =>
     match is_wconst_of_size U64 y as u return is_reflect (λ z : Z, Pcast U64 z) y u → _ with
     | None => λ _, Opn5f_other
     | Some n =>
       λ W,
-      if let h := m / 2 in if -h <=? n then n <? h else false
+      if check_signed_range m sz n
       then Opn5f_other
       else Opn5f_large_immed erefl (is_reflect_some_inv W)
     end%Z (is_wconst_of_sizeP U64 y)
@@ -454,11 +463,51 @@ Definition opn_no_imm (op: sopn) : sopn :=
   | Ox86_IMULtimm sz => Ox86_IMULt sz
   | _ => op end.
 
-Definition opn_5flags (immed_bound: Z) (vi: var_info)
+(* TODO: move *)
+Definition wsize_of_sopn (op: sopn) : wsize :=
+  match op with
+  | Ox86_SETcc => U8
+  | Omulu x
+  | Oaddcarry x
+  | Osubcarry x
+  | Oset0 x
+  | Ox86_MOV x
+  | Ox86_CMOVcc x
+  | Ox86_ADD x
+  | Ox86_SUB x
+  | Ox86_MUL x
+  | Ox86_IMUL x
+  | Ox86_IMULt x
+  | Ox86_IMULtimm x
+  | Ox86_DIV x
+  | Ox86_IDIV x
+  | Ox86_ADC x
+  | Ox86_SBB x
+  | Ox86_NEG x
+  | Ox86_INC x
+  | Ox86_DEC x
+  | Ox86_BT x
+  | Ox86_LEA x
+  | Ox86_TEST x
+  | Ox86_CMP x
+  | Ox86_AND x
+  | Ox86_OR x
+  | Ox86_XOR x
+  | Ox86_NOT x
+  | Ox86_ROR x
+  | Ox86_ROL x
+  | Ox86_SHL x
+  | Ox86_SHR x
+  | Ox86_SAR x
+  | Ox86_SHLD x
+    => x
+  end.
+
+Definition opn_5flags (immed_bound: option wsize) (vi: var_info)
            (cf: lval) (x: lval) tg (o: sopn) (a: pexprs) : seq instr_r :=
   let f := Lnone_b vi in
   let fopn o a := [:: Copn [:: f ; cf ; f ; f ; f ; x ] tg o a ] in
-  match opn_5flags_cases a immed_bound with
+  match opn_5flags_cases a immed_bound (wsize_of_sopn o) with
   | Opn5f_large_immed x y n z _ _ =>
     let c := {| v_var := {| vtype := sword U64; vname := fresh_multiplicand fv U64 |} ; v_info := vi |} in
     Copn [:: Lvar c ] tg (Ox86_MOV U64) [:: y] :: fopn (opn_no_imm o) (x :: Pvar c :: z)
@@ -509,7 +558,10 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
       else if o == @wconst sz 0 then
           (* d + b *)
           if d == 1%R then inc (Ox86_INC sz) b
-          else [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86_ADD sz) [:: b ; de])]
+          else
+            if check_signed_range (Some U32) sz (wunsigned d)
+            then [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86_ADD sz) [:: b ; de ])]
+            else lea tt
       else lea tt
       
   | LowerEq sz a b => [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg (Ox86_CMP sz) [:: a ; b ]) ]
@@ -541,7 +593,7 @@ Definition lower_addcarry_classify (sub: bool) (xs: lvals) (es: pexprs) :=
 Definition lower_addcarry sz (sub: bool) (xs: lvals) tg (es: pexprs) : seq instr_r :=
   if (sz ≤ U64)%CMP then
   match lower_addcarry_classify sub xs es with
-  | Some (vi, o, es, cf, r) => opn_5flags (wbase U32) vi cf r tg (o sz) es
+  | Some (vi, o, es, cf, r) => opn_5flags (Some U32) vi cf r tg (o sz) es
   | None => [:: Copn xs tg ((if sub then Osubcarry else Oaddcarry) sz) es ]
   end
   else [:: Copn xs tg ((if sub then Osubcarry else Oaddcarry) sz) es ].

@@ -591,7 +591,7 @@ Lemma to_arr_ok s n v t :
   to_arr s n v = ok t →
   v = @Varr s n t.
 Proof.
-case: v => // [ sz' n' a | [] // sz' n' ] /=; last by case: andP.
+case: v => // [ sz' n' a | [] // ] /=.
 case: wsize_eq_dec => // ?; subst.
 case: CEDecStype.pos_dec => // ?; subst.
 by case => ->.
@@ -656,9 +656,7 @@ Proof.
   case: ty v => [ | | sz n | sz ] [] //; try by case.
   - move => sz' n' t; rewrite /truncate_val /=; case: wsize_eq_dec => // ?; subst.
     by case: CEDecStype.pos_dec => // ?; subst.
-  - by case => // sz' n'; rewrite /truncate_val /=; case: ifP.
-  - by move => sz' w; rewrite /truncate_val /=; t_xrbindP => w' /truncate_wordP [].
-  by case => // sz'; rewrite /truncate_val /=; case: ifP.
+  by move => sz' w; rewrite /truncate_val /=; t_xrbindP => w' /truncate_wordP [].
 Qed.
 
 Lemma truncate_val_has_type ty v v' :
@@ -670,9 +668,7 @@ Proof.
   - by move => z [<-].
   - move => sz' n' t; rewrite /truncate_val /=; case: wsize_eq_dec => // ?; subst.
     by case: CEDecStype.pos_dec => // ?; subst => - [<-].
-  - by case => // sz' n'; rewrite /truncate_val /=; case: ifP.
-  - by move => sz' w; rewrite /truncate_val /=; t_xrbindP => w' /truncate_wordP [] ? -> <-.
-  by case => // sz'; rewrite /truncate_val /=; case: ifP.
+  by move => sz' w; rewrite /truncate_val /=; t_xrbindP => w' /truncate_wordP [] ? -> <-.
 Qed.
 
 Lemma truncate_val_wordI ty v sz w :
@@ -682,11 +678,9 @@ Proof.
 case: ty v => [ | | s n | s ] [] //; try by case.
 - move => sz' n' t; rewrite /truncate_val /=; case: wsize_eq_dec => // ?; subst.
   by case: CEDecStype.pos_dec => // ?; subst.
-- by case => // sz' n'; rewrite /truncate_val /=; case: ifP.
-- move => sz' w'; rewrite /truncate_val /=.
-  apply: rbindP => w'' /truncate_wordP [] => hle -> h.
-  by have := ok_inj h => {h} /Vword_inj [] ?; subst => /= ?; subst; eauto.
-by case => // sz'; rewrite /truncate_val /=; case: ifP.
+move => sz' w'; rewrite /truncate_val /=.
+apply: rbindP => w'' /truncate_wordP [] => hle -> h.
+by have := ok_inj h => {h} /Vword_inj [] ?; subst => /= ?; subst; eauto.
 Qed.
 
 Lemma truncate_val_int ty (z: Z) v :
@@ -1210,23 +1204,6 @@ Lemma value_uincl_zero_ext sz sz' (w':word sz') : (sz ≤ sz')%CMP ->
   value_uincl (Vword (zero_extend sz w')) (Vword w').
 Proof. apply word_uincl_zero_ext. Qed.
 
-Lemma of_val_undef t t':
-  of_val t (Vundef t') = Error (if subtype t t' then ErrAddrUndef else ErrType).
-Proof.
-case: t t' => [[]|[]||?[]] //=.
-+ move=> sz p [] // sz' p'.
-  have <- : (sarr sz p == sarr sz' p') = (sz == sz') && (p == p').
-  + case: (sarr _ _ =P _) => //.
-    + by move=> [] -> ->;rewrite !eqxx.
-    by case: eqP => //= ->;case:eqP => //= ->.
-  by case:ifP.    
-by move=> ?;case:ifP.
-Qed.
-
-Lemma of_val_undef_ok t t' v:
-  of_val t (Vundef t') <> ok v.
-Proof. by case: t t' v => //= [||s p|s] [] //= *;case: ifP. Qed.
-
 Lemma pof_val_undef_ok t t' v:
   pof_val t (Vundef t') <> ok v.
 Proof. by case: t t' v => //= [||s p|s] [] //= *;case: ifP. Qed.
@@ -1247,25 +1224,19 @@ Proof.
 case: ty x y => //.
 - by case => // [ b | [] ] // [] //= ? <- [<-]; exists (Vbool b).
 - by case => // [ z | [] ] // [] //= ? <- [<-]; exists (Vint z).
-- move => sz n; case => // [ sz' n' t' | [] // sz' n' ] [] //=.
-  + move => sz'' n'' t [?] [?]; subst => h /=.
-    rewrite /truncate_val /=.
-    case: wsize_eq_dec => // ?; subst.
-    case: (CEDecStype.pos_dec _ _) => // ?; subst => - [<-] /=.
-    eexists; split; first reflexivity.
-    by split => //; exists erefl.
-  + move => sz'' n'' a [? ?]; subst.
-    by rewrite /truncate_val /=; case: ifP.
-  case => //= sz'' n'' [? ?]; subst.
-  by rewrite /truncate_val /=; case: ifP.
+- move => sz n; case => // [ sz' n' t' | [] // ] [] //=.
+  move => sz'' n'' t [?] [?]; subst => h /=.
+  rewrite /truncate_val /=.
+  case: wsize_eq_dec => // ?; subst.
+  case: (CEDecStype.pos_dec _ _) => // ?; subst => - [<-] /=.
+  eexists; split; first reflexivity.
+  by split => //; exists erefl.
 (move => sz; case => // [ sz' w | [] // sz' ];
-case) => // [ sz'' w' | sz'' w' | [] // sz'' ] /=.
-+ case/andP => hsz' /eqP -> {w}; rewrite /truncate_val /= /truncate_word.
-  case: ifP => // hsz [<-].
-  rewrite (cmp_le_trans hsz hsz') /=; eexists; split; first reflexivity.
-  by rewrite/= zero_extend_idem.
-+ by rewrite /truncate_val /=; case: ifP.
-by rewrite /truncate_val /=; case: ifP.
+case) => // sz'' w' /=.
+case/andP => hsz' /eqP -> {w}; rewrite /truncate_val /= /truncate_word.
+case: ifP => // hsz [<-].
+rewrite (cmp_le_trans hsz hsz') /=; eexists; split; first reflexivity.
+by rewrite/= zero_extend_idem.
 Qed.
 
 Lemma mapM2_truncate_val tys vs1' vs1 vs2' : 
@@ -2266,7 +2237,7 @@ Qed.
 (* TODO: move *)
 Lemma to_word_to_pword s v w: to_word s v = ok w -> to_pword s v = ok (pword_of_word w).
 Proof.
-  case: v => //= [ s' w'| []//?];last by case: ifP.
+  case: v => //= [ s' w' | [] // ].
   move=> /truncate_wordP [hle] ?;subst w.
   case: Sumbool.sumbool_of_bool => /=.
   + move=> e;move: (e);rewrite cmp_le_eq_lt in e => e'.

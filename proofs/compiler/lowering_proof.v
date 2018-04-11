@@ -1351,7 +1351,8 @@ Ltac elim_div :=
         move: Hvo Hwo Hw'; rewrite Eoo => - [<-].
         rewrite hsz -!/(zero_extend _ _) !zero_extend_u => - [<-].
         rewrite zero_extend_u GRing.mulr0 GRing.addr0 GRing.addrC.
-        by rewrite /sem_sopn /sem_pexprs /= Hvb -/to_pointer /= Hwb /= => ->.
+        by rewrite /sem_sopn /sem_pexprs /= Hvb /= Hwb /= => ->.
+      case: ifP => // hrange.
       apply sem_seq1;constructor;constructor.
       move: Hvo Hwo Hw'; rewrite Eoo => - [<-].
       rewrite hsz -!/(zero_extend _ _) !zero_extend_u => - [<-].
@@ -1651,7 +1652,7 @@ Ltac elim_div :=
       }
       clear C.
       case: D => des' [ xs' [ hxs' [ v' [hv' ho'] ] ] ].
-      case: (opn_5flags_correct ii t (wbase U32) des' dxs hxs' hv' ho') => {hv' ho'} so'.
+      case: (opn_5flags_correct ii t (Some U32) des' dxs hxs' hv' ho') => {hv' ho'} so'.
       intuition eauto using eq_exc_freshT.
     Qed.
     Opaque lower_addcarry.

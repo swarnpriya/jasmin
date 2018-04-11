@@ -140,7 +140,7 @@ Definition truncate_word (s s':wsize) (w:word s') : exec (word s) :=
 Definition to_word (s: wsize) (v: value) : exec (word s) :=
   match v with
   | Vword s' w        => truncate_word s w
-  | Vundef (sword s') => if (s <= s')%CMP then undef_error else type_error
+  | Vundef (sword s') => Error (if (s <= s')%CMP then ErrAddrUndef else ErrType)
   | _                 => type_error
   end.
 
@@ -168,7 +168,7 @@ Definition to_arr s n v : exec (sem_t (sarr s n)) :=
       end
     | _ => type_error
     end
-  | Vundef (sarr s' n') => if (s == s') && (n == n') then undef_error else type_error
+  | Vundef (sarr s' n') => Error (if (s == s') && (n == n') then ErrAddrUndef else ErrType)
   | _                => type_error
   end.
 
@@ -1175,7 +1175,7 @@ End SEM_IND.
 
 Lemma of_val_undef t t':
   of_val t (Vundef t') =
-    if subtype t t' then undef_error else type_error.
+    Error (if subtype t t' then ErrAddrUndef else ErrType).
 Proof.
   case: t t' => //= [  [] |  [] | | s []] //.
   move=> s p [] // s' p';  case:eqP => [-> | ] /=; last by case: eqP => // -[] ->.
