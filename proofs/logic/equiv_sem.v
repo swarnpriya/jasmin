@@ -80,11 +80,11 @@ Definition svalue_uincl (v: value) (sv: svalue) :=
   | Vint n1, SVint n2   => n1 = n2
   | Varr s _ t1, SVarr s' t2 =>
     if s == s' then forall i v, Array.get t1 i = ok v ->  truncate_word s' (FArray.get t2 i) = truncate_word s' v else False
-  | Vword s w1, SVword s' w2  => if s == s' then truncate_word s' w1 = truncate_word s' w2 else False
+  | Vword s w1, SVword s' w2  => if (s' <= s')%CMP  then truncate_word s' w1 = truncate_word s' w2 else False
   | Vundef ty, _ => sstype_of_stype ty = sval_sstype sv
   | _, _ => False
   end.
-(*
+
 Lemma to_int_inv x i :
   to_int x = ok i →
   x = i.
@@ -93,7 +93,7 @@ Proof.
     apply ok_inj in H; congruence.
   elim (@of_val_undef_ok sint _ _ H).
 Qed.
-
+(*
 Lemma to_word_inv x w :
   to_word x = ok w →
   x = w.
@@ -102,7 +102,7 @@ Proof.
     apply ok_inj in H; congruence.
   elim (@of_val_undef_ok sword _ _ H).
 Qed.
-
+*)
 Lemma to_bool_inv x b :
   to_bool x = ok b →
   x = b.
@@ -111,7 +111,7 @@ Proof.
     apply ok_inj in H; congruence.
   elim (@of_val_undef_ok sbool _ _ H).
 Qed.
- *)
+ 
 
 Require psem.
 
@@ -127,7 +127,12 @@ Proof.
 
   case: ifP => //= eq_ss' _ H.
   have H' := (of_vword H).
-                                 admit.
+move:H'.  move => [s'' [le_ss' H']].
+subst t.
+move:H.
+rewrite /of_val.
+simpl.
+admit.
 
 
   case: (s =P s') => //= eq_ss'.
@@ -139,22 +144,26 @@ Proof.
   rewrite eq_dec_refl; congr ok.
   Check Array.get.
   simpl in H2.
-  move => i w H. apply H2 in H.
-Qed.
+  (*move => i w H. apply H2 in H.*)
+Admitted.
 
 Lemma svalue_uincl_int ve ve' z :
   svalue_uincl ve ve' -> to_int ve = ok z -> ve = z /\ ve' = z.
 Proof.
   move=> h t; case: (@of_sval_uincl ve ve' sint z h t) => /= z' [t' q].
   apply sto_int_inv in t'; apply to_int_inv in t. intuition congruence.
-Qed.
-(*
-Lemma svalue_uincl_word ve ve' w :
-  svalue_uincl ve ve' -> to_word ve = ok w -> ve = w /\ ve' = w.
+Admitted.
+
+Lemma svalue_uincl_word ve ve' sz w :
+  svalue_uincl ve ve' -> to_word sz ve = ok w -> ve = (Vword w) /\ ve' = (SVword w).
 Proof.
-  move=> h t; case: (@of_sval_uincl ve ve' sword w h t) => /= z' [t' q].
+  move=> h t; case: (@of_sval_uincl ve ve' (sword sz) w h t) => /= z' [t' q].
+(*  
+  intuition congruence.
+  
   apply sto_word_inv in t'; apply to_word_inv in t. intuition congruence.
-Qed.
+Qed.*)
+  Admitted.
 
 Lemma svalue_uincl_bool ve ve' b :
   svalue_uincl ve ve' -> to_bool ve = ok b -> ve = b /\ ve' = b.
@@ -171,12 +180,15 @@ Proof.
 move=> /(_ x); rewrite /seval_uincl; move=> H P; move: P H.
 apply: on_vuP => [ y | ] ->.
 case: x y => vi vt /= z <- /=.
-by case: vi z.
+case: vi z => //=.
+move => s n z H;case:ifP => [_ | ] //=;last by move => /eqP.
+by move => i w H'; apply H in H'; rewrite H';  simpl in H.
+by move => s w H; rewrite cmp_le_refl H.
 move=> H _; apply ok_inj in H; subst.
 symmetry.
 exact: sval_sstype_to_sval.
 Qed.
-
+(*
 Lemma sget_vars_uincl (xs:seq var_i) vm1 vm2 vs1:
   svm_uincl vm1 vm2 ->
   mapM (fun x => get_var vm1 (v_var x)) xs = ok vs1 ->
@@ -317,21 +329,22 @@ Lemma ssem_pexpr_uincl s ss e v1:
   sem_pexpr gd s e = ok v1 ->
   exists v2, ssem_pexpr gd ss e = ok v2 /\ svalue_uincl v1 v2.
 Proof.
-  move=> [Hu1 Hu2]; elim: e v1=>//= [z | b | sz e He | x | g | x p Hp | x p Hp | o e He | o e1 He1 e2 He2| eb Heb e1 He1 e2 He2 ] v1.
+  move=> [Hu1 Hu2]; elim: e v1=>//= [z | b | sz e He | x | g | x p Hp | sz x p Hp | o e He | o e1 He1 e2 He2| eb Heb e1 He1 e2 He2 ] v1.
   + by move=> [] <-;exists z.
   + by move=> [] <-;exists b.
   + apply: rbindP => z; apply: rbindP => ve /He [] ve' [] -> Hvu Hto [] <-.
-    by case: (svalue_uincl_int Hvu Hto) => ??;subst; exists (SVword (I64.repr z)).
-    by case: (svalue_uincl_int Hvu Hto) => ??;subst; exists (SVword (I64.repr z)).
+    by case: (svalue_uincl_int Hvu Hto) => ??;subst; exists (SVword (wrepr sz z)); simpl; split => //=;rewrite cmp_le_refl.
   + move=> ?; eexists; split=> //; exact: sget_var_uincl.
   + rewrite/get_global/sget_global; case: get_global_word => // v' h; apply ok_inj in h; subst.
-    by exists v'.
+    by exists (SVword v').
   + have := Hu2 x;case x => -[xt xn] xi /= H H';move: H' H.
-    apply: on_arr_varP=> /= n t -> /= /(sget_var_uincl Hu2) /= Hsame.
+    apply: on_arr_varP=> /= sz n t -> /= /(sget_var_uincl Hu2) /=.
+    case:ifP => _ //= Hsame.
     apply: rbindP => z;apply: rbindP => vp /Hp [] vp' [] Hvp' Hvu /(svalue_uincl_int Hvu) [Hvp1 Hvp2].
     apply: rbindP=> w Hw [] <- /= ?.
     rewrite Hvp' Hvp2 /=.
-    eexists; split=> //.
+    eexists; split=> //. simpl.
+    simpl; rewrite cmp_le_refl.
     by rewrite (Hsame _ _ Hw).
   + apply: rbindP => w1;apply: rbindP => vx /(sget_var_uincl Hu2) /svalue_uincl_word H/H.
     move=> [_ ->] /=.

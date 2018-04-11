@@ -560,11 +560,17 @@ Proof. by case: sst; case: z2; case: z1 => //= x1 x2 _ _ [->]. Qed.
 Lemma of_sval_to_sval ty x :
   of_sval ty (to_sval x) = ok x.
 Proof. by move: x; case ty. Qed.
-
-Lemma sto_word_inv x i :
-  sto_word x = ok i →
-  x = i.
-Proof. case: x => // i' H; apply ok_inj in H. congruence. Qed.
+*)
+Lemma sto_word_inv sz'(x : word sz') sz (i: word sz) :
+  sto_word sz (SVword x) = ok i →
+  (sz <= sz')%CMP ->
+  truncate_word sz x = ok i.
+Proof.
+case: x => //i';simpl.
+(*rewrite /truncate_word.
+case:cmp_le => //= H; apply ok_inj in H.
+rewrite -H. congr. congruence.
+apply ok_inj in H. congruence.*) Qed.
 
 Lemma sto_int_inv x i :
   sto_int x = ok i →
@@ -575,10 +581,10 @@ Lemma sto_bool_inv x b :
   sto_bool x = ok b →
   x = b.
 Proof. case: x => // i' H; apply ok_inj in H. congruence. Qed.
-
+(*
 Lemma sto_arr_inv x a :
   sto_arr x = ok a →
-  x = SVarr a.
+  x = SVarr s a.
 Proof. case: x => // a' H;apply ok_inj in H. congruence. Qed.
 
 Lemma slet_inv {A s x} {f: _ → _ → exec A} {y} :
