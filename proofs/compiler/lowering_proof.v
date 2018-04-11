@@ -541,14 +541,11 @@ Ltac elim_div :=
   Proof.
   Admitted.
 
-  Lemma wunsigned0 sz : @wunsigned sz 0%R = 0%Z.
-  Admitted.
-
   Lemma wsigned0 sz : @wsigned sz 0%R = 0%Z.
-  Admitted.
+  Proof. by case: sz. Qed.
 
   Lemma msb0 sz : @msb sz 0%R = false.
-  Admitted.
+  Proof. by case: sz. Qed.
 
   Lemma wles_msb sz (α β: word sz) :
   α ≠ β
@@ -732,7 +729,7 @@ Ltac elim_div :=
       + rewrite -Hz1z2 /vzf /vsf /vof /ZF_of_word /SF_of_word wltE GRing.subr_eq0; f_equal.
         set α := zero_extend _ z1; set β := zero_extend _ z2.
         case: (α =P _) => /=.
-        * by move => ->; rewrite GRing.subrr Z.sub_diag wunsigned0.
+        * by move => ->; rewrite GRing.subrr Z.sub_diag.
         exact: wlts_msb.
   Qed.
 
@@ -1258,8 +1255,7 @@ Ltac elim_div :=
   Lemma between_ZR (a b c: ssrZ.Z_numType) :
     (a <= b < c)%R →
     (a <= b < c)%Z.
-  Proof using.
-  Admitted.
+  Proof. by case/andP => /ssrZ.lezP ? /ssrZ.ltzP. Qed.
 
   Local Lemma Hassgn s1 s2 l tag ty e v v' :
     sem_pexpr gd s1 e = ok v →

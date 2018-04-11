@@ -33,12 +33,13 @@ Proof.
   | left e => left _
   | right ne => right _
   end.
-Admitted.
-(*
-  abstract (case: d d' e => [ a | r | f ] [ a' | r' | f' ] //= /eqP; apply: f_equal).
-  abstract (case: d d' ne => [ a | r | f ] [ a' | r' | f' ] //= /eqP ne k; refine (ne (let: erefl := k in erefl))).
+  abstract (case: d d' e => [ s a | r | f ] [ s' a' | r' | f' ] //=;
+    try case/andP; repeat (move => /eqP -> //)).
+  abstract (case: d d' ne => [ s a | r | f ] [ s' a' | r' | f' ] //=;
+    try (move/negbT /andP => ne k; refine (ne (let: erefl := k in conj (eq_refl _) (eq_refl _))));
+      move => /eqP ne k; refine (ne (let: erefl := k in erefl))).
 Defined.
-*)
+
 Definition destination_eqMixin := comparableClass destination_eq_dec.
 Canonical destination_eqType := EqType _ destination_eqMixin.
 
@@ -214,16 +215,13 @@ Definition argument_beq (a a': argument) : bool :=
 
 Lemma argument_beq_axiom : Equality.axiom argument_beq.
 Proof.
-(*
-case => [ f | i | g | r | s o | c ] [ f' | s' o' | c' ] /=;
+case => [ f | i | g | r | sz ptr | ct ] [ f' | i' | g' | r' | sz' ptr' | ct' ] /=;
   try (right; refine (λ e, let 'erefl := e in I));
   try by case: eqP => [ -> | ne ]; constructor => // k; refine (ne (let 'erefl := k in erefl)).
  case: eqP => [-> | ] /=.
  + by case: eqP => [ -> | H] /=; constructor => // -[].
  by constructor => // -[].
 Qed.
-*)
-Admitted.
 
 Definition argument_eqMixin := Equality.Mixin argument_beq_axiom .
 Canonical argument_eqType := EqType _ argument_eqMixin.
