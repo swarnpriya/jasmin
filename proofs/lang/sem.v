@@ -23,7 +23,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ----------------------------------------------------------------------- *)
 
-(* * Syntax and semantics of the dmasm source language *)
+(* * Syntax and semantics of the Jasmin source language *)
 
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
@@ -1047,76 +1047,116 @@ Section SEM_IND.
     (Pfor : var_i -> seq Z -> estate -> cmd -> estate -> Prop)
     (Pfun : mem -> funname -> seq value -> mem -> seq value -> Prop).
 
-  Hypothesis Hnil : forall s : estate, Pc s [::] s.
+  Definition sem_Ind_nil : Prop :=
+    forall s : estate, Pc s [::] s.
 
-  Hypothesis Hcons : forall (s1 s2 s3 : estate) (i : instr) (c : cmd),
-    sem_I s1 i s2 -> Pi s1 i s2 -> sem s2 c s3 -> Pc s2 c s3 -> Pc s1 (i :: c) s3.
+  Definition sem_Ind_cons : Prop :=
+    forall (s1 s2 s3 : estate) (i : instr) (c : cmd),
+      sem_I s1 i s2 -> Pi s1 i s2 -> sem s2 c s3 -> Pc s2 c s3 -> Pc s1 (i :: c) s3.
 
-  Hypothesis HmkI : forall (ii : instr_info) (i : instr_r) (s1 s2 : estate),
-    sem_i s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
+  Hypotheses
+    (Hnil: sem_Ind_nil)
+    (Hcons: sem_Ind_cons)
+  .
 
-  Hypothesis Hasgn : forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v v',
-    sem_pexpr gd s1 e = ok v ->
-    truncate_val ty v = ok v' →
-    write_lval gd x v' s1 = Ok error s2 ->
-    Pi_r s1 (Cassgn x tag ty e) s2.
+  Definition sem_Ind_mkI : Prop :=
+    forall (ii : instr_info) (i : instr_r) (s1 s2 : estate),
+      sem_i s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 
-  Hypothesis Hopn : forall (s1 s2 : estate) t (o : sopn) (xs : lvals) (es : pexprs),
-    sem_sopn o s1 xs es = Ok error s2 ->
-    Pi_r s1 (Copn xs t o es) s2.
+  Hypothesis HmkI : sem_Ind_mkI.
 
-  Hypothesis Hif_true : forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
-    sem_pexpr gd s1 e = ok (Vbool true) ->
-    sem s1 c1 s2 -> Pc s1 c1 s2 -> Pi_r s1 (Cif e c1 c2) s2.
+  Definition sem_Ind_assgn : Prop :=
+    forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v v',
+      sem_pexpr gd s1 e = ok v ->
+      truncate_val ty v = ok v' →
+      write_lval gd x v' s1 = Ok error s2 ->
+      Pi_r s1 (Cassgn x tag ty e) s2.
 
-  Hypothesis Hif_false : forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
-    sem_pexpr gd s1 e = ok (Vbool false) ->
-    sem s1 c2 s2 -> Pc s1 c2 s2 -> Pi_r s1 (Cif e c1 c2) s2.
+  Definition sem_Ind_opn : Prop :=
+    forall (s1 s2 : estate) t (o : sopn) (xs : lvals) (es : pexprs),
+      sem_sopn o s1 xs es = Ok error s2 ->
+      Pi_r s1 (Copn xs t o es) s2.
 
-  Hypothesis Hwhile_true : forall (s1 s2 s3 s4 : estate) (c : cmd) (e : pexpr) (c' : cmd),
-    sem s1 c s2 -> Pc s1 c s2 ->
-    sem_pexpr gd s2 e = ok (Vbool true) ->
-    sem s2 c' s3 -> Pc s2 c' s3 ->
-    sem_i s3 (Cwhile c e c') s4 -> Pi_r s3 (Cwhile c e c') s4 -> Pi_r s1 (Cwhile c e c') s4.
+  Definition sem_Ind_if_true : Prop :=
+    forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
+      sem_pexpr gd s1 e = ok (Vbool true) ->
+      sem s1 c1 s2 -> Pc s1 c1 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
-  Hypothesis Hwhile_false : forall (s1 s2 : estate) (c : cmd) (e : pexpr) (c' : cmd),
-    sem s1 c s2 -> Pc s1 c s2 ->
-    sem_pexpr gd s2 e = ok (Vbool false) ->
-    Pi_r s1 (Cwhile c e c') s2.
+  Definition sem_Ind_if_false : Prop :=
+    forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
+      sem_pexpr gd s1 e = ok (Vbool false) ->
+      sem s1 c2 s2 -> Pc s1 c2 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
-  Hypothesis Hfor : forall (s1 s2 : estate) (i : var_i) (d : dir)
-         (lo hi : pexpr) (c : cmd) (vlo vhi : Z),
-    sem_pexpr gd s1 lo = ok (Vint vlo) ->
-    sem_pexpr gd s1 hi = ok (Vint vhi) ->
-    sem_for i (wrange d vlo vhi) s1 c s2 ->
-    Pfor i (wrange d vlo vhi) s1 c s2 -> Pi_r s1 (Cfor i (d, lo, hi) c) s2.
+  Definition sem_Ind_while_true : Prop :=
+    forall (s1 s2 s3 s4 : estate) (c : cmd) (e : pexpr) (c' : cmd),
+      sem s1 c s2 -> Pc s1 c s2 ->
+      sem_pexpr gd s2 e = ok (Vbool true) ->
+      sem s2 c' s3 -> Pc s2 c' s3 ->
+      sem_i s3 (Cwhile c e c') s4 -> Pi_r s3 (Cwhile c e c') s4 -> Pi_r s1 (Cwhile c e c') s4.
 
-  Hypothesis Hfor_nil : forall (s : estate) (i : var_i) (c : cmd), Pfor i [::] s c s.
+  Definition sem_Ind_while_false : Prop :=
+    forall (s1 s2 : estate) (c : cmd) (e : pexpr) (c' : cmd),
+      sem s1 c s2 -> Pc s1 c s2 ->
+      sem_pexpr gd s2 e = ok (Vbool false) ->
+      Pi_r s1 (Cwhile c e c') s2.
 
-  Hypothesis Hfor_cons : forall (s1 s1' s2 s3 : estate) (i : var_i)
-         (w : Z) (ws : seq Z) (c : cmd),
-    write_var i w s1 = Ok error s1' ->
-    sem s1' c s2 -> Pc s1' c s2 ->
-    sem_for i ws s2 c s3 -> Pfor i ws s2 c s3 -> Pfor i (w :: ws) s1 c s3.
+  Hypotheses
+    (Hasgn: sem_Ind_assgn)
+    (Hopn: sem_Ind_opn)
+    (Hif_true: sem_Ind_if_true)
+    (Hif_false: sem_Ind_if_false)
+    (Hwhile_true: sem_Ind_while_true)
+    (Hwhile_false: sem_Ind_while_false)
+  .
 
-  Hypothesis Hcall : forall (s1 : estate) (m2 : mem) (s2 : estate)
-         (ii : inline_info) (xs : lvals)
-         (fn : funname) (args : pexprs) (vargs vs : seq value),
-    sem_pexprs gd s1 args = Ok error vargs ->
-    sem_call (emem s1) fn vargs m2 vs -> Pfun (emem s1) fn vargs m2 vs ->
-    write_lvals gd {| emem := m2; evm := evm s1 |} xs vs = Ok error s2 ->
-    Pi_r s1 (Ccall ii xs fn args) s2.
+  Definition sem_Ind_for : Prop :=
+    forall (s1 s2 : estate) (i : var_i) (d : dir) (lo hi : pexpr) (c : cmd) (vlo vhi : Z),
+      sem_pexpr gd s1 lo = ok (Vint vlo) ->
+      sem_pexpr gd s1 hi = ok (Vint vhi) ->
+      sem_for i (wrange d vlo vhi) s1 c s2 ->
+      Pfor i (wrange d vlo vhi) s1 c s2 -> Pi_r s1 (Cfor i (d, lo, hi) c) s2.
 
-  Hypothesis Hproc : forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs vargs': seq value)
-         (s1 : estate) (vm2 : vmap) (vres vres': seq value),
-    get_fundef P fn = Some f ->
-    mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs ->
-    write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
-    sem s1 (f_body f) {| emem := m2; evm := vm2 |} ->
-    Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
-    mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
-    mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ->
-    Pfun m1 fn vargs' m2 vres'.
+  Definition sem_Ind_for_nil : Prop :=
+    forall (s : estate) (i : var_i) (c : cmd),
+      Pfor i [::] s c s.
+
+  Definition sem_Ind_for_cons : Prop :=
+    forall (s1 s1' s2 s3 : estate) (i : var_i) (w : Z) (ws : seq Z) (c : cmd),
+      write_var i w s1 = Ok error s1' ->
+      sem s1' c s2 -> Pc s1' c s2 ->
+      sem_for i ws s2 c s3 -> Pfor i ws s2 c s3 -> Pfor i (w :: ws) s1 c s3.
+
+  Hypotheses
+    (Hfor: sem_Ind_for)
+    (Hfor_nil: sem_Ind_for_nil)
+    (Hfor_cons: sem_Ind_for_cons)
+  .
+
+  Definition sem_Ind_call : Prop :=
+    forall (s1 : estate) (m2 : mem) (s2 : estate)
+           (ii : inline_info) (xs : lvals)
+           (fn : funname) (args : pexprs) (vargs vs : seq value),
+      sem_pexprs gd s1 args = Ok error vargs ->
+      sem_call (emem s1) fn vargs m2 vs -> Pfun (emem s1) fn vargs m2 vs ->
+      write_lvals gd {| emem := m2; evm := evm s1 |} xs vs = Ok error s2 ->
+      Pi_r s1 (Ccall ii xs fn args) s2.
+
+  Definition sem_Ind_proc : Prop :=
+    forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs vargs': seq value)
+           (s1 : estate) (vm2 : vmap) (vres vres': seq value),
+      get_fundef P fn = Some f ->
+      mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs ->
+      write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
+      sem s1 (f_body f) {| emem := m2; evm := vm2 |} ->
+      Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
+      mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
+      mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ->
+      Pfun m1 fn vargs' m2 vres'.
+
+  Hypotheses
+    (Hcall: sem_Ind_call)
+    (Hproc: sem_Ind_proc)
+  .
 
   Fixpoint sem_Ind (e : estate) (l : cmd) (e0 : estate) (s : sem e l e0) {struct s} :
     Pc e l e0 :=
