@@ -79,7 +79,7 @@ Definition svalue_uincl (v: value) (sv: svalue) :=
   | Vbool b1, SVbool b2 => b1 = b2
   | Vint n1, SVint n2   => n1 = n2
   | Varr s _ t1, SVarr s' t2 =>
-    forall i v, Array.get t1 i = ok v -> if s == s' then truncate_word s' (FArray.get t2 i) = truncate_word s' v else False
+    if s == s' then forall i v, Array.get t1 i = ok v ->  truncate_word s' (FArray.get t2 i) = truncate_word s' v else False
   | Vword s w1, SVword s' w2  => if s == s' then truncate_word s' w1 = truncate_word s' w2 else False
   | Vundef ty, _ => sstype_of_stype ty = sval_sstype sv
   | _, _ => False
@@ -125,71 +125,30 @@ Proof.
   try (by case: t z=> //= z -> []->; exists z);
   try (move=> _ H; elim (of_val_undef_ok H); fail); last first.
 
-  case: ifP => //=.  admit.
+  case: ifP => //= eq_ss' _ H.
+  have H' := (of_vword H).
+                                 admit.
 
 
-
-  move => H //=. (*case: (s =P s'). move /eqP. *)
-  simpl.
-  Search _ "wsize_eq_dec".
-  Check eq_refl.
-  case: (s == s') => //=.
+  case: (s =P s') => //= eq_ss'.
   rewrite /truncate_word.
-  (*move => //= H2 H;
-  apply of_vword in H;
-  move: H => [] s'' [le_s t_def]; subst t.*)
+  move => //= H2 H.
+  apply of_varr in H. subst t; simpl;  subst s';  simpl in z.
+  have z' := word_array_to_farray z.
+  exists z'. split;last split => //=.
+  rewrite eq_dec_refl; congr ok.
+  Check Array.get.
+  simpl in H2.
+  move => i w H. apply H2 in H.
+Qed.
 
-  admit.
-  
-  move=> h1.
-  have h3 := of_varr h1. subst t;simpl in z. 
-  exists  (truncate_farray s (word_array_to_farray z));split;last split. Focus 3. simpl. 
-
- (* simpl.
-  case: (wsize_eq_dec s' s).
-  move => eq_ss'. congr ok => //=. admit. admit.
-
-
-  simpl => i w H.
-  by rewrite /truncate_farray /FArray.get /word_array_to_farray H /truncate_word cmp_le_refl zero_extend_u.
-  
-  have:s=s'.
-  
-  rewrite /eq_rect.
-  rewrite /truncate_farray.
-  rewrite /truncate_word.
-  simpl.
-  case: (s <= s)%CMP => //=.
-  rewrite /word_array_to_farray.
-
-  rewrite /eq_ss'.
-  
-  Search _ "eq_rect_".
-  move:eq_->.
-  eq_rect
-  simpl. => //=.
-  
-  Search _ "wsize_eq".
-  case: (CEDecStype.pos_dec s' s).
-  
-
-  case: (s =P s') => [eq_ss'|ne_ss']; last first.
-  + move/(_ 0%Z).
-
-
-    
-  exists a'; split=> //.
-  by case: _ / H'.
-Admitted.
-Qed.*)
-(*
 Lemma svalue_uincl_int ve ve' z :
   svalue_uincl ve ve' -> to_int ve = ok z -> ve = z /\ ve' = z.
 Proof.
   move=> h t; case: (@of_sval_uincl ve ve' sint z h t) => /= z' [t' q].
   apply sto_int_inv in t'; apply to_int_inv in t. intuition congruence.
 Qed.
-
+(*
 Lemma svalue_uincl_word ve ve' w :
   svalue_uincl ve ve' -> to_word ve = ok w -> ve = w /\ ve' = w.
 Proof.
@@ -353,15 +312,16 @@ Section GLOB_DEFS.
 
 Context (gd: glob_defs).
 
-(*Lemma ssem_pexpr_uincl s ss e v1:
+Lemma ssem_pexpr_uincl s ss e v1:
   sestate_uincl s ss ->
   sem_pexpr gd s e = ok v1 ->
   exists v2, ssem_pexpr gd ss e = ok v2 /\ svalue_uincl v1 v2.
 Proof.
-  move=> [Hu1 Hu2]; elim: e v1=>//= [z | b | e He | x | g | x p Hp | x p Hp | o e He | o e1 He1 e2 He2| eb Heb e1 He1 e2 He2 ] v1.
+  move=> [Hu1 Hu2]; elim: e v1=>//= [z | b | sz e He | x | g | x p Hp | x p Hp | o e He | o e1 He1 e2 He2| eb Heb e1 He1 e2 He2 ] v1.
   + by move=> [] <-;exists z.
   + by move=> [] <-;exists b.
-  + apply: rbindP => z;apply: rbindP => ve /He [] ve' [] -> Hvu Hto [] <-.
+  + apply: rbindP => z; apply: rbindP => ve /He [] ve' [] -> Hvu Hto [] <-.
+    by case: (svalue_uincl_int Hvu Hto) => ??;subst; exists (SVword (I64.repr z)).
     by case: (svalue_uincl_int Hvu Hto) => ??;subst; exists (SVword (I64.repr z)).
   + move=> ?; eexists; split=> //; exact: sget_var_uincl.
   + rewrite/get_global/sget_global; case: get_global_word => // v' h; apply ok_inj in h; subst.
@@ -396,7 +356,7 @@ Proof.
     case: (of_sval_uincl h1 Z1) => x1 [] X1 [] _ ->; rewrite X1 /=.
     case: (of_sval_uincl h2 Z2) => x2 [] -> _ //.
 Qed.
-
+(*
 Lemma ssem_pexprs_uincl s ss es vs1:
   sestate_uincl s ss ->
   sem_pexprs gd s es = ok vs1 ->
@@ -735,7 +695,7 @@ Let Pfun m1 fd vargs m2 vres :=
 
 (*Local Lemma Hnil s : Pc s [::] s.
 Proof. by move=> vm1 Hvm1;exists vm1;split=> //;constructor. Qed.
-
+*)
 Local Lemma Hcons s1 s2 s3 i c :
   sem_I p gd s1 i s2 -> Pi s1 i s2 ->
   sem p gd s2 c s3 -> Pc s2 c s3 -> Pc s1 (i :: c) s3.
@@ -743,19 +703,19 @@ Proof.
   move=> _ Hi _ Hc vm1 /Hi [vm2 []] Hsi /Hc [vm3 []] Hsc ?.
   by exists vm3;split=>//;econstructor;eauto.
 Qed.
-
+(*
 Local Lemma HmkI ii i s1 s2 : sem_i p gd s1 i s2 -> Pi_r s1 i s2 -> Pi s1 (MkI ii i) s2.
 Proof. by move=> _ Hi vm1 /Hi [vm2 []] Hsi ?;exists vm2. Qed.
-
-Local Lemma Hasgn s1 s2 x tag e :
+*)
+Local Lemma Hasgn s1 s2 x tag st e :
   Let v := sem_pexpr gd s1 e in write_lval gd x v s1 = ok s2 ->
-  Pi_r s1 (Cassgn x tag e) s2.
+  Pi_r s1 (Cassgn x tag st e) s2.
 Proof.
   move=> Hs2 vm1 Hvm1;apply:rbindP Hs2 => z /(ssem_pexpr_uincl Hvm1) [] z' [] Hz' Hz.
   move=> /(swrite_uincl Hvm1 Hz) [vm2 []] Hw ?;exists vm2;split=> //.
   by constructor;rewrite Hz' /= Hw.
 Qed.
-
+(*
 Local Lemma Hopn s1 s2 t o xs es:
   sem_sopn gd o s1 xs es = ok s2 ->
   Pi_r s1 (Copn xs t o es) s2.
