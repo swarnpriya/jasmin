@@ -396,123 +396,6 @@ Section PROOF.
   by case: o => // -[] // => [ | | [] | [] | [] | [] ] sz [] _ <- <-.
   Qed.
 
-  (*
-  Lemma weq_sub z1 z2: weq z1 z2 = I64.eq (I64.sub z1 z2) I64.zero.
-  Proof.
-  case: z1 z2 => [z1 h1] [z2 h2]; rewrite /weq /I64.eq /I64.sub /=.
-  rewrite unsigned0 I64.unsigned_repr_eq; case: Coqlib.zeq => z_mod_12.
-  + have {h1 h2} lt_abs: (Z.abs (z1 - z2) < I64.modulus)%Z by lia.
-    have {z_mod_12} z_mod_abs: (Z.abs (z1 - z2) mod I64.modulus = 0)%Z.
-    * case: (Z.abs_spec (z1 - z2))  => [[_ ->//]|[_ ->]].
-      by apply/Z_mod_zero_opp.
-    have h := Z_div_mod_eq (Z.abs (z1 - z2)) _ I64.modulus_pos.
-    apply/eqP/Zminus_eq/Z.abs_0_iff; rewrite {}h z_mod_abs Z.add_0_r.
-    by apply/Z.eq_mul_0; right; apply: Zdiv_small; lia.
-  + by apply/Z.eqb_neq => eq; subst z2; rewrite Z.sub_diag Zmod_0_l in z_mod_12.
-  Qed.
-
-  Lemma wult_sub z1 z2: wult z1 z2 = (I64.unsigned (I64.sub z1 z2) != (z1 - z2)%Z).
-  Proof.
-  case: z1 z2 => [z1 h1] [z2 h2]; rewrite /wult /I64.sub /=.
-  case/boolP: (z1 <? z2)%Z => [/Z.ltb_lt lt_z1_z2|].
-  + apply/esym/eqP=> eqsub; move/Z.lt_sub_0: lt_z1_z2.
-    rewrite -eqsub I64.unsigned_repr_eq; apply/Z.le_ngt.
-    by case (Z_mod_lt (z1 - z2) _ I64.modulus_pos).
-  + move/negbTE/Z.ltb_ge => le_z2_z1; apply/esym/negbTE.
-    rewrite negbK -(rwP eqP) I64.unsigned_repr_eq Zmod_small; lia.
-  Qed.
-
-  Lemma wule_not_wult z1 z2: wule z2 z1 = ~~ wult z1 z2.
-  Proof. exact: Z.leb_antisym. Qed.
-
-  Lemma wult_not_wule z1 z2: wult z2 z1 = ~~ wule z1 z2.
-  Proof. exact: Z.ltb_antisym. Qed.
-
-  Lemma wsle_not_wslt z1 z2: wsle z2 z1 = ~~ wslt z1 z2.
-  Proof. exact: Z.leb_antisym. Qed.
-
-  Lemma wslt_not_wsle z1 z2: wslt z2 z1 = ~~ wsle z1 z2.
-  Proof. exact: Z.ltb_antisym. Qed.
-
-Ltac elim_div :=
-   unfold Zdiv, Zmod;
-     match goal with
-       |  H : context[ Zdiv_eucl ?X ?Y ] |-  _ =>
-          generalize (Z_div_mod_full X Y) ; destruct (Zdiv_eucl X Y)
-       |  |-  context[ Zdiv_eucl ?X ?Y ] =>
-          generalize (Z_div_mod_full X Y) ; destruct (Zdiv_eucl X Y)
-     end; unfold Remainder.
-
-  Lemma wslt_sub z1 z2: wslt z1 z2 =
-   (msb (I64.sub z1 z2) !=
-        (I64.signed (I64.sub z1 z2) != (I64.signed z1 - I64.signed z2)%Z)).
-  Proof.
-    clear.
-    rewrite /msb /wslt I64.sub_signed I64.signed_repr_eq.
-    move: (I64.signed_range z1) (I64.signed_range z2); rewrite/I64.min_signed/I64.max_signed.
-    move: (I64.signed z1) (I64.signed z2) => {z1 z2} x y.
-    set m := I64.modulus. vm_compute in m.
-    set h := I64.half_modulus. vm_compute in h.
-    move=> [xl xh] [yl yh].
-    have mz : m ≠ 0%Z by subst m; lia.
-    case: Coqlib.zlt; elim_div; case => //.
-    + move=> H D M.
-      case: D. 2: subst m; lia.
-      case => Hz0' _.
-      case: (Z.ltb_spec z0). lia.
-      move => _.
-      case: Z.ltb_spec => Hxy.
-      + case: (z0 =P _) => //. lia.
-      case: (z0 =P _) => //.
-      subst m h; lia.
-    move=> H []. 2: lia.
-    case => Hz0' Hz0m _.
-    rewrite (proj2 (Z.ltb_lt _ 0)). 2: lia.
-    case: Z.ltb_spec => Hxy.
-    case: ((z0  - m)%Z =P _) => //. subst h m. lia.
-    case: ((z0  - m)%Z =P _) => //. subst h m. lia.
-  Qed.
-
-  Lemma Z_leb_eqVlt z1 z2 : ((z1 <=? z2) = ((z1 =? z2) || (z1 <? z2)))%Z.
-  Proof.
-  by apply/idP/orP; rewrite /is_true !(Z.leb_le, Z.ltb_lt, Z.eqb_eq); lia.
-  Qed.
-
-  Lemma wule_sub z1 z2: wule z1 z2 =
-   (I64.unsigned (I64.sub z1 z2) != (z1 - z2)%Z)
-   || I64.eq (I64.sub z1 z2) I64.zero.
-  Proof. by rewrite -wult_sub -weq_sub /wule Z_leb_eqVlt orbC. Qed.
-
-  Lemma I64_eq z1 z2 : (z1 = z2) <-> (I64.intval z1 = I64.intval z2).
-  Proof.
-  case: z1 z2 => [z1 h1] [z2 h2] /=; split; first by case.
-  by move=> eq; apply: I64.mkint_eq.
-  Qed.
-
-  Lemma I64_signed_inj : injective I64.signed.
-  Proof.
-  case=> [z1 h1] [z2 h2] eq; apply/I64_eq => /=; move: eq.
-  by rewrite /I64.signed /=; do 2! case: Coqlib.zlt; lia.
-  Qed.
-
-  Lemma I64_unsigned_inj : injective I64.unsigned.
-  Proof. by case=> [z1 h1] [z2 h2] eq; apply/I64_eq. Qed.
-
-  Lemma weq_signed z1 z2 : weq z1 z2 = (I64.signed z1 =? I64.signed z2)%Z.
-  Proof. apply/idP/idP => /Z.eqb_eq.
-  * by move/I64_unsigned_inj=> ->; apply/Z.eqb_refl.
-  * by move/I64_signed_inj=> ->; apply/Z.eqb_refl.
-  Qed.
-
-  Lemma wsle_sub z1 z2: wsle z1 z2 =
-   I64.eq (I64.sub z1 z2) I64.zero
-   || (msb (I64.sub z1 z2) !=
-           (I64.signed (I64.sub z1 z2) != (I64.signed z1 - I64.signed z2)%Z)).
-  Proof.
-  by rewrite -weq_sub -wslt_sub /wsle /wslt weq_signed Z_leb_eqVlt.
-  Qed.
-*)
-
   Lemma setP_comm {to} (m: Fv.t to) x1 v1 x2 v2:
     x1 != x2 ->
     m.[x1 <- v1].[x2 <- v2] = m.[x2 <- v2].[x1 <- v1].
@@ -534,32 +417,6 @@ Ltac elim_div :=
       rewrite eq_sym in Heq1; rewrite eq_sym in Heq2.
       by rewrite !Fv.setP_neq.
   Qed.
-
-  Lemma wsub_signed_overflow sz (α β: word sz) :
-    (wunsigned (α - β) != (wunsigned α - wunsigned β)%Z) =
-    (msb (α - β) != (wsigned (α - β) != (wsigned α - wsigned β)%Z)).
-  Proof.
-  Admitted.
-
-  Lemma wsigned0 sz : @wsigned sz 0%R = 0%Z.
-  Proof. by case: sz. Qed.
-
-  Lemma msb0 sz : @msb sz 0%R = false.
-  Proof. by case: sz. Qed.
-
-  Lemma wles_msb sz (α β: word sz) :
-  α ≠ β
-  → (msb (β - α) == (wsigned (β - α) != (wsigned β - wsigned α)%Z)) =
-    (msb (α - β) != (wsigned (α - β) != (wsigned α - wsigned β)%Z)).
-  Proof.
-  Admitted.
-
-  Lemma wlts_msb sz (α β: word sz) :
-  α ≠ β
-  → (wunsigned (β - α) != (wunsigned β - wunsigned α)%Z) =
-    (msb (α - β) == (wsigned (α - β) != (wsigned α - wsigned β)%Z)).
-  Proof.
-  Admitted.
 
   Lemma lower_cond_classifyP ii e cond s1':
     sem_pexpr gd s1' e = ok cond ->
@@ -1445,20 +1302,6 @@ Ltac elim_div :=
     by eexists _, w1, _, wx'.
   Qed.
 
-  (*
-  Lemma unsigned_overflow (z: Z):
-    (0 <= z)%Z ->
-    (I64.unsigned (I64.repr z) != z) = (I64.modulus <=? z)%Z.
-  Proof.
-  move=> H.
-  rewrite /= I64.unsigned_repr_eq; apply/idP/idP.
-  * apply: contraR => /negbTE /Z.leb_gt lt; apply/eqP.
-    by rewrite Z.mod_small //; lia.
-  * apply: contraL => /eqP <-; apply/negbT/Z.leb_gt.
-    by case: (Z_mod_lt z _ I64.modulus_pos).
-  Qed.
-  *)
-
   Lemma add_overflow sz (w1 w2: word sz) :
     (wbase sz <=? wunsigned w1 + wunsigned w2)%Z =
     (wunsigned (w1 + w2) != (wunsigned w1 + wunsigned w2)%Z).
@@ -1590,17 +1433,6 @@ Ltac elim_div :=
     by move=> cfi [] //=; eauto 11.
   Qed.
 
-  Lemma wrepr_add sz (w1 w2: word sz) :
-    (w1 + w2)%R = wrepr _ (wunsigned w1 + wunsigned w2).
-  Proof using.
-  Admitted.
-
-  Lemma wrepr_sub sz (w1 w2: word sz) :
-    (w1 - w2)%R = wrepr _ (wunsigned w1 - wunsigned w2).
-  Proof using.
-    rewrite wrepr_add.
-  Admitted.
-
   Lemma lower_addcarry_correct ii si so si' sub sz xs t es x v :
     eq_exc_fresh si' si →
     disj_fvars (vars_lvals xs) →
@@ -1635,9 +1467,9 @@ Ltac elim_div :=
           subst x v => /sem_pexprs_dec3 [hx] [hy] [?]; subst b;
           (exists [:: Vword w1; Vword w2]; split; [by rewrite /sem_pexprs /= hx /= hy|]);
           rewrite /= /truncate_word hsz1 hsz2 /x86_sub /x86_add /check_size_8_64 hsz64; eexists; split; first reflexivity.
-          + by rewrite /= Z.sub_0_r sub_underflow -wrepr_sub in ho.
+          + by rewrite /= Z.sub_0_r sub_underflow wrepr_sub !wrepr_unsigned in ho.
           + by [].
-          by rewrite /= Z.add_0_r add_overflow -wrepr_add in ho.
+          by rewrite /= Z.add_0_r add_overflow wrepr_add !wrepr_unsigned in ho.
         exists x; split; [ exact hx |]; clear hx.
         case: sub hv => /app_wwb_dec [sz1] [w1] [sz2] [w2] [b] [hsz1] [hsz2] [?] [?];
         subst x v; rewrite /= /truncate_word hsz1 hsz2 /x86_sbb /x86_adc /check_size_8_64 hsz64;
