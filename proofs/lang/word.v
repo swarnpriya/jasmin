@@ -28,7 +28,7 @@
 (* ** Imports and settings *)
 
 From mathcomp Require Import all_ssreflect all_algebra.
-From CoqWord Require Import xword.
+From CoqWord Require Import word.
 Require ssrring.
 Require Zquot.
 Require Import Psatz ZArith utils type.
@@ -497,7 +497,7 @@ Proof. by rewrite /wbit_n /wxor wxorE. Qed.
 
 Lemma wN1E sz i :
   @wbit_n sz (-1)%R i = leq (S i) (wsize_size_minus_1 sz).+1.
-Admitted.
+Proof. exact: wN1E. Qed.
 
 Lemma wnotE sz (w: word sz) (i: 'I_(wsize_size_minus_1 sz).+1) :
   wbit_n (wnot w) i = ~~ wbit_n w i.
@@ -622,7 +622,7 @@ rewrite /zero_extend /wbit_n /wunsigned /wrepr.
 move: (urepr w) => {w} z.
 rewrite mkwordK.
 set m := wsize_size_minus_1 _.
-rewrite /xword.wbit /=.
+rewrite /CoqWord.word.wbit /=.
 move: (Z.of_nat i) => {i} i.
 rewrite /modulus two_power_nat_equiv.
 case: Z.leb_spec => hi.

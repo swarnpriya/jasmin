@@ -348,11 +348,11 @@ Section PROOF.
     have := add_inc_dec_classifyP' sz a b.
     case: (add_inc_dec_classify sz a b)=> [y|y|//].
     + case=> [[??]|[??]]; subst; rewrite /sem_pexprs /=; t_xrbindP.
-      + by move => z -> -> -> [<-]; exists w1, z1; do 2 (split; first by eauto); rewrite zero_extend_u /wrepr xword.mkword1E.
-      by move => ? z -> <- -> [<-] [->]; exists w2, z2; do 2 (split; first by eauto); rewrite zero_extend_u /wrepr xword.mkword1E GRing.addrC.
+      + by move => z -> -> -> [<-]; exists w1, z1; do 2 (split; first by eauto); rewrite zero_extend_u /wrepr CoqWord.word.mkword1E.
+      by move => ? z -> <- -> [<-] [->]; exists w2, z2; do 2 (split; first by eauto); rewrite zero_extend_u /wrepr CoqWord.word.mkword1E GRing.addrC.
     + case=> [[??]|[??]]; subst; rewrite /sem_pexprs /=; t_xrbindP.
-      + by move => z -> -> -> [<-]; exists w1, z1; do 2 (split; first by eauto); rewrite zero_extend_u /wrepr xword.mkwordN1E.
-      by move => ? z -> <- -> [<-] [->]; exists w2, z2; do 2 (split; first by eauto); rewrite zero_extend_u /wrepr xword.mkwordN1E GRing.addrC.
+      + by move => z -> -> -> [<-]; exists w1, z1; do 2 (split; first by eauto); rewrite zero_extend_u /wrepr CoqWord.word.mkwordN1E.
+      by move => ? z -> <- -> [<-] [->]; exists w2, z2; do 2 (split; first by eauto); rewrite zero_extend_u /wrepr CoqWord.word.mkwordN1E GRing.addrC.
   Qed.
 
   Lemma sub_inc_dec_classifyP sz e:
@@ -1101,14 +1101,14 @@ Ltac elim_div :=
           apply: rbindP => v1 -> h; have {h} /seq_eq_injL [? /seq_eq_injL [/Vword_inj [? ?] _]] := ok_inj h; subst.
           rewrite /= /truncate_word Hsz1 /=.
           rewrite /x86_inc /check_size_8_64 hsz64 /rflags_of_aluop_nocf_w /flags_w /=.
-          eexists _, _, _, _. repeat f_equal. rewrite zero_extend_u /wrepr xword.mkwordN1E.
+          eexists _, _, _, _. repeat f_equal. rewrite zero_extend_u /wrepr CoqWord.word.mkwordN1E.
           ssrring.ssring.
         (* SubDec *)
         * move: Hv; rewrite /sem_pexprs /=.
           apply: rbindP => v1 -> h; have {h} /seq_eq_injL [? /seq_eq_injL [/Vword_inj [? ?] _]] := ok_inj h; subst.
           rewrite /= /truncate_word Hsz1 /=.
           rewrite /x86_dec /check_size_8_64 hsz64 /rflags_of_aluop_nocf_w /flags_w /=.
-          by eexists _, _, _, _; repeat f_equal; rewrite zero_extend_u /wrepr xword.mkword1E.
+          by eexists _, _, _, _; repeat f_equal; rewrite zero_extend_u /wrepr CoqWord.word.mkword1E.
         (* SubNone *)
         + split. by rewrite read_es_swap.
           by rewrite Hv /= /truncate_word Hsz1 Hsz2 /x86_sub /check_size_8_64 hsz64 /= Hw.
@@ -1322,7 +1322,7 @@ Ltac elim_div :=
         subst; rewrite zero_extend_u.
         move: (_ + _)%R H; clear => - [] /= z hw' hz. subst.
         case: w hw' => w h h'; apply: word_ext.
-        rewrite /wunsigned /xword.urepr /=; symmetry; apply: Z.mod_small.
+        rewrite /wunsigned /CoqWord.word.urepr /=; symmetry; apply: Z.mod_small.
         exact: between_ZR.
       move: Hwb; apply: rbindP => vb Hvb Hwb.
       move: Hwo; apply: rbindP => vo Hvo Hwo.
