@@ -120,14 +120,6 @@ Definition wand {s} (x y: word s) : word s := wand x y.
 Definition wor {s} (x y: word s) : word s := wor x y.
 Definition wxor {s} (x y: word s) : word s := wxor x y.
 
-Parameter wshr wshl wsar : forall {s}, word s -> Z -> word s.
-
-(* Waiting for a true implementation *)
-Extract Constant wshr => "(fun _ _ _ -> failwith ""TODO: wshr"")".
-Extract Constant wshl => "(fun _ _ _ -> failwith ""TODO: wshl"")".
-Extract Constant wsar => "(fun _ _ _ -> failwith ""TODO: wsar"")".
-(* -------------------------------------------------------------------- *)
-
 Definition wlt {sz} (sg: signedness) : word sz → word sz → bool :=
   match sg with
   | Unsigned => λ x y, (urepr x < urepr y)%R
@@ -168,6 +160,9 @@ Proof. by move => x y /eqP /val_eqP. Qed.
 Lemma wrepr_unsigned s (w: word s) : wrepr s (wunsigned w) = w.
 Proof. by rewrite /wrepr /wunsigned ureprK. Qed.
 
+Lemma wrepr_signed s (w: word s) : wrepr s (wsigned w) = w.
+Proof. by rewrite /wrepr /wsigned sreprK. Qed.
+
 Lemma wunsigned_repr s z :
   wunsigned (wrepr s z) = z mod modulus (wsize_size_minus_1 s).+1.
 Proof. done. Qed.
@@ -195,14 +190,14 @@ Lemma wle_refl sz sg (w: word sz) :
   wle sg w w = true.
 Proof. case: sg; exact: Z.leb_refl. Qed.
 
-Lemma wshr0 sz (w: word sz) : wshr w 0 = w.
-Proof. Admitted.
+Definition wshr sz (x: word sz) (n: Z) : word sz :=
+  wrepr sz (lsr x (Z.to_nat n)).
 
-Lemma wshl0 sz (w: word sz) : wshl w 0 = w.
-Proof. Admitted.
+Definition wshl sz (x: word sz) (n: Z) : word sz :=
+  wrepr sz (lsl x (Z.to_nat n)).
 
-Lemma wsar0 sz (w: word sz) : wsar w 0 = w.
-Proof. Admitted.
+Definition wsar sz (x: word sz) (n: Z) : word sz :=
+  wrepr sz (asr x (Z.to_nat n)).
 
 Definition wmulhu sz (x y: word sz) : word sz :=
   wrepr sz ((wunsigned x * wunsigned y) / wbase sz).
@@ -303,6 +298,15 @@ Definition wrol sz (w:word sz) (z:Z) :=
 (* -------------------------------------------------------------------*)
 Lemma msb0 sz : @msb sz 0 = false.
 Proof. by case: sz. Qed.
+
+Lemma wshr0 sz (w: word sz) : wshr w 0 = w.
+Proof. by rewrite /wshr /lsr Z.shiftr_0_r; exact: wrepr_unsigned. Qed.
+
+Lemma wshl0 sz (w: word sz) : wshl w 0 = w.
+Proof. by rewrite /wshl /lsl Z.shiftl_0_r; exact: wrepr_unsigned. Qed.
+
+Lemma wsar0 sz (w: word sz) : wsar w 0 = w.
+Proof. by rewrite /wsar /asr Z.shiftr_0_r wrepr_signed. Qed.
 
 (* -------------------------------------------------------------------*)
 
@@ -494,7 +498,7 @@ Definition check_scale (s:Z) :=
 
 Definition mask_word (sz:wsize) : u64 := 
   match sz with
-  | U8 | U16 => wshl (wrepr _ (-1)) (wsize_bits sz)
+  | U8 | U16 => wshl (-1)%R (wsize_bits sz)
   | _ => 0%R
   end.
 

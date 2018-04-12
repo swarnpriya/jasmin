@@ -805,7 +805,10 @@ Lemma zero_extend_mask_word sz sz' :
   (sz ≤ sz')%CMP →
   zero_extend sz (mask_word sz') = 0%R.
 Proof.
-Admitted.
+case: sz'.
++ 1-2: case: sz => // _; exact: word_ext.
+all: exact: (λ _, zero_extend0 sz _).
+Qed.
 
 Lemma word_uincl_ze_mw sz sz' (w: word sz) (u: u64) :
   (sz' ≤ sz)%CMP →
