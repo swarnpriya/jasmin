@@ -553,14 +553,12 @@ Proof.
   case/truncate_val_word => szw [] -> hle -> /=.
   rewrite zero_extend_wrepr //.
   case: x => -[] [] //= szx xn vi; apply: rbindP => vm.
-  apply: set_varP => //= w' h <- [<-] /= Hv z /= n.
+  apply: set_varP => //= w' [<-] <- [<-] /= Hv z /= n.
   have := Hv z n.
   case: ({| vtype := sword szx; vname := xn |} =P z).
   + move=> <- /=; rewrite Mvar.setP_eq=> ? -[] <-; rewrite /get_var Fv.setP_eq /=.
     f_equal.
-    case: Sumbool.sumbool_of_bool h => /= hlt; rewrite hlt.
-    * by move => [<-] /=.
-    by t_xrbindP => w'' /truncate_wordP [] hle' -> <- /=.
+    by case: Sumbool.sumbool_of_bool => /= ->.
   by move=> /eqP Hneq;rewrite Mvar.setP_neq.
 Qed.
 

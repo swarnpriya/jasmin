@@ -61,9 +61,10 @@ Definition pword_of_word (s:wsize) (w:word s) : pword s :=
 Definition to_pword (s: wsize) (v: value) : exec (pword s) :=
    match v with
    | Vword s' w =>
+    ok (
      if Sumbool.sumbool_of_bool (s' ≤ s)%CMP is left heq
-     then ok {| pw_word := w ; pw_proof := heq |}
-     else truncate_word s w >>= λ w, ok (pword_of_word w)
+     then {| pw_word := w ; pw_proof := heq |}
+     else pword_of_word (zero_extend s w))
    | Vundef (sword _) => undef_error
    | _                => type_error
    end.
@@ -96,13 +97,10 @@ Lemma to_pwordI s v w :
   to_pword s v = ok w →
   ∃ s' w',
     v = @Vword s' w' ∧
-    if Sumbool.sumbool_of_bool (s' ≤ s)%CMP is left heq
-    then w = {| pw_word := w' ; pw_proof := heq |}
-     else ∃ t, truncate_word s w' = ok t ∧ w = pword_of_word t.
-Proof.
-  case: v => // [ | [] // ] s' w' /= h; exists s', w'; split; first reflexivity.
-  case: Sumbool.sumbool_of_bool h; t_xrbindP => // _ w'' -> <-; eauto.
-Qed.
+    w = if Sumbool.sumbool_of_bool (s' ≤ s)%CMP is left heq
+        then {| pw_word := w' ; pw_proof := heq |}
+        else pword_of_word (zero_extend s w').
+Proof. by case: v => // [ | [] // ] s' w' /= [<-]; exists s', w'. Qed.
 
 Lemma type_of_val_to_pword sz v w :
   type_of_val v = sword sz →
@@ -1346,14 +1344,14 @@ Proof.
     case: (Sumbool.sumbool_of_bool (sz' ≤ s)%CMP).
     + move=> ?; eexists;split;first reflexivity => /=.
       by rewrite /word_uincl /= hsz eqxx.
-    move=> /negbT hle;rewrite /truncate_word (cmp_nle_le hle) /=;eexists;split;first reflexivity.
+    move => /negbT hle; eexists; split; first reflexivity.
     by rewrite /word_uincl /= e zero_extend_idem // eqxx.
-  move=> /negbT hlt1; have hle:= cmp_nle_le hlt1; rewrite /truncate_word hle zero_extend_idem //= => -[<-].
+  move => /negbT hlt1 [<-]; eexists; split; first reflexivity.
   have hnle: (sz' <= s)%CMP = false.
-  + apply negbTE;rewrite cmp_nle_lt.
-    by apply: cmp_lt_le_trans hsz;rewrite -cmp_nle_lt.
-  rewrite (sumbool_of_boolEF hnle) (cmp_le_trans hle hsz) /=.
-  by eexists;split;first reflexivity.
+  + apply negbTE; rewrite cmp_nle_lt.
+    by apply: cmp_lt_le_trans hsz; rewrite -cmp_nle_lt.
+  have hle := cmp_nle_le hlt1.
+  by rewrite /= zero_extend_idem // (sumbool_of_boolEF hnle).
 Qed.
 
 Lemma value_uincl_int1 z v : value_uincl (Vint z) v -> v = Vint z.
@@ -1649,9 +1647,6 @@ case: t v => [||sz p|sz] [] //=.
 + move => sz' n a; case: wsize_eq_dec => // ?; subst.
   by case: CEDecStype.pos_dec.
 + by case => // ??;case:ifP => // /andP [] /eqP <- /eqP <-;eauto.
-+ move=> s w.
-  case: Sumbool.sumbool_of_bool => //=.
-  by rewrite /truncate_word;case:ifP.
 case => // s _;eexists;split;last reflexivity.
 by apply wsize_le_U8.
 Qed.
@@ -1665,8 +1660,6 @@ Proof.
   + by case: tv => //=;eauto.
   + by move=> [] ??;subst s2 p2;rewrite eq_dec_refl pos_dec_n_n /=;eauto.
   + by case: tv => //= s2 p2 [] ??;subst;rewrite !eqxx /=;eauto.
-  + move => _; case: Sumbool.sumbool_of_bool => [ e | /negbT ]; first by eauto.
-    by rewrite /truncate_word => h; rewrite (cmp_nle_le h) /=;eauto.
   by case: tv => //= s2 _;eauto.
 Qed.
 
@@ -1680,20 +1673,14 @@ Proof.
   + move=> h;eexists;split;first by apply h.
     by move=> /=;split=>//;exists erefl.
   case: t2 => //= s2 hle;case: v => //=;last by case.
-  move=> s' w.
-  case: Sumbool.sumbool_of_bool => e.
-  + case: Sumbool.sumbool_of_bool => e'.
-    + move=> [<-];eauto.
-    by rewrite (cmp_le_trans e hle) in e'.
-  move: e => /negbT ;rewrite cmp_nle_lt => e.
-  t_xrbindP => w' /truncate_wordP [hle1 ?] ?;subst w' v1.
-  case: Sumbool.sumbool_of_bool => e'.
-  + eexists;split;first reflexivity.
-    by rewrite /pword_of_word /= /word_uincl hle1 eqxx.
-  move: e' => /negbT ;rewrite cmp_nle_lt => e'.
-  rewrite /truncate_word (cmp_lt_le e') /= /pword_of_word. 
-  eexists;split;first reflexivity.
-  by rewrite /= /word_uincl hle zero_extend_idem // eqxx.
+  move=> s' w [<-]; eexists; split; first reflexivity.
+  case: Sumbool.sumbool_of_bool => e /=.
+  + by rewrite (sumbool_of_boolET (cmp_le_trans e hle)).
+  case: Sumbool.sumbool_of_bool => e' /=.
+  + move: e => /negbT e.
+    apply/andP; split => //; exact: cmp_nle_le.
+  rewrite -(zero_extend_idem _ hle).
+  exact: word_uincl_zero_ext.
 Qed.
 
 Lemma pof_val_pto_val t (v:psem_t t): pof_val t (pto_val v) = ok v.
@@ -1714,12 +1701,11 @@ Proof.
   + by move=> /to_bool_inv ->.
   + by move=> h1 h2;have [? [<-]]:= value_uincl_int h2 h1.
   + by move=> /to_arr_ok ->.
-  case: v1 => //= [ s' w| [] //].
-  case: Sumbool.sumbool_of_bool => [ e | /negbT ].
-  + by move=> [<-].
-  rewrite cmp_nle_lt /truncate_word => hlt.
-  have hle := cmp_lt_le hlt.
-  by rewrite hle /= => -[<-] /=; apply word_uincl_trans;rewrite /word_uincl hle eqxx.
+  case: v1 => //= [ s' w| [] //] [<-].
+  case: Sumbool.sumbool_of_bool => //= /negbT hnle.
+  have hle := cmp_nle_le hnle.
+  apply: word_uincl_trans.
+  exact: word_uincl_zero_ext.
 Qed.
 
 Lemma apply_undef_pundef_addr t : apply_undef (pundef_addr t) = pundef_addr t.
@@ -2245,10 +2231,9 @@ Qed.
 Lemma to_word_to_pword s v w: to_word s v = ok w -> to_pword s v = ok (pword_of_word w).
 Proof.
   case: v => //= [ s' w' | [] // ].
-  move=> /truncate_wordP [hle] ?;subst w.
-  case: Sumbool.sumbool_of_bool => /=.
-  + move=> e;move: (e);rewrite cmp_le_eq_lt in e => e'.
-    case /orP: e => [hlt | /eqP ?];first by rewrite -cmp_nlt_le hlt in hle.
-    by subst; rewrite /pword_of_word zero_extend_u;do 2 f_equal;apply eq_irrelevance.
-  by move=> /negbT;rewrite cmp_nle_lt /truncate_word => h;rewrite (cmp_lt_le h) /=.
+  move=> /truncate_wordP [hle] ?; subst w; f_equal.
+  case: Sumbool.sumbool_of_bool => //=.
+  move=> e;move: (e);rewrite cmp_le_eq_lt in e => e'.
+  case /orP: e => [hlt | /eqP ?];first by rewrite -cmp_nlt_le hlt in hle.
+  by subst; rewrite /pword_of_word zero_extend_u;do 2 f_equal;apply eq_irrelevance.
 Qed.

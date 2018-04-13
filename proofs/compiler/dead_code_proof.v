@@ -316,11 +316,13 @@ Section PROOF.
     apply: rbindP=> z Hexpr []?; subst z.
     apply: rbindP => v0 /of_val_word [sz0] [v0'] [hle ? ?]; subst.
     rewrite /x86_MOV;t_xrbindP => ? h; have ha := assertP h => ?;subst.
-    move:Hw;rewrite /= /write_var;t_xrbindP => s3 vm3. 
+    move:Hw; rewrite /= /write_var => - [<-] {s2}.
     have [sz' /= [[? hle']]]:= get_var_word Hexpr;subst sz'.
-    have ? := cmp_le_antisym hle' hle;subst sz0;rewrite zero_extend_u => Hset ??;subst. 
-    move: s1 Hwf Hvm Hexpr Hset => [mem1 vm1] /= Hwf Hvm Hexpr Hset; f_equal.
-    by apply: (set_get_word Hexpr).
+    have ? := cmp_le_antisym hle' hle; subst sz0.
+    rewrite sumbool_of_boolET zero_extend_u.
+    move: s1 Hwf Hvm Hexpr => [mem1 vm1] /= Hwf Hvm Hexpr; f_equal.
+    have := set_get_word Hexpr; rewrite /set_var /= sumbool_of_boolET.
+    exact.
   Qed.
          
   Local Lemma Hif_true s1 s2 e c1 c2 :

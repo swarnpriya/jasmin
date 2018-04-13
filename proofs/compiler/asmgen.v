@@ -833,7 +833,7 @@ case: register_of_var (@var_of_register_of_var (Var ty x)) => [ r | ].
 - (* Register *)
   move => /(_ _ erefl) [? ?]; subst x ty .
   case => <- /= {rf}.
-  move: hwv; apply: set_varP => //= w /to_pwordI [sz'] [w''] [?]; subst y => ok_w <- {vm}.
+  move: hwv; apply: set_varP => //= w /to_pwordI [sz'] [w''] [?]; subst y => [->] {w} <- {vm}.
   case: y0 hvu => // sz x /andP [hle /eqP ?]; subst w''.
   eexists; first by reflexivity.
   case: eqm => eqm eqr eqf.
@@ -842,11 +842,11 @@ case: register_of_var (@var_of_register_of_var (Var ty x)) => [ r | ].
     * move => /= w' hw' <- {v}; move: hw'.
       rewrite ffunE; case: eqP.
       - move => ?; subst r'; rewrite Fv.setP_eq => -[<-] /=.
-        case: Sumbool.sumbool_of_bool ok_w => /= hle'.
-        + move => -> {w} /=; exact: word_uincl_ze_mw.
-        case => u []. rewrite /truncate_word; case: ifP => // hle'' [<-] {u} -> {w} /=.
-        rewrite zero_extend_idem //; apply: word_uincl_ze_mw => //.
-        exact: (cmp_le_trans hle'' hle).
+        case: Sumbool.sumbool_of_bool => /= hle'.
+        + exact: word_uincl_ze_mw.
+        have {hle'} hle' := cmp_nle_le (negbT hle').
+        rewrite zero_extend_idem //. apply: word_uincl_ze_mw => //.
+        exact: (cmp_le_trans hle' hle).
       move => ne ; rewrite Fv.setP_neq.
       - by move => hw'; apply: eqr; rewrite /get_var hw'.
       by apply/eqP => -[] k; have ?:= inj_string_of_register k; apply: ne.
