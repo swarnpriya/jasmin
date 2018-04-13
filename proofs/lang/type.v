@@ -27,7 +27,7 @@
 
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
-Require Import ZArith gen_map utils.
+Require Import ZArith gen_map utils strings.
 Import Utf8.
 
 Set Implicit Arguments.
@@ -54,6 +54,24 @@ Variant stype : Set :=
 Variant signedness := 
   | Signed
   | Unsigned.
+
+Definition string_of_wsize (sz: wsize) : string :=
+  match sz with
+  | U8 => "U8"
+  | U16 => "U16"
+  | U32 => "U32"
+  | U64 => "U64"
+  | U128 => "U128"
+  | U256 => "U256"
+  end.
+
+Definition string_of_stype (ty: stype) : string :=
+  match ty with
+  | sbool => "sbool"
+  | sint => "sint"
+  | sarr sz n => "(sarr " ++ string_of_wsize sz ++ " ?)"
+  | sword sz => "(sword " ++ string_of_wsize sz ++ ")"
+  end.
 
 Notation sword8   := (sword U8).
 Notation sword16  := (sword U16).

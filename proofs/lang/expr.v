@@ -160,16 +160,6 @@ Qed.
 Definition sopn_eqMixin     := Equality.Mixin sopn_eq_axiom.
 Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 
-Definition string_of_wsize (sz: wsize) : string :=
-  match sz with
-  | U8 => "U8"
-  | U16 => "U16"
-  | U32 => "U32"
-  | U64 => "U64"
-  | U128 => "U128"
-  | U256 => "U256"
-  end.
-
 Definition string_of_sopn o : string :=
   match o with
   | Omulu sz => "Omulu " ++ string_of_wsize sz

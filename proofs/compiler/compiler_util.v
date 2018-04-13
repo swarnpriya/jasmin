@@ -6,6 +6,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Local Unset Elimination Schemes.
+
 (* ** Compiler warning  
  * -------------------------------------------------------------------------- *)
 
