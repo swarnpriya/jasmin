@@ -1012,27 +1012,17 @@ Record xfundef := XFundef {
 Definition xprog : Type :=
   seq (funname * xfundef).
 
-Definition mem_write_regs m rs (vs:seq u64) :=
-    foldl (λ m rv, let '(r,v) := rv in mem_write_reg r v m) m (zip rs vs).
-
-Lemma mem_write_regs_cons m r rs v vs :
-  mem_write_regs m (r :: rs) (v :: vs) =
-  mem_write_regs (mem_write_reg r v m) rs vs.
-Proof. by []. Qed.
-
-(* FIXME: initial register map *)
-Variant x86sem_fd (P: xprog) (gd: glob_defs) m1 fn va m2 vr : Prop :=
-| X86Sem_fd fd mp m2'
+(* TODO: flags may be preserved *)
+(* TODO: restore stack pointer of caller? *)
+Variant x86sem_fd (P: xprog) (gd: glob_defs) fn st st' : Prop :=
+| X86Sem_fd fd mp st2
    `(get_fundef P fn = Some fd)
-   `(alloc_stack m1 fd.(xfd_stk_size) = ok mp)
+   `(alloc_stack st.(xmem) fd.(xfd_stk_size) = ok mp)
+    (st1 := mem_write_reg fd.(xfd_nstk) (top_stack mp) {| xmem := mp ; xreg := st.(xreg) ; xrf := rflagmap0 |})
     (c := fd.(xfd_body))
-    (m1' := mem_write_reg fd.(xfd_nstk) (top_stack mp) {| xmem := mp ; xreg := regmap0 ; xrf := rflagmap0 |})
-    `(size va = size fd.(xfd_arg))
-    (m1'' := mem_write_regs m1' fd.(xfd_arg) va)
-    `(x86sem gd {| xm := m1'' ; xc := c ; xip := 0 |} {| xm := m2'; xc := c; xip := size c |})
-    `(vr = map (λ r, m2'.(xreg) r) fd.(xfd_res))
-    `(m2 = free_stack m2'.(xmem) fd.(xfd_stk_size))
-    : x86sem_fd P gd m1 fn va m2 vr.
+    `(x86sem gd {| xm := st1 ; xc := c ; xip := 0 |} {| xm := st2; xc := c; xip := size c |})
+    `(st' = {| xmem := free_stack st2.(xmem) fd.(xfd_stk_size) ; xreg := st2.(xreg) ; xrf := rflagmap0 |})
+    .
 
 Definition x86sem_trans gd s2 s1 s3 :
   x86sem gd s1 s2 -> x86sem gd s2 s3 -> x86sem gd s1 s3 :=
