@@ -1,1 +1,0 @@
-../../coqword/src/word.v

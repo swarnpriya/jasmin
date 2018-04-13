@@ -1,7 +1,0 @@
--arg -w
--arg -parsing
-
--R src CoqWord
-
-src/ssrZ.v
-src/word.v
