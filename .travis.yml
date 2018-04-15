@@ -1,20 +1,16 @@
-sudo: required
-dist: trusty
-language: coq
+sudo: true
+language: nix
+cache:
+  directories:
+  - /nix/store
 branches:
   only:
   - master
-services:
-- docker
+  - travis-nix
 notifications:
   email:
   - false
-env:
-- COQV=8.7.0-1.6.4 TARGET=compiler
-- COQV=8.7.0-1.6.4 TARGET=coq
-before_install:
-- docker pull jasminlang/test-box:${COQV}
 script:
 - >-
-  docker run -v $PWD:/home/ci/jasmin:rw jasminlang/test-box:${COQV}
-  sh -c "git clone jasmin jasmin.dev && opam config exec -- make -C jasmin.dev/travis check-${TARGET}"
+  nix-shell --pure --run 'make -j $NIX_BUILD_CORES -C proofs'
+  nix-shell --pure --run 'make -C compiler CIL build tests-ci'
