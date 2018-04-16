@@ -2,7 +2,13 @@ sudo: true
 language: nix
 cache:
   directories:
-  - /nix/store
+  - $HOME/.nix.cache
+before_cache:
+- mkdir -p $HOME/.nix.cache
+- nix copy --to file://$HOME/.nix.cache -f default.nix buildInputs
+before_install:
+- sudo mkdir -p /etc/nix
+- echo 'binary-caches = https://cache.nixos.org/ file://$HOME/.nix.cache' | sudo tee -a /etc/nix/nix.conf > /dev/null
 branches:
   only:
   - master
