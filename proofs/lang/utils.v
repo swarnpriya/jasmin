@@ -28,6 +28,7 @@
 From mathcomp Require Import all_ssreflect.
 From Coq.Unicode Require Import Utf8.
 Require Import ZArith Setoid Morphisms CMorphisms CRelationClasses.
+Require Import oseq.
 Require Psatz.
 
 Set Implicit Arguments.
@@ -201,6 +202,14 @@ Definition mapM eT aT bT (f : aT -> result eT bT)  : seq aT → result eT (seq b
       Ok eT [:: y & ys]
   end.
 
+Lemma map_ext aT bT f g m :
+  (forall a, List.In a m -> f a = g a) ->
+  @map aT bT f m = map g m.
+Proof.
+elim: m => //= a m ih ext.
+rewrite ext; [ f_equal | ]; eauto.
+Qed.
+
 Instance mapM_ext eT aT bT :
   Proper (@eqfun (result eT bT) aT ==> eq ==> eq) (@mapM eT aT bT).
 Proof.
@@ -233,6 +242,34 @@ by case: n ih => // n /(_ n).
 Qed.
 
 Local Open Scope Z_scope.
+
+Lemma mapM_onth eT aT bT (f: aT → result eT bT) (xs: seq aT) ys n x :
+  mapM f xs = ok ys →
+  onth xs n = Some x →
+  ∃ y, onth ys n = Some y ∧ f x = ok y.
+Proof.
+move => ok_ys.
+case: (leqP (size xs) n) => hsz; first by rewrite (onth_default hsz).
+elim: xs ys ok_ys n hsz.
+- by move => ys [<-].
+move => y xs ih ys' /=; t_xrbindP => z ok_z ys ok_ys <- [| n ] hsz /= ok_y.
+- by exists z; case: ok_y => <-.
+exact: (ih _ ok_ys n hsz ok_y).
+Qed.
+
+Lemma mapM_onth' eT aT bT (f: aT → result eT bT) (xs: seq aT) ys n y :
+  mapM f xs = ok ys →
+  onth ys n = Some y →
+  ∃ x, onth xs n = Some x ∧ f x = ok y.
+Proof.
+move => ok_ys.
+case: (leqP (size ys) n) => hsz; first by rewrite (onth_default hsz).
+elim: xs ys ok_ys n hsz.
+- by move => ys [<-].
+move => x xs ih ys' /=; t_xrbindP => z ok_z ys ok_ys <- [| n ] hsz /= ok_y.
+- by exists x; case: ok_y => <-.
+exact: (ih _ ok_ys n hsz ok_y).
+Qed.
 
 Lemma mapMP {eT} {aT bT: eqType} (f: aT -> result eT bT) (s: seq aT) (s': seq bT) y:
   mapM f s = ok s' ->
@@ -310,7 +347,20 @@ Section MAP2.
       ok (c::lc)
     | _     , _      => Error e
     end.
-  
+
+  Lemma mapM2_Forall2 (P: R → B → Prop) ma mb mr :
+    (∀ a b r, List.In (a, b) (zip ma mb) → f a b = ok r → P r b) →
+    mapM2 ma mb = ok mr →
+    List.Forall2 P mr mb.
+  Proof.
+    elim: ma mb mr.
+    + move => [] // mr _ [<-]; constructor.
+    move => a ma ih [] // b mb mr' h /=; t_xrbindP => r ok_r mr rec <- {mr'}.
+    constructor.
+    + by apply: (h _ _ _ _ ok_r); left.
+    by apply: ih => // a' b' r' h' ok_r'; apply: (h a' b' r' _ ok_r'); right.
+  Qed.
+
 End MAP2.
 
 (* Inversion lemmas *)
