@@ -166,13 +166,13 @@ Lemma compile_prog_to_x86P entries (p: prog) (gd: glob_defs) (xp: xprog) m1 fn v
     List.Forall2 value_uincl vr (get_reg_values st2 fd'.(xfd_res)) ∧
     st2.(xmem) = m2.
 Proof.
-apply: rbindP=> lp hlp; t_xrbindP => _ /(@assertP _ _ _ _) /List.forallb_forall ok_sig hxp hfn hsem hsafe.
+apply: rbindP=> lp hlp; t_xrbindP => _ /(@assertP _ _ _ _) /allP ok_sig hxp hfn hsem hsafe.
 have hlsem := compile_progP hlp hfn hsem.
 case: hlsem.
 - move => fd hfd.
   have [xfd [hxfd]] := get_map_cfprog hxp hfd.
   by move => /hsafe; rewrite (assemble_fd_stk_size hxfd).
-have /xseq.InP := hfn => /ok_sig {hfn ok_sig}.
+move/ok_sig: hfn.
 case: hsem => {m1 m2 hsafe fn va vr} m1 m2 fn fd va va' st1 vm2 vr vr1 ok_fd ok_va _ _ _ _ hsig vr' [ok_vr' hlsem].
 exists fd, va.
 split; first exact: ok_fd.
