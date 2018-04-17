@@ -306,6 +306,18 @@ case.
   by exists y0; split=> //; right.
 Qed.
 
+Lemma mapM_In' {aT bT eT} (f: aT -> result eT bT) (s: seq aT) (s': seq bT) y:
+  mapM f s = ok s' ->
+  List.In y s' -> exists2 x, List.In x s & f x = ok y.
+Proof.
+elim: s s'.
++ by move => _ [<-].
+move => a s ih s'' /=; t_xrbindP => b ok_b s' rec <- {s''} /=.
+case.
++ by move=> <-; exists a => //; left.
+by move => h; case: (ih _ rec h) => x hx ok_y; eauto.
+Qed.
+
 Fixpoint foldM eT aT bT (f : aT -> bT -> result eT bT) (acc : bT) (l : seq aT) :=
   match l with
   | [::]         => Ok eT acc

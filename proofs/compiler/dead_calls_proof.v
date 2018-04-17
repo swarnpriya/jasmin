@@ -382,3 +382,14 @@ Proof.
   rewrite foldlE.
   rewrite in_cons in Hin; case/orP: Hin=> [/eqP ->|/IH Hin]; SpD.fsetdec.
 Qed.
+
+Lemma dead_calls_err_get_fundef s p p' fn fd :
+  dead_calls_err s p = cfok p' →
+  get_fundef p' fn = Some fd →
+  get_fundef p fn = Some fd.
+Proof.
+rewrite /dead_calls_err; case: ifP => // _ [<- {p'}].
+move: (live_calls s p) => {s} s.
+rewrite /get_fundef /dead_calls (assoc_filterI (λ q, Sp.mem q s)).
+by case: ifP.
+Qed.
