@@ -166,7 +166,7 @@ Lemma compile_prog_to_x86P entries (p: prog) (gd: glob_defs) (xp: xprog) m1 fn v
     List.Forall2 value_uincl vr (get_reg_values st2 fd'.(xfd_res)) ∧
     st2.(xmem) = m2.
 Proof.
-apply: rbindP=> lp hlp; t_xrbindP => _ /(@assertP _ _ _ _) /allP ok_sig hxp hfn hsem hsafe.
+apply: rbindP=> lp hlp; t_xrbindP => _ /assertP /allP ok_sig hxp hfn hsem hsafe.
 have hlsem := compile_progP hlp hfn hsem.
 case: hlsem.
 - move => fd hfd.
