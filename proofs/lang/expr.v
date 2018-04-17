@@ -476,6 +476,12 @@ Record fundef := MkFun {
   f_res    : seq var_i;
 }.
 
+Definition function_signature : Type :=
+  (seq stype * seq stype).
+
+Definition signature_of_fundef (fd: fundef) : function_signature :=
+  (f_tyin fd, f_tyout fd).
+
 Definition prog := seq (funname * fundef).
 
 Definition instr_d (i:instr) :=

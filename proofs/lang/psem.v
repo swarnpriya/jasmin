@@ -23,7 +23,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ----------------------------------------------------------------------- *)
 
-(* * Syntax and semantics of the dmasm source language *)
+(* * Jasmin semantics with “partial values”. *)
 
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.

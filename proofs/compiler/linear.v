@@ -76,6 +76,9 @@ Record lfundef := LFundef {
  lfd_res  : seq var_i;  (* /!\ did we really want to have "seq var_i" here *)
 }.
 
+Definition signature_of_lfundef (lfd: lfundef) : function_signature :=
+  (lfd_tyin lfd, lfd_tyout lfd).
+
 Definition lprog := seq (funname * lfundef).
 
 (* --------------------------------------------------------------------------- *)
