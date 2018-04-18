@@ -350,13 +350,6 @@ case: (modulus_m (wsize_size_m hsz)) => n hn.
 by rewrite hn mod_pq_mod_q.
 Qed.
 
-Lemma sign_zero_sign_extend sz sz' (w: word sz') :
-  sign_extend sz (zero_extend sz' (sign_extend sz w)) = sign_extend sz w.
-Admitted.
-
-Lemma sign_extend_u sz (w: word sz) : sign_extend sz w = w.
-Proof. exact: sreprK. Qed.
-
 Lemma zero_extend_wrepr sz sz' z :
   (sz <= sz')%CMP →
   zero_extend sz (wrepr sz' z) = wrepr sz z.
@@ -388,6 +381,22 @@ case: Z.leb_spec => hi.
 + rewrite Z.mod_pow2_bits_low //; lia.
 rewrite Z.mod_pow2_bits_high //; lia.
 Qed.
+
+Lemma wbit_sign_extend s s' (w: word s') i :
+  wbit_n (sign_extend s w) i = wbit_n w (min i (wsize_size_minus_1 s)).
+Proof. Admitted.
+
+Lemma sign_zero_sign_extend sz sz' (w: word sz') :
+  sign_extend sz (zero_extend sz' (sign_extend sz w)) = sign_extend sz w.
+Proof.
+apply/eqP/eq_from_wbit_n => i.
+rewrite !(wbit_sign_extend, wbit_zero_extend) -Min.min_assoc Min.min_idempotent.
+case: leZP => // /Z.nle_gt /Nat2Z.inj_lt hlt; rewrite /wbit_n wbit_word_ovf //.
+exact/ltP.
+Qed.
+
+Lemma sign_extend_u sz (w: word sz) : sign_extend sz w = w.
+Proof. exact: sreprK. Qed.
 
 Lemma wrepr0 sz : wrepr sz 0 = 0%R.
 Proof. by apply/eqP. Qed.
