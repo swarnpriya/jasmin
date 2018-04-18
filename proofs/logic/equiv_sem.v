@@ -177,16 +177,20 @@ Qed.
 
 Lemma svalue_uincl_word ve ve' sz w :
   svalue_uincl ve ve' -> to_word sz ve = ok w ->
-  exists sz', exists (w' : word sz'),truncate_word sz w' = ok w /\ ve = (Vword w') /\ ve' = (SVword w').
+  exists sz', exists (w' : word sz'), exists sz'', exists (w'' : word sz''),
+          truncate_word sz w' = ok w /\ ve = (Vword w') /\ ve' = (SVword w'').
 Proof.
   move=> h t; case: (@of_sval_uincl ve ve' (sword sz) w h t) => /= z' [t' [sub rel]].
   subst z'.
+  have h' := ((@to_word_inv sz ve w) t).
+  move:h' => [sz' [w' [eq_vew' trunc_ww']]].
   have h' := ((@sto_word_inv sz ve' w) t').
-  move:h' => [sz' [w' [eq_ve'w' trunc_ww']]].
-  exists sz'. exists w'.
+  move:h' => [sz'' [w'' [eq_ve'w'' trunc_ww'']]].
+  exists sz'. exists w'. exists sz''. exists w''.
+  
   split => //=; split => //=.
 
-  have h' := ((@to_word_inv sz ve w) t).
+  (*have h' := ((@to_word_inv sz ve w) t).
   move:h' => [sz'' [w'' [eq_vew'' trunc_ww'']]].
 
   have:sz' = sz''.
@@ -202,7 +206,7 @@ Proof.
   rewrite eq_vw'.
   exists sz'. exists w'. split => //=;split => //=.
   Check sto_word_inv.
-  apply to_word_inv in t. intuition congruence.
+  apply to_word_inv in t. intuition congruence.*)
 Qed.
 
 (*Lemma svalue_uincl_word ve ve' sz w :
@@ -221,7 +225,6 @@ Proof.
   apply to_word_inv in t. intuition congruence.
 Qed.*)
 
-
 Lemma svalue_uincl_bool ve ve' b :
   svalue_uincl ve ve' -> to_bool ve = ok b -> ve = b /\ ve' = b.
 Proof.
@@ -239,8 +242,8 @@ apply: on_vuP => [ y | ] ->.
 case: x y => vi vt /= z <- /=.
 case: vi z => //=.
 move => s n z H;case:ifP => [_ | ] //=;last by move => /eqP.
-by move => i w H'; apply H in H'; rewrite H';  simpl in H.
-by move => s w H; rewrite cmp_le_refl H.
+by move => i w H'; apply H in H'; rewrite H' psem.truncate_word_u.
+by move => s w H; case:ifP;  move => /eqP //= _; rewrite -H psem.truncate_word_u.
 move=> H _; apply ok_inj in H; subst.
 symmetry.
 exact: sval_sstype_to_sval.
@@ -390,10 +393,11 @@ Proof.
   + by move=> [] <-;exists z.
   + by move=> [] <-;exists b.
   + apply: rbindP => z; apply: rbindP => ve /He [] ve' [] -> Hvu Hto [] <-.
-    by case: (svalue_uincl_int Hvu Hto) => ??;subst; exists (SVword (wrepr sz z)); simpl; split => //=;rewrite cmp_le_refl.
+    case: (svalue_uincl_int Hvu Hto) => ??;subst; exists (SVword (wrepr sz z)); simpl; split => //=; case:ifP => /eqP //= _.
+    by rewrite psem.truncate_word_u.
   + move=> ?; eexists; split=> //; exact: sget_var_uincl.
   + rewrite/get_global/sget_global; case: get_global_word => // v' h; apply ok_inj in h; subst.
-    by exists (SVword v').
+    by exists (SVword v'); split => //=; rewrite psem.truncate_word_u.
   + have := Hu2 x;case x => -[xt xn] xi /= H H';move: H' H.
     apply: on_arr_varP=> /= sz n t -> /= /(sget_var_uincl Hu2) /=.
     case:ifP => _ //= Hsame.
@@ -401,11 +405,22 @@ Proof.
     apply: rbindP=> w Hw [] <- /= ?.
     rewrite Hvp' Hvp2 /=.
     eexists; split=> //. simpl.
-    simpl; rewrite cmp_le_refl.
+    case:ifP => /eqP //= _.
     by rewrite (Hsame _ _ Hw).
-  + apply: rbindP => w1;apply: rbindP => vx /(sget_var_uincl Hu2) /svalue_uincl_word H/H.
-    move=> [_ ->] /=.
-    apply: rbindP => wp;apply: rbindP => vp /Hp [] vp' [] -> Hvu Hto.
+  + apply: rbindP => w1.
+    apply: rbindP => vx.
+    move => /(sget_var_uincl Hu2).
+    move => /svalue_uincl_word H/H.
+    have Hu64 := (H U64).
+    move => [sz' [w' [sz'' [w'' [tr_w' [temp->]]]]]]; subst => /=.
+    apply:rbindP => wb.
+    apply: rbindP => vb sem_vb. apply Hp in sem_vb. move:sem_vb => [v2 ssem_v2].
+    move => point_wb.
+    apply: rbindP  => wsz Hwsz val_wsz. apply ok_inj in val_wsz. subst.
+    exists v2. simpl.
+    apply: rbindP => vb => Hvb Hpvb;apply:rbindP => wsz read_wsz val_wsz.
+    exists (SVword w'');subst.
+    rewrite var_x. simpl.
     rewrite -Hu1 /=.
     case: (svalue_uincl_word Hvu Hto) => ??;subst.
     by apply rbindP => w /= /mem2smem_read -> [] <-;exists w.
