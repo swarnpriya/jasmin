@@ -14,7 +14,7 @@
  * The above copyright notice and this permission notice shall be
  * included in all copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
  * IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
@@ -79,8 +79,8 @@ Definition svalue_uincl (v: value) (sv: svalue) :=
   | Vbool b1, SVbool b2 => b1 = b2
   | Vint n1, SVint n2   => n1 = n2
   | Varr s _ t1, SVarr s' t2 =>
-    if s == s' then forall i v, Array.get t1 i = ok v ->  truncate_word s' (FArray.get t2 i) = truncate_word s' v else False
-  | Vword s w1, SVword s' w2  => if (s' <= s')%CMP  then truncate_word s' w1 = truncate_word s' w2 else False
+    if s == s' then forall i v, Array.get t1 i = ok v ->  truncate_word s (FArray.get t2 i) = ok v else False
+  | Vword s w1, SVword s' w2  => if s == s' then truncate_word s w2 = ok w1 else False
   | Vundef ty, _ => sstype_of_stype ty = sval_sstype sv
   | _, _ => False
   end.
@@ -93,77 +93,134 @@ Proof.
     apply ok_inj in H; congruence.
   elim (@of_val_undef_ok sint _ _ H).
 Qed.
-(*
-Lemma to_word_inv x w :
-  to_word x = ok w →
-  x = w.
+
+
+Lemma to_word_inv s x (w:word s) :
+  to_word s x = ok w →
+  exists  {s'} (w': word s'), x = Vword w' /\ truncate_word s w' = ok w.
 Proof.
-  case: x => // ? H.
-    apply ok_inj in H; congruence.
-  elim (@of_val_undef_ok sword _ _ H).
+  case: x => //;last by  move => st; rewrite /to_word; case: st => //=.
+  move => s' w'. rewrite /to_word /truncate_word.
+  elim le_ss' : cmp_le => //= eq_ww';apply ok_inj in eq_ww'.
+  by exists s'; exists  w';split => //=; rewrite le_ss' eq_ww'.
 Qed.
-*)
+
+Lemma sto_word_inv s x (w:word s) :
+  sto_word s x = ok w →
+  exists  {s'} (w': word s'), x = SVword w' /\ truncate_word s w' = ok w.
+Proof.
+  case: x => // s' w'. rewrite /sto_word /truncate_word.
+  elim le_ss' : cmp_le => //= eq_ww';apply ok_inj in eq_ww'.
+  by exists s'; exists  w';split => //=; rewrite le_ss' eq_ww'.
+Qed.
+
 Lemma to_bool_inv x b :
   to_bool x = ok b →
   x = b.
 Proof.
   case: x => // ? H.
-    apply ok_inj in H; congruence.
+  apply ok_inj in H; congruence.
   elim (@of_val_undef_ok sbool _ _ H).
 Qed.
  
 
 Require psem.
 
+Definition sstype_stype_incl sst st :=
+  match sst, st with
+  |ssint, sint => true
+  |ssbool, sbool => true
+  |ssword s, sword s' => (s' <= s)%CMP
+  |ssarr s, sarr s' _ => s == s'
+  |_, _ => false
+  end.
+
+Lemma to_arr_inv s n a v :
+  of_val (sarr s n) (@Varr s n a) = ok v -> a = v.
+Proof. by rewrite /of_val /to_arr (eq_dec_refl wsize_eq_dec) pos_dec_n_n;simpl; apply ok_inj.
+Qed.
+
 Lemma of_sval_uincl v v' t z:
   svalue_uincl v v' ->
   of_val t v = ok z ->
-  exists z', of_sval t v' = ok z' /\ sval_uincl z z' ∧ sval_sstype v' = t. (* Subtype ?*)
+  exists z', of_sval t v' = ok z' /\ sval_uincl z z' ∧ sstype_stype_incl (sval_sstype v') t. (* Subtype ?*)
 Proof.
   case: v  => [b | n  | s n a | s  w | ty];
   case: v' => [b'| n' | s' a' | s' w'] //=;
   try (by case: t z=> //= z -> []->; exists z);
   try (move=> _ H; elim (of_val_undef_ok H); fail); last first.
 
-  case: ifP => //= eq_ss' _ H.
-  have H' := (of_vword H).
-move:H'.  move => [s'' [le_ss' H']].
-subst t.
-move:H.
-rewrite /of_val.
-simpl.
-admit.
+  case: ifP => //= /eqP eq_ss' val_zw' H; subst s'.
+  rewrite psem.truncate_word_u in val_zw'; apply ok_inj in val_zw'; subst w'.
+  have H' := (of_vword H); move:H';  move => [s'' [le_ss' H']]; subst t.
+  move:H;  rewrite /of_val; simpl.
+  exists z; split => //=.
 
 
-  case: (s =P s') => //= eq_ss'.
-  rewrite /truncate_word.
-  move => //= H2 H.
-  apply of_varr in H. subst t; simpl;  subst s';  simpl in z.
-  have z' := word_array_to_farray z.
-  exists z'. split;last split => //=.
+  case: (s =P s') => //= eq_ss';subst s'.
+  move => //= H2 H. rewrite /of_sval. 
+  have H' := (of_varr H). subst t; simpl; simpl in z.
+  exists a'. split;last split => //=.
   rewrite eq_dec_refl; congr ok.
-  Check Array.get.
-  simpl in H2.
-  (*move => i w H. apply H2 in H.*)
-Admitted.
+  apply to_arr_inv in H; subst z.
+  move => i w H; apply H2 in H;rewrite psem.truncate_word_u in H.
+  by apply ok_inj in H.
+Qed.
 
 Lemma svalue_uincl_int ve ve' z :
   svalue_uincl ve ve' -> to_int ve = ok z -> ve = z /\ ve' = z.
 Proof.
   move=> h t; case: (@of_sval_uincl ve ve' sint z h t) => /= z' [t' q].
   apply sto_int_inv in t'; apply to_int_inv in t. intuition congruence.
-Admitted.
+Qed.
+
 
 Lemma svalue_uincl_word ve ve' sz w :
-  svalue_uincl ve ve' -> to_word sz ve = ok w -> ve = (Vword w) /\ ve' = (SVword w).
+  svalue_uincl ve ve' -> to_word sz ve = ok w ->
+  exists sz', exists (w' : word sz'),truncate_word sz w' = ok w /\ ve = (Vword w') /\ ve' = (SVword w').
 Proof.
-  move=> h t; case: (@of_sval_uincl ve ve' (sword sz) w h t) => /= z' [t' q].
-(*  
-  intuition congruence.
+  move=> h t; case: (@of_sval_uincl ve ve' (sword sz) w h t) => /= z' [t' [sub rel]].
+  subst z'.
+  have h' := ((@sto_word_inv sz ve' w) t').
+  move:h' => [sz' [w' [eq_ve'w' trunc_ww']]].
+  exists sz'. exists w'.
+  split => //=; split => //=.
+
+  have h' := ((@to_word_inv sz ve w) t).
+  move:h' => [sz'' [w'' [eq_vew'' trunc_ww'']]].
+
+  have:sz' = sz''.
+  move:h. rewrite /svalue_uincl eq_ve'w' eq_vew''.
+  by case:ifP => //= /eqP . 
+  move => eq_sz'sz''. subst sz''.
+  rewrite eq_vew''.
+
   
-  apply sto_word_inv in t'; apply to_word_inv in t. intuition congruence.
+  rewrite cmp_le_refl in h' => //.
+  apply to_word_inv in t.
+  move:t =>  [sz' [w' [eq_vw' trunc_w']]].
+  rewrite eq_vw'.
+  exists sz'. exists w'. split => //=;split => //=.
+  Check sto_word_inv.
+  apply to_word_inv in t. intuition congruence.
+Qed.
+
+(*Lemma svalue_uincl_word ve ve' sz w :
+  svalue_uincl ve ve' -> to_word sz ve = ok w ->
+  exists sz', exists (w' : word sz'),truncate_word sz w' = ok w /\ ve = (Vword w') /\ ve' = (SVword w').
+Proof.
+  move=> h t; case: (@of_sval_uincl ve ve' (sword sz) w h t) => /= z' [t' [sub rel]].
+  subst z'.
+  have h' := @sto_word_inv sz w sz w.
+  rewrite cmp_le_refl in h' => //.
+  apply to_word_inv in t.
+  move:t =>  [sz' [w' [eq_vw' trunc_w']]].
+  rewrite eq_vw'.
+  exists sz'. exists w'. split => //=;split => //=.
+  Check sto_word_inv.
+  apply to_word_inv in t. intuition congruence.
 Qed.*)
-  Admitted.
+
 
 Lemma svalue_uincl_bool ve ve' b :
   svalue_uincl ve ve' -> to_bool ve = ok b -> ve = b /\ ve' = b.
