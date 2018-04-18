@@ -396,28 +396,6 @@ Section PROOF.
   by case: o => // -[] // => [ | | [] | [] | [] | [] ] sz [] _ <- <-.
   Qed.
 
-  Lemma setP_comm {to} (m: Fv.t to) x1 v1 x2 v2:
-    x1 != x2 ->
-    m.[x1 <- v1].[x2 <- v2] = m.[x2 <- v2].[x1 <- v1].
-  Proof.
-    move=> Hneq.
-    apply: Fv.map_ext=> y.
-    case Heq1: (y == x1); case Heq2: (y == x2).
-    + exfalso; move: Hneq=> /eqP; apply.
-      move: Heq1=> /eqP <-.
-      move: Heq2=> /eqP <- //.
-    + move: Heq1=> /eqP Heq1; subst y.
-      rewrite Fv.setP_eq Fv.setP_neq.
-      by rewrite Fv.setP_eq.
-      by rewrite eq_sym.
-    + move: Heq2=> /eqP Heq2; subst y.
-      by rewrite Fv.setP_eq Fv.setP_neq // Fv.setP_eq.
-    + move: Heq1=> /negbT Heq1.
-      move: Heq2=> /negbT Heq2.
-      rewrite eq_sym in Heq1; rewrite eq_sym in Heq2.
-      by rewrite !Fv.setP_neq.
-  Qed.
-
   Lemma lower_cond_classifyP ii e cond s1':
     sem_pexpr gd s1' e = ok cond ->
     match lower_cond_classify fv ii e with
@@ -446,8 +424,8 @@ Section PROOF.
           vbool fv1 = x1 /\ vbool fv2 = x2 /\
           fv1 != fv2 /\
           cond = Vbool match c with
-          | CondEq => v1 == v2
-          | CondNeq => v1 != v2
+          | CondEq => v2 == v1
+          | CondNeq => v2 != v1
           | CondOr => v1 || v2
           | CondAndNot => ~~ v1 && ~~ v2
           end
@@ -459,8 +437,8 @@ Section PROOF.
           vbool fv1 = x1 /\ vbool fv2 = x2 /\ vbool fv3 = x3 /\
           fv1 != fv2 /\ fv1 != fv3 /\ fv2 != fv3 /\
           cond = Vbool match c with
-          | CondOrNeq => v1 || (v2 != v3)
-          | CondAndNotEq => (~~ v1) && (v2 == v3)
+          | CondOrNeq => v3 || (v2 != v1)
+          | CondAndNotEq => (~~ v3) && (v2 == v1)
           end
       end)
     | _ => True
@@ -510,8 +488,7 @@ Section PROOF.
       rewrite /x86_cmp /check_size_8_64 Hsz /=.
       set vof := wsigned (zero_extend sz z1 - zero_extend sz z2) != (wsigned (zero_extend sz z1) - wsigned (zero_extend sz z2))%Z.
       set vsf := SF_of_word (zero_extend sz z1 - zero_extend sz z2).
-      exists vsf, vof, fv.(fresh_SF), fv.(fresh_OF); repeat split=> //=.
-      + by rewrite setP_comm.
+      exists vof, vsf, fv.(fresh_OF), fv.(fresh_SF); repeat split=> //=.
       + by rewrite -Hz1z2 /vsf /SF_of_word /vof wlesE.
     (* Cond2 CondNeq *)
     + case: o He => // [] // [] // [] sz' // He []??????; subst.
@@ -521,8 +498,7 @@ Section PROOF.
       rewrite /x86_cmp /check_size_8_64 Hsz /=.
       set vof := wsigned (zero_extend sz z1 - zero_extend sz z2) != (wsigned (zero_extend sz z1) - wsigned (zero_extend sz z2))%Z.
       set vsf := SF_of_word (zero_extend sz z1 - zero_extend sz z2).
-      exists vsf, vof, fv.(fresh_SF), fv.(fresh_OF); repeat split=> //=.
-      + by rewrite setP_comm.
+      exists vof, vsf, fv.(fresh_OF), fv.(fresh_SF); repeat split=> //=.
       + by rewrite -Hz1z2 /vsf /SF_of_word /vof wltE wsub_signed_overflow.
     (* Cond2 CondOr *)
     + case: o He => // [] // [] // [] sz' // He []??????; subst.
@@ -554,14 +530,7 @@ Section PROOF.
       set vof := wsigned (zero_extend sz z1 - zero_extend sz z2) != (wsigned (zero_extend sz z1) - wsigned (zero_extend sz z2))%Z.
       set vsf := SF_of_word (zero_extend sz z1 - zero_extend sz z2).
       set vzf := ZF_of_word (zero_extend sz z1 - zero_extend sz z2).
-      exists vzf, vsf, vof, fv.(fresh_ZF), fv.(fresh_SF), fv.(fresh_OF); repeat split=> //=.
-      + rewrite [_.[vbool (fresh_OF fv) <- _].[vbool (fresh_SF fv) <- _]]setP_comm.
-        rewrite setP_comm.
-        rewrite [_.[vbool (fresh_SF fv) <- _].[vbool (fresh_ZF fv) <- _]]setP_comm //.
-        by apply/eqP=> -[]Habs; have := of_neq_zf; rewrite Habs eq_refl.
-        by apply/eqP=> -[]Habs; have := of_neq_sf; rewrite Habs eq_refl.
-      + rewrite eq_sym; exact: sf_neq_zf.
-      + rewrite eq_sym; exact: of_neq_zf.
+      exists vof, vsf, vzf, fv.(fresh_OF), fv.(fresh_SF), fv.(fresh_ZF); repeat split=> //=.
       + rewrite -Hz1z2 /vzf /ZF_of_word /vsf /SF_of_word /vof wlesE GRing.subr_eq0; f_equal.
         case: (zero_extend _ z1 =P _) => /=.
         * by move => ->; rewrite GRing.subrr Z.sub_diag wsigned0 msb0.
@@ -575,20 +544,16 @@ Section PROOF.
       set vof := wsigned (zero_extend sz z1 - zero_extend sz z2) != (wsigned (zero_extend sz z1) - wsigned (zero_extend sz z2))%Z.
       set vsf := SF_of_word (zero_extend sz z1 - zero_extend sz z2).
       set vzf := ZF_of_word (zero_extend sz z1 - zero_extend sz z2).
-      exists vzf, vsf, vof, fv.(fresh_ZF), fv.(fresh_SF), fv.(fresh_OF); repeat split=> //=.
-      + rewrite [_.[vbool (fresh_OF fv) <- _].[vbool (fresh_SF fv) <- _]]setP_comm.
-        rewrite setP_comm.
-        rewrite [_.[vbool (fresh_SF fv) <- _].[vbool (fresh_ZF fv) <- _]]setP_comm //.
-        by apply/eqP=> -[]Habs; have := of_neq_zf; rewrite Habs eq_refl.
-        by apply/eqP=> -[]Habs; have := of_neq_sf; rewrite Habs eq_refl.
-      + rewrite eq_sym; exact: sf_neq_zf.
-      + rewrite eq_sym; exact: of_neq_zf.
+      exists vof, vsf, vzf, fv.(fresh_OF), fv.(fresh_SF), fv.(fresh_ZF); repeat split=> //=.
       + rewrite -Hz1z2 /vzf /vsf /vof /ZF_of_word /SF_of_word wltE GRing.subr_eq0; f_equal.
         set α := zero_extend _ z1; set β := zero_extend _ z2.
         case: (α =P _) => /=.
         * by move => ->; rewrite GRing.subrr Z.sub_diag.
         exact: wlts_msb.
   Qed.
+
+  Lemma vboolI x y : x != y → vbool y != vbool x.
+  Proof. by move => /eqP ne; apply/eqP => -[?]; apply: ne. Qed.
 
   Lemma lower_condition_corr ii ii' i e e' s1 cond:
     (i, e') = lower_condition fv ii' e ->
@@ -635,7 +600,7 @@ Section PROOF.
         apply/eqP=> Habs; subst var; exact: Hvar.
       + move: c Hz Ht=> [] Hz Ht.
         + rewrite /= /get_var /on_vu -Hfv1 -Hfv2 Fv.setP_eq Fv.setP_neq ?Fv.setP_eq /= ?Hz.
-          by case: b1 Hw Hz.
+          by case: b2 Hw Hz.
           by apply/eqP=> -[]Habs; rewrite Habs eq_refl in Hneq.
         + rewrite /= /get_var /on_vu -Hfv1 -Hfv2 Fv.setP_eq Fv.setP_neq ?Fv.setP_eq /= ?Hz.
           by case: b1 Hw Hz=> _ _; case: b2.
@@ -647,7 +612,8 @@ Section PROOF.
           by case: b1 Hw Hz.
           by apply/eqP=> -[]Habs; rewrite Habs eq_refl in Hneq.
     (* Cond3 *)
-    + move=> [b1 [b2 [b3 [fv1 [fv2 [fv3 [Hw [Hin1 [Hin2 [Hin3 [Hfv1 [Hfv2 [Hfv3 [Hneq1 [Hneq2 [Hneq3 Hz]]]]]]]]]]]]]]]].
+    + move=> [b1 [b2 [b3 [fv1 [fv2 [fv3 [Hw [Hin1 [Hin2 [Hin3 [Hfv1 [Hfv2 [Hfv3]]]]]]]]]]]]].
+      case => /vboolI Hneq1 [] /vboolI Hneq2 [] /vboolI Hneq3 Hz.
       exists {| emem := emem s1'; evm := ((evm s1').[vbool fv1 <- ok b1]).[vbool fv2 <- ok b2].[vbool fv3 <- ok b3] |}; repeat split=> /=.
       + apply: sem_seq1; apply: EmkI; apply: Eopn.
         by rewrite /sem_sopn He1e2 /= /truncate_word hw1 hw2 Hw.
@@ -657,21 +623,10 @@ Section PROOF.
         apply/eqP=> Habs; subst var; exact: Hvar.
         apply/eqP=> Habs; subst var; exact: Hvar.
         apply/eqP=> Habs; subst var; exact: Hvar.
-      + move: c Hz Ht=> [] -> Ht {Hw}.
-        + rewrite /= /get_var /on_vu -Hfv1 -Hfv2 -Hfv3 Fv.setP_eq Fv.setP_neq ?Fv.setP_eq.
-          rewrite Fv.setP_neq.
-          rewrite Fv.setP_neq ?Fv.setP_eq /=.
-          move: b1 b2 b3=> [] [] [] //.
-          by apply/eqP=> -[]Habs; rewrite Habs eq_refl in Hneq1.
-          by apply/eqP=> -[]Habs; rewrite Habs eq_refl in Hneq2.
-          by apply/eqP=> -[]Habs; rewrite Habs eq_refl in Hneq3.
-        + rewrite /= /get_var /on_vu -Hfv1 -Hfv2 -Hfv3 Fv.setP_eq Fv.setP_neq ?Fv.setP_eq.
-          rewrite Fv.setP_neq.
-          rewrite Fv.setP_neq ?Fv.setP_eq /=.
-          move: b1 b2 b3=> [] [] [] //.
-          by apply/eqP=> -[]Habs; rewrite Habs eq_refl in Hneq1.
-          by apply/eqP=> -[]Habs; rewrite Habs eq_refl in Hneq2.
-          by apply/eqP=> -[]Habs; rewrite Habs eq_refl in Hneq3.
+      + move: c Hz Ht=> [] -> Ht {Hw};
+          rewrite /= /get_var /on_vu -Hfv1 -Hfv2 -Hfv3;
+          repeat rewrite (Fv.setP_eq, Fv.setP_neq) //=;
+          by move: b1 b2 b3 => [] [] [].
   Qed.
 
   Lemma read_es_swap x y : Sv.Equal (read_es [:: x ; y ]) (read_es [:: y ; x ]).

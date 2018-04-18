@@ -390,8 +390,6 @@ Module Fv.
   Definition ext_eq  {to} (vm1 vm2 : t to) :=
     forall x, get vm1 x = get vm2 x.
 
-  Axiom map_ext: forall to (vm1 vm2 : t to), ext_eq vm1 vm2 -> vm1 = vm2.
-
 End Fv.
 
 Delimit Scope vmap_scope with vmap.
