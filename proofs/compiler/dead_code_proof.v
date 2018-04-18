@@ -215,26 +215,25 @@ Section PROOF.
       by apply:eq_onT Hvm;apply eq_onS.
     case: ifPn=> Hnop /=;last by apply: Hassgn_aux Hv htr Hw.
     move=> Hwf vm1' Hvm.
-    have Hs: {| emem := m1; evm := vm1 |} = {| emem := m2; evm := vm2 |}.
+    have [-> Hs] : m1 = m2 ∧ vm2 =v vm1.
     + move: (check_nop_spec Hnop)=> {Hnop} [x0 [i1 [i2 [Hx He Hty]]]];subst x e.
       case: x0 Hty Hv Hw => ? xn0 /= <- Hv Hw.
       have ?: v' = v.
       + apply: on_vuP Hv=> [???|? [?]];subst;first by apply: truncate_pto_val htr.
-        by elim: (truncate_val_Vundef htr).       
+        by elim: (truncate_val_Vundef htr).
       subst.
       move: Hw;rewrite /= /write_var/set_var /=.
       apply: on_vuP Hv => /= [t|] Hx0 => [|[]] ?;subst v.
-      + rewrite pof_val_pto_val /= => -[<-] <-;f_equal;apply: Fv.map_ext=> z.
+      + rewrite pof_val_pto_val /= => -[<-] <-; split => // z.
         by case: ({|vtype := ty;vname := xn0|} =P z) => [<-|/eqP Hne];rewrite ?Fv.setP_eq ?Fv.setP_neq.
       t_xrbindP => vm3; apply: on_vuP;first by move=> ? /pof_val_undef_ok.
       case:ifP => // hty _ [] ???;subst.
-      f_equal;apply: Fv.map_ext=> z.
+      split => // z.
       case: ({| vtype := ty; vname := xn0 |} =P z) => [<-|/eqP Hne];rewrite ?Fv.setP_eq ?Fv.setP_neq //.
       by have := Hwf {| vtype := ty; vname := xn0 |};rewrite Hx0;case : (ty) hty.
-    exists vm1'; split.
-    + apply: eq_onT Hvm.
-      by case: Hs=> _ ->.
-    by case: Hs=> -> _; exact: Eskip.
+    eexists; split.
+    + apply: eq_onT _ Hvm => //.
+    apply: Eskip.
   Qed.
 
   Lemma check_nop_opn_spec (xs:lvals) (o:sopn) (es:pexprs): check_nop_opn xs o es ->
@@ -249,13 +248,12 @@ Section PROOF.
     let x := {| vtype := sword sz; vname := xn |} in
     get_var vm1 x = ok v ->
     set_var vm1 x v = ok vm2 ->
-    vm1 = vm2.
+    vm1 =v vm2.
   Proof.
     rewrite /get_var /set_var.
     apply: on_vuP=> [ /= t Hr <- /=| _ [<-] //].
     have -> /= := sumbool_of_boolET (pw_proof t).
-    move=> [<-].
-    apply: Fv.map_ext=> z.
+    move => [<-] z.
     set x0 := {| vtype := _; vname := xn |}.
     case: (x0 =P z) => [<-|/eqP Hne];rewrite ?Fv.setP_eq ?Fv.setP_neq //.
     by rewrite -/x0 Hr;case: (t).
@@ -310,7 +308,8 @@ Section PROOF.
     case:ifPn => [ | _ /=]; last by apply: Hopn_aux Hexpr Hopn Hw.
     move=> /check_nop_opn_spec [x [i1 [sz [i2 [???]]]]]; subst xs o es=> /=.
     move=> Hwf vm1' Hvm.
-    have Hs: s1 = s2;last by subst s2; exists vm1'; split=> //; exact: Eskip.
+    have [ -> Hs ] : emem s1 = emem s2 ∧ evm s1 =v evm s2;
+      last by eexists; split; last exact: Eskip; apply: eq_onT _ Hvm.
     move: x0 Hexpr Hopn=> [] // x0 [] //=;last by  move=> ???; apply: rbindP.
     rewrite /sem_pexprs /=.
     apply: rbindP=> z Hexpr []?; subst z.
@@ -320,7 +319,7 @@ Section PROOF.
     have [sz' /= [[? hle']]]:= get_var_word Hexpr;subst sz'.
     have ? := cmp_le_antisym hle' hle; subst sz0.
     rewrite sumbool_of_boolET zero_extend_u.
-    move: s1 Hwf Hvm Hexpr => [mem1 vm1] /= Hwf Hvm Hexpr; f_equal.
+    move: s1 Hwf Hvm Hexpr => [mem1 vm1] /= Hwf Hvm Hexpr; split => //.
     have := set_get_word Hexpr; rewrite /set_var /= sumbool_of_boolET.
     exact.
   Qed.

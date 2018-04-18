@@ -23,7 +23,7 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ----------------------------------------------------------------------- *)
 
-(* * Syntax and semantics of the dmasm source language *)
+(* * Jasmin semantics with “partial values”. *)
 
 (* ** Imports and settings *)
 From mathcomp Require Import all_ssreflect all_algebra.
@@ -2215,17 +2215,6 @@ Proof. by case: t v. Qed.
 
 Lemma pto_val_undef  t (v:psem_t t) : pto_val v <> Vundef t.
 Proof. by case: t v. Qed.
-
-Lemma vmap_eqP (lv1 lv2 : vmap) :
-  (lv1 = lv2) <-> (forall x, get_var lv1 x = get_var lv2 x).
-Proof.
-   split => [-> // | Hget];apply Fv.map_ext => x.
-   have := Hget x;rewrite /get_var /on_vu.
-   case: (lv1.[x])%vmap (lv2.[x])%vmap => [ v1 | []] [v2 | []] //.
-   + by move=> H; have -> := pto_val_inj (ok_inj H).
-   + by move=> H;have {H} /pto_val_undef:= ok_inj H.
-   by move=> H; have {H}  /pto_val_undef := ok_inj (Logic.eq_sym H). 
-Qed.
 
 (* TODO: move *)
 Lemma to_word_to_pword s v w: to_word s v = ok w -> to_pword s v = ok (pword_of_word w).

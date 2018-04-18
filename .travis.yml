@@ -5,7 +5,6 @@ cache:
   directories:
   - $HOME/nix.store
 before_cache:
-- rm -rf $HOME/nix.store
 - mkdir -p $HOME/nix.store
 - nix copy --to file://$HOME/nix.store -f default.nix buildInputs
 before_install:

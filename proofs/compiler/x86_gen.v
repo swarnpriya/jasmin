@@ -241,7 +241,7 @@ exists fd'. split; first exact: ok_fd'.
 move => s1 hargs ?; subst m1.
 move: h; rewrite /assemble_fd; t_xrbindP => body ok_body.
 case ok_sp: (reg_of_string _) => [ sp | // ];
-  t_xrbindP => args ok_args dsts ok_dsts _ /(@assertP _ _ _ _) hsp [?]; subst fd'.
+  t_xrbindP => args ok_args dsts ok_dsts _ /assertP hsp [?]; subst fd'.
 set xr1 := mem_write_reg sp (Memory.top_stack m1') {| xmem := m1' ; xreg := s1.(xreg) ; xrf := rflagmap0 |}.
 have eqm1 : lom_eqv {| emem := m1' ; evm := vm1 |} xr1.
 + constructor => //.
