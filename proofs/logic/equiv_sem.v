@@ -262,7 +262,7 @@ Proof.
   apply: sget_var_uincl=> //.
   by apply: IH.
 Qed.
-
+*)
 Lemma svuincl_sem_op2_b o ve1 ve1' ve2 ve2' v1 :
   svalue_uincl ve1 ve1' -> svalue_uincl ve2 ve2' -> sem_op2_b o ve1 ve2 = ok v1 ->
   exists v2 : svalue, ssem_op2_b o ve1' ve2' = ok v2 /\ svalue_uincl v1 v2.
@@ -282,7 +282,7 @@ Proof.
   apply: rbindP => z2 /(svalue_uincl_int Hvu2) [] _ -> [] <- /=.
   by exists (o z1 z2).
 Qed.
-
+(*
 Lemma svuincl_sem_op2_w o ve1 ve1' ve2 ve2' v1 :
   svalue_uincl ve1 ve1' -> svalue_uincl ve2 ve2' -> sem_op2_w o ve1 ve2 = ok v1 ->
   exists v2 : svalue, ssem_op2_w o ve1' ve2' = ok v2 /\ svalue_uincl v1 v2.
@@ -312,7 +312,7 @@ Proof.
   apply: rbindP => z2 /(svalue_uincl_word Hvu2) [] _ -> [] <- /=.
   by exists (o z1 z2).
 Qed.
-
+*)
 Lemma svuincl_sem_op1_b o w w' r :
   svalue_uincl w w' → sem_op1_b o w = ok r →
   ∃ r' : svalue, ssem_op1_b o w' = ok r' ∧ svalue_uincl r r'.
@@ -323,8 +323,8 @@ Proof.
   case: w' H => // b' <- {b'}.
   by exists (o b).
 Qed.
-
-Lemma svuincl_sem_op1_w o w w' r :
+(*
+Lemma svuincl_sem_op1_w o s w w' r :
   svalue_uincl w w' → sem_op1_w o w = ok r →
   ∃ r' : svalue, ssem_op1_w o w' = ok r' ∧ svalue_uincl r r'.
 Proof.
@@ -417,13 +417,14 @@ Proof.
     apply: rbindP => vb sem_vb. apply Hp in sem_vb. move:sem_vb => [v2 ssem_v2].
     move => point_wb.
     apply: rbindP  => wsz Hwsz val_wsz. apply ok_inj in val_wsz. subst.
-    exists v2. simpl.
+    exists v2.  (*simpl.
     apply: rbindP => vb => Hvb Hpvb;apply:rbindP => wsz read_wsz val_wsz.
     exists (SVword w'');subst.
     rewrite var_x. simpl.
     rewrite -Hu1 /=.
-    case: (svalue_uincl_word Hvu Hto) => ??;subst.
-    by apply rbindP => w /= /mem2smem_read -> [] <-;exists w.
+    case: (svalue_uincl_word Hvu Hto) => ??;subst.*)
+    admit.
+    (*by apply rbindP => w /= /mem2smem_read -> [] <-;exists w.*)
   + apply: rbindP => w /He {He} [] w' [] ->; apply svuincl_sem_op1.
   + apply: rbindP => ve1 /He1 [] ve1' [] -> Hvu1.
     apply: rbindP => ve2 /He2 [] ve2' [] -> Hvu2 {He1 He2}.
