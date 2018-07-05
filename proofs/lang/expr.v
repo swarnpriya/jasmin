@@ -141,6 +141,7 @@ Variant sopn : Set :=
 
 | Ox86_VPADD of velem & wsize (* Parallel addition over 128/256-bit vectors *)
 | Ox86_VPMULU of wsize (* Parallel 32-bit → 64-bit multiplication *)
+| Ox86_VPMULL of velem & wsize (* Parallel truncated multiplication *)
 | Ox86_VPEXTR of wsize (* Element extraction from a 128-bit vector *)
 | Ox86_VPINSR of velem (* Insert element into a 128-bit vector *)
 
@@ -251,6 +252,7 @@ Definition string_of_sopn o : string :=
   | Ox86_VPXOR sz => "Ox86_VPXOR " ++ string_of_wsize sz
   | Ox86_VPADD ve sz => "Ox86_VPADD " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
   | Ox86_VPMULU sz => "Ox86_VPMULU " ++ string_of_wsize sz
+  | Ox86_VPMULL ve sz => "Ox86_VPMULL " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
   | Ox86_VPEXTR ve => "Ox86_VPEXTR " ++ string_of_wsize ve
   | Ox86_VPINSR ve => "Ox86_VPINSR " ++ string_of_velem ve
   | Ox86_VPSLL ve sz => "Ox86_VPSLL " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
@@ -315,7 +317,7 @@ Definition sopn_tout (o:sopn) :  list stype :=
     => [:: sword128 ]
   | Ox86_VMOVDQU sz
   | Ox86_VPAND sz | Ox86_VPANDN sz | Ox86_VPOR sz | Ox86_VPXOR sz
-  | Ox86_VPADD _ sz | Ox86_VPMULU sz
+  | Ox86_VPADD _ sz | Ox86_VPMULU sz | Ox86_VPMULL _ sz
   | Ox86_VPSLL _ sz | Ox86_VPSRL _ sz
   | Ox86_VPSLLV _ sz | Ox86_VPSRLV _ sz
   | Ox86_VPSHUFB sz | Ox86_VPSHUFHW sz | Ox86_VPSHUFLW sz | Ox86_VPSHUFD sz
@@ -382,7 +384,7 @@ Definition sopn_tin (o: sopn) : list stype :=
   | Ox86_VPBLENDD sz
     => let t := sword sz in [:: t ; t ; sword8 ]
   | Ox86_VPAND sz | Ox86_VPANDN sz | Ox86_VPOR sz | Ox86_VPXOR sz
-  | Ox86_VPADD _ sz | Ox86_VPMULU sz
+  | Ox86_VPADD _ sz | Ox86_VPMULU sz | Ox86_VPMULL _ sz
   | Ox86_VPSLLV _ sz | Ox86_VPSRLV _ sz
   | Ox86_VPSHUFB sz
   | Ox86_VPUNPCKH _ sz | Ox86_VPUNPCKL _ sz

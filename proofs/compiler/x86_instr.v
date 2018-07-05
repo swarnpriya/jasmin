@@ -1051,6 +1051,10 @@ Definition VPADD_desc ve sz := make_instr_desc
     (x86_rm128_binop_gsc sz (Ox86_VPADD ve) (VPADD ve) (lift2_vec ve +%R sz)
     (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
 
+Definition VPMULL_desc ve sz := make_instr_desc
+    (x86_rm128_binop_gsc sz (Ox86_VPMULL ve) (VPMULL ve) (lift2_vec ve *%R sz)
+    (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+
 (* ----------------------------------------------------------------------------- *)
 Lemma VPEXTR_gsc ve :
   gen_sem_correct [:: TYoprd ; TYxreg ; TYimm U8 ] (Ox86_VPEXTR ve)
@@ -1380,6 +1384,7 @@ Definition sopn_desc ii (c : sopn) : ciexec instr_desc :=
   | Ox86_VPXOR sz => ok (VPXOR_desc sz)
   | Ox86_VPADD ve sz => ok (VPADD_desc ve sz)
   | Ox86_VPMULU sz => ok (VPMULU_desc sz)
+  | Ox86_VPMULL ve sz => ok (VPMULL_desc ve sz)
   | Ox86_VPEXTR ve => ok (VPEXTR_desc ve)
   | Ox86_VPINSR ve => ok (VPINSR_desc ve)
   | Ox86_VPSLL ve sz => ok (VPSLL_desc ve sz)

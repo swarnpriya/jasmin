@@ -200,6 +200,7 @@ Variant asm : Type :=
 | VPXOR `(wsize) (_ _ _: rm128)
 | VPADD `(velem) `(wsize) (_ _ _: rm128)
 | VPMULU `(wsize) (_ _: xmm_register) `(rm128)
+| VPMULL `(velem) `(wsize) (_ _ _: rm128)
 | VPEXTR of wsize & oprd & xmm_register & u8
 | VPINSR `(velem) (_ _: xmm_register) `(oprd) `(u8)
 | VPSLL `(velem) `(wsize) (_ _: rm128) `(u8)
@@ -1176,6 +1177,7 @@ Definition eval_VPXOR sz := eval_rm128_binop MSB_CLEAR (@wxor sz).
 
 (* -------------------------------------------------------------------- *)
 Definition eval_VPADD ve sz := eval_rm128_binop MSB_CLEAR (lift2_vec ve +%R sz).
+Definition eval_VPMULL ve sz := eval_rm128_binop MSB_CLEAR (lift2_vec ve *%R sz).
 
 (* -------------------------------------------------------------------- *)
 Definition eval_xmm_binop sz (op: word sz → word sz → word sz)
@@ -1344,6 +1346,7 @@ Definition eval_instr_mem (i : asm) s : x86_result :=
   | VPXOR sz dst src1 src2 => eval_VPXOR sz dst src1 src2 s
   | VPADD ve sz dst src1 src2 => eval_VPADD ve sz dst src1 src2 s
   | VPMULU sz dst src1 src2 => eval_VPMULU sz dst src1 src2 s
+  | VPMULL ve sz dst src1 src2 => eval_VPMULL ve sz dst src1 src2 s
   | VPEXTR ve dst src i => eval_VPEXTR ve dst src i s
   | VPINSR ve dst src1 src2 i => eval_VPINSR ve dst src1 src2 i s
   | VPSLL ve sz dst src1 src2 => eval_VPSLL ve sz dst src1 src2 s

@@ -860,6 +860,7 @@ Definition x86_vpxor {sz} := x86_u128_binop (@wxor sz).
 
 (* ---------------------------------------------------------------- *)
 Definition x86_vpadd (ve: velem) {sz} := x86_u128_binop (lift2_vec ve +%R sz).
+Definition x86_vpmull (ve: velem) {sz} := x86_u128_binop (lift2_vec ve *%R sz).
 
 Definition x86_vpmulu {sz} := x86_u128_binop (@wpmulu sz).
 
@@ -1018,6 +1019,7 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
   | Ox86_VPXOR sz => app_ww sz x86_vpxor
   | Ox86_VPADD ve sz => app_ww sz (x86_vpadd ve)
   | Ox86_VPMULU sz => app_ww sz x86_vpmulu
+  | Ox86_VPMULL ve sz => app_ww sz (x86_vpmull ve)
   | Ox86_VPEXTR ve => app_w8 U128 (x86_vpextr ve)
   | Ox86_VPINSR ve => app_sopn [:: sword128 ; sword ve ; sword8 ] (x86_vpinsr ve)
   | Ox86_VPSLL ve sz => app_w8 sz (x86_vpsll ve)
