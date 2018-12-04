@@ -7,6 +7,7 @@ homepage: "http://jasmin-lang.github.io/"
 bug-reports: "https://github.com/jasmin-lang/jasmin/issues"
 synopsis: "High-Assurance and High-Speed Cryptography"
 license: "GPLv2"
+
 build: [
   make "build"
 ]
