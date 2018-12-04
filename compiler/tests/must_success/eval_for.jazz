@@ -1,6 +1,7 @@
 param int n = 12;
 
 
+export
 fn test_for() -> reg u64 {
 reg u64[n] t;
 reg u64 sum;

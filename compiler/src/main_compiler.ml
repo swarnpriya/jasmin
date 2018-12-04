@@ -1,6 +1,7 @@
 open Utils
 open Prog
 open Glob_options
+
 (* -------------------------------------------------------------------- *)
 exception UsageError
 
@@ -120,7 +121,7 @@ and pp_comp_ferr tbl fmt = function
     Format.fprintf fmt "error global not equal"
   | Ferr_fun (f, err_msg) ->
     let f =  Conv.fun_of_cfun tbl f in
-    Format.fprintf fmt "in function %s: %a" 
+    Format.fprintf fmt "in function %s: %a"
       f.fn_name (pp_comp_err tbl) err_msg
   | Ferr_remove_glob (ii, x) ->
     let i_loc, _ = Conv.get_iinfo tbl ii in
@@ -129,6 +130,7 @@ and pp_comp_ferr tbl fmt = function
      Printer.pp_iloc i_loc
   | Ferr_remove_glob_dup (_, _) ->
     Format.fprintf fmt "duplicate global: please report"
+
 
 (* -------------------------------------------------------------------- *)
 let main () =
@@ -155,8 +157,16 @@ let main () =
     let prog = Subst.remove_params pprog in
     eprint Compiler.ParamsExpansion (Printer.pp_prog ~debug:true) prog;
 
+    if !check_safety then begin
+      let module AbsInt = Safety.AbsInterpreter(Safety.AbsDom) in
+      let _ =
+        List.for_all (fun f_decl ->
+            if f_decl.f_cc = Export then AbsInt.analyze f_decl prog else true)
+          (snd prog) in ()
+    end;
+
     if !ec_list <> [] then begin
-      let fmt, close = 
+      let fmt, close =
         if !ecfile = "" then Format.std_formatter, fun () -> ()
         else
           let out = open_out !ecfile in
@@ -270,35 +280,35 @@ let main () =
     let pp_linear fmt lp =
       PrintLinear.pp_prog tbl fmt lp in
 
-    let rename_fd ii fn cfd = 
-      let ii,_ = Conv.get_iinfo tbl ii in 
-      let doit fd = 
+    let rename_fd ii fn cfd =
+      let ii,_ = Conv.get_iinfo tbl ii in
+      let doit fd =
         let fd = Subst.clone_func fd in
         Subst.extend_iinfo ii fd in
       apply "rename_fd" doit fn cfd in
 
-    let warning ii msg = 
+    let warning ii msg =
       let loc,_ = Conv.get_iinfo tbl ii in
       Format.eprintf "WARNING: at %a, %a@." Printer.pp_iloc loc Printer.pp_warning_msg msg;
       ii in
-        
-    let inline_var x = 
+
+    let inline_var x =
       let x = Conv.var_of_cvar tbl x in
       x.v_kind = Inline in
 
     let translate_var = Conv.var_of_cvar tbl in
-      
-    let is_glob x = 
+
+    let is_glob x =
       let x = Conv.var_of_cvar tbl x in
       x.v_kind = Global in
-      
-    let fresh_id gd x = 
+
+    let fresh_id gd x =
       let x = (Conv.var_of_cvar tbl x).v_name in
       let ns = List.map (fun (g,_) -> snd (Conv.global_of_cglobal g)) gd in
       let s = Ss.of_list ns in
-      let x = 
+      let x =
         if Ss.mem x s then
-          let rec aux i = 
+          let rec aux i =
             let x = x ^ "_" ^ string_of_int i in
             if Ss.mem x s then aux (i+1)
             else x in
@@ -319,7 +329,7 @@ let main () =
       Compiler.print_linear = (fun p -> eprint Compiler.Linearisation pp_linear p; p);
       Compiler.warning      = warning;
       Compiler.inline_var   = inline_var;
-      Compiler.lowering_opt = Lowering.{ use_lea = !Glob_options.lea; 
+      Compiler.lowering_opt = Lowering.{ use_lea = !Glob_options.lea;
                                          use_set0 = !Glob_options.set0; };
       Compiler.is_glob     = is_glob;
       Compiler.fresh_id    = fresh_id;

@@ -10,6 +10,6 @@ stdenv.mkDerivation {
   buildInputs = [ coqword ]
     ++ (with python3Packages; [ python pyyaml ])
     ++ (with coqPackages; [ coq mathcomp ])
-    ++ (with ocamlPackages; [ ocaml findlib ocamlbuild batteries menhir merlin zarith ])
+    ++ (with ocamlPackages; [ ocaml findlib ocamlbuild batteries menhir merlin zarith mpfr camlidl apron ppl])
     ;
 }

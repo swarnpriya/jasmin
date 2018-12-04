@@ -10,6 +10,7 @@ let coqonly = ref false
 let print_list = ref []
 let ecfile = ref ""
 let ec_list = ref []
+let check_safety = ref true
 
 let lea = ref false
 let set0 = ref false
@@ -45,7 +46,7 @@ let set_printing p () =
 let set_all_print () =
   print_list := poptions
 
-let set_ec f = 
+let set_ec f =
   ec_list := f :: !ec_list
 
 let set_constTime () = model := ConstantTime
