@@ -23,6 +23,8 @@ a.out
 .DS_Store
 test_jasmin.rs
 
+*.crashcoqide
+
 target
 
 Makefile.coq
