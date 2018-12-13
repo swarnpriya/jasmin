@@ -1406,9 +1406,11 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
     (Let _ := check_size_8_64 sz in
      let vf := Vbool false in
      ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
+  | Ox86 inst => (fun x =>  ok [::])
+end.
 
   (* Low level x86 operations *)
-  | Ox86_MOV sz => app_w sz (@x86_MOV sz)
+(*   | Ox86_MOV sz => app_w sz (@x86_MOV sz)
   | Ox86_MOVSX sz sz' => app_w sz' (@x86_MOVSX sz sz')
   | Ox86_MOVZX sz sz' => app_w sz' (@x86_MOVZX sz sz')
   | Ox86_MOVZX32 => app_w U32 (λ x : u32, ok [:: Vword (zero_extend U64 x) ])
@@ -1488,7 +1490,7 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
   | Ox86_VPERM2I128 => app_ww8 U256 x86_vperm2i128
   | Ox86_VPERMQ => app_w8 U256 x86_vpermq
   end.
-
+ *)
 Ltac app_sopn_t := 
   match goal with
   | |- forall (_:wsize), _     => move=> ?;app_sopn_t

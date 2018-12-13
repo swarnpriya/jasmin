@@ -28,7 +28,7 @@ Require Import oseq.
 Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
-Require Export strings word utils type var.
+Require Export strings word utils type var x86_instr_t.
 Require Import xseq.
 Import Utf8 ZArith.
 
@@ -111,8 +111,11 @@ Variant sopn : Set :=
 | Osubcarry of wsize   (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
 
 (* Low level x86 operations *)
-| Oset0        of wsize  (* set register + flags to 0 (implemented using XOR x x) *)
-| Ox86_MOV     of wsize  (* copy *)
+| Oset0     of wsize  (* set register + flags to 0 (implemented using XOR x x) *)
+
+| Ox86      of x86_instr_t (* x86 instruction *)
+.
+(* | Ox86_MOV     of wsize  (* copy *)
 | Ox86_MOVSX of wsize & wsize (* sign-extension *)
 | Ox86_MOVZX of wsize & wsize (* zero-extension *)
 | Ox86_MOVZX32  (* Pseudo instruction for 32-bit to 64-bit zero-extension *)
@@ -186,7 +189,7 @@ Variant sopn : Set :=
 | Ox86_VPERM2I128 (* Permutation of 128-bit words *)
 | Ox86_VPERMQ (* Permutation of 64-bit words *)
 .
-
+ *)
 Scheme Equality for sop1.
 (* Definition sop1_beq : sop1 -> sop1 -> bool *)
 
@@ -243,209 +246,98 @@ Definition string_of_sopn o : string :=
   | Oaddcarry sz => "Oaddcarry " ++ string_of_wsize sz
   | Osubcarry sz => "Osubcarry " ++ string_of_wsize sz
   | Oset0 sz => "Oset0 " ++ string_of_wsize sz
-  | Ox86_MOV sz => "Ox86_MOV " ++ string_of_wsize sz
-  | Ox86_MOVSX sz sz' => "Ox86_MOVSX " ++ string_of_wsize sz ++ " " ++ string_of_wsize sz'
-  | Ox86_MOVZX sz sz' => "Ox86_MOVZX " ++ string_of_wsize sz ++ " " ++ string_of_wsize sz'
-  | Ox86_MOVZX32 => "Ox86_MOVZX32"
-  | Ox86_CMOVcc sz => "Ox86_CMOVcc " ++ string_of_wsize sz
-  | Ox86_ADD sz => "Ox86_ADD " ++ string_of_wsize sz
-  | Ox86_SUB sz => "Ox86_SUB " ++ string_of_wsize sz
-  | Ox86_MUL sz => "Ox86_MUL " ++ string_of_wsize sz
-  | Ox86_IMUL sz => "Ox86_IMUL " ++ string_of_wsize sz
-  | Ox86_IMULt sz => "Ox86_IMULt " ++ string_of_wsize sz
-  | Ox86_IMULtimm sz => "Ox86_IMULtimm " ++ string_of_wsize sz
-  | Ox86_DIV sz => "Ox86_DIV " ++ string_of_wsize sz
-  | Ox86_IDIV sz => "Ox86_IDIV " ++ string_of_wsize sz
-  | Ox86_CQO sz => "Ox86_CQO " ++ string_of_wsize sz
-  | Ox86_ADC sz => "Ox86_ADC " ++ string_of_wsize sz
-  | Ox86_SBB sz => "Ox86_SBB " ++ string_of_wsize sz
-  | Ox86_NEG sz => "Ox86_NEG " ++ string_of_wsize sz
-  | Ox86_INC sz => "Ox86_INC " ++ string_of_wsize sz
-  | Ox86_DEC sz => "Ox86_DEC " ++ string_of_wsize sz
-  | Ox86_SETcc => "Ox86_SETcc"
-  | Ox86_BT sz => "Ox86_BT " ++ string_of_wsize sz
-  | Ox86_LEA sz => "Ox86_LEA " ++ string_of_wsize sz
-  | Ox86_TEST sz => "Ox86_TEST " ++ string_of_wsize sz
-  | Ox86_CMP sz => "Ox86_CMP " ++ string_of_wsize sz
-  | Ox86_AND sz => "Ox86_AND " ++ string_of_wsize sz
-  | Ox86_ANDN sz => "Ox86_ANDN " ++ string_of_wsize sz
-  | Ox86_OR sz => "Ox86_OR " ++ string_of_wsize sz
-  | Ox86_XOR sz => "Ox86_XOR " ++ string_of_wsize sz
-  | Ox86_NOT sz => "Ox86_NOT " ++ string_of_wsize sz
-  | Ox86_ROR sz => "Ox86_ROR " ++ string_of_wsize sz
-  | Ox86_ROL sz => "Ox86_ROL " ++ string_of_wsize sz
-  | Ox86_SHL sz => "Ox86_SHL " ++ string_of_wsize sz
-  | Ox86_SHR sz => "Ox86_SHR " ++ string_of_wsize sz
-  | Ox86_SAR sz => "Ox86_SAR " ++ string_of_wsize sz
-  | Ox86_SHLD sz => "Ox86_SHLD " ++ string_of_wsize sz
-  | Ox86_SHRD sz => "Ox86_SHRD " ++ string_of_wsize sz
-  | Ox86_BSWAP sz => "Ox86_BSWAP " ++ string_of_wsize sz
-  | Ox86_MOVD sz => "Ox86_MOVD " ++ string_of_wsize sz
-  | Ox86_VMOVDQU sz => "Ox86_VMOVDQU " ++ string_of_wsize sz
-  | Ox86_VPAND sz => "Ox86_VPAND " ++ string_of_wsize sz
-  | Ox86_VPANDN sz => "Ox86_VPANDN " ++ string_of_wsize sz
-  | Ox86_VPOR sz => "Ox86_VPOR " ++ string_of_wsize sz
-  | Ox86_VPXOR sz => "Ox86_VPXOR " ++ string_of_wsize sz
-  | Ox86_VPADD ve sz => "Ox86_VPADD " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPSUB ve sz => "Ox86_VPSUB " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPMULL ve sz => "Ox86_VPMULL " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPMULU sz => "Ox86_VPMULU " ++ string_of_wsize sz
-  | Ox86_VPEXTR ve => "Ox86_VPEXTR " ++ string_of_wsize ve
-  | Ox86_VPINSR ve => "Ox86_VPINSR " ++ string_of_velem ve
-  | Ox86_VPSLL ve sz => "Ox86_VPSLL " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPSRL ve sz => "Ox86_VPSRL " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPSRA ve sz => "Ox86_VPSRA " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPSLLV ve sz => "Ox86_VPSLLV " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPSRLV ve sz => "Ox86_VPSRLV " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPSLLDQ sz => "Ox86_VPSLLDQ" ++ string_of_wsize sz
-  | Ox86_VPSRLDQ sz => "Ox86_VPSRLDQ" ++ string_of_wsize sz
-  | Ox86_VPSHUFB sz => "Ox86_VPSHUFB " ++ string_of_wsize sz
-  | Ox86_VPSHUFHW sz => "Ox86_VPSHUFHW " ++ string_of_wsize sz
-  | Ox86_VPSHUFLW sz => "Ox86_VPSHUFLW " ++ string_of_wsize sz
-  | Ox86_VPSHUFD sz => "Ox86_VPSHUFD " ++ string_of_wsize sz
-  | Ox86_VPUNPCKH ve sz => "Ox86_VPUNPCKH " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPUNPCKL ve sz => "Ox86_VPUNPCKL " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VPBLENDD sz => "Ox86_VPBLENDD " ++ string_of_wsize sz
-  | Ox86_VPBROADCAST ve sz => "Ox86_VPBROADCAST " ++ string_of_velem ve ++ " " ++ string_of_wsize sz
-  | Ox86_VBROADCASTI128 => "Ox86_VBROADCASTI128"
-  | Ox86_VEXTRACTI128 => "Ox86_VEXTRACTI128"
-  | Ox86_VINSERTI128 => "Ox86_VINSERTI128"
-  | Ox86_VPERM2I128 => "Ox86_VPERM2I128"
-  | Ox86_VPERMQ => "Ox86_VPERMQ"
+  | Ox86 inst => string_of_x86_instr_t inst
   end.
-
-Definition b_ty := [::sbool].
-Definition b5_ty := [:: sbool;sbool;sbool;sbool;sbool].
-Definition w_ty sz:= [::sword sz].
-Definition b2w_ty sz := [::sbool;sbool;sword sz].
-Definition b4w_ty sz := [:: sbool;sbool;sbool;sbool;sword sz].
-Definition b5w_ty sz := [:: sbool;sbool;sbool;sbool;sbool;sword sz].
-Definition b5ww_ty sz := [:: sbool;sbool;sbool;sbool;sbool;sword sz;sword sz].
 
 Definition sopn_tout (o:sopn) :  list stype :=
   match o with
-  | Omulu sz => [::sword sz; sword sz]
-  | Oaddcarry sz | Osubcarry sz => [:: sbool; sword sz]
-  | Oset0 sz => b5w_ty sz
-  | Ox86_MOV sz
-  | Ox86_MOVSX sz _
-  | Ox86_MOVZX sz _
-  | Ox86_CMOVcc sz
-  | Ox86_BSWAP sz
-  | Ox86_CQO sz  
-    => w_ty sz
-  | Ox86_MOVZX32 => [:: sword64 ]
-  | Ox86_ADD sz | Ox86_SUB sz     => b5w_ty sz
-  | Ox86_MUL sz | Ox86_IMUL sz    => b5ww_ty sz
-  | Ox86_IMULt sz | Ox86_IMULtimm sz => b5w_ty sz
-  | Ox86_DIV sz | Ox86_IDIV sz    => b5ww_ty sz
-  | Ox86_ADC sz | Ox86_SBB sz     => b5w_ty sz
-  | Ox86_NEG sz                   => b5w_ty sz
-  | Ox86_INC sz | Ox86_DEC sz     => b4w_ty sz
-  | Ox86_SETcc                    => w_ty U8
-  | Ox86_BT sz                    => b_ty 
-  | Ox86_LEA sz                   => w_ty sz
-  | Ox86_TEST sz | Ox86_CMP sz    => b5_ty
-  | Ox86_AND sz | Ox86_ANDN sz | Ox86_OR sz | Ox86_XOR sz => b5w_ty sz
-  | Ox86_NOT sz                   => w_ty sz
-  | Ox86_ROL sz | Ox86_ROR sz     => b2w_ty sz
-  | Ox86_SHL sz | Ox86_SHR sz     => b5w_ty sz 
-  | Ox86_SAR sz | Ox86_SHLD sz | Ox86_SHRD sz => b5w_ty sz
-  | Ox86_MOVD _
-  | Ox86_VPINSR _
-  | Ox86_VEXTRACTI128
-    => [:: sword128 ]
-  | Ox86_VMOVDQU sz
-  | Ox86_VPAND sz | Ox86_VPANDN sz | Ox86_VPOR sz | Ox86_VPXOR sz
-  | Ox86_VPADD _ sz | Ox86_VPSUB _ sz | Ox86_VPMULL _ sz | Ox86_VPMULU sz
-  | Ox86_VPSLL _ sz | Ox86_VPSRL _ sz | Ox86_VPSRA _ sz 
-  | Ox86_VPSLLV _ sz | Ox86_VPSRLV _ sz
-  | Ox86_VPSLLDQ sz | Ox86_VPSRLDQ sz
-  | Ox86_VPSHUFB sz | Ox86_VPSHUFHW sz | Ox86_VPSHUFLW sz | Ox86_VPSHUFD sz
-  | Ox86_VPUNPCKH _ sz | Ox86_VPUNPCKL _ sz
-  | Ox86_VPBLENDD sz | Ox86_VPBROADCAST _ sz
-    => [:: sword sz ]
-  | Ox86_VBROADCASTI128
-  | Ox86_VPERM2I128
-  | Ox86_VPERMQ
-  | Ox86_VINSERTI128
-    => [:: sword256 ]
-  | Ox86_VPEXTR ve => [:: sword ve ]
-  end.
+  | Omulu sz => w2_ty sz sz tt
+  | Oaddcarry sz => bw_ty sz tt
+  | Osubcarry sz => bw_ty sz tt
+  | Oset0 sz => b5w_ty sz tt
+  | Ox86 inst => x86_instr_t_tout inst
+end.
 
 Definition sopn_tin (o: sopn) : list stype :=
   match o with
-  | Oaddcarry sz
-  | Osubcarry sz
-  | Ox86_ADC sz
-  | Ox86_SBB sz
-    => let t := sword sz in [:: t ; t ; sbool ]
+  | Omulu sz => let t := sword sz in [:: t ; t ]
+  | Oaddcarry sz => let t := sword sz in [:: t ; t ; sbool ]
+  | Osubcarry sz => let t := sword sz in [:: t ; t ; sbool ]
   | Oset0 _ => [::]
-  | Ox86_MOV sz
-  | Ox86_MOVSX _ sz
-  | Ox86_MOVZX _ sz
-  | Ox86_NEG sz
-  | Ox86_INC sz
-  | Ox86_DEC sz
-  | Ox86_NOT sz
-  | Ox86_BSWAP sz
-  | Ox86_CQO sz  
-  | Ox86_MOVD sz
-  | Ox86_VMOVDQU sz
-    => [:: sword sz ]
+  | Ox86 inst => x86_instr_t_tin inst
+end.
+
+(*   | Ox86_ADC sz => let t := sword sz in [:: t ; t ; sbool ]
+  | Ox86_SBB sz => let t := sword sz in [:: t ; t ; sbool ]
+  | Ox86_MOV sz => [:: sword sz ]
+  | Ox86_MOVSX _ sz => [:: sword sz ]
+  | Ox86_MOVZX _ sz => [:: sword sz ]
+  | Ox86_NEG sz => [:: sword sz ]
+  | Ox86_INC sz => [:: sword sz ]
+  | Ox86_DEC sz => [:: sword sz ]
+  | Ox86_NOT sz => [:: sword sz ]
+  | Ox86_BSWAP sz => [:: sword sz ]
+  | Ox86_CQO sz => [:: sword sz ]
+  | Ox86_MOVD sz => [:: sword sz ]
+  | Ox86_VMOVDQU sz => [:: sword sz ]
   | Ox86_MOVZX32 => [:: sword32 ]
   | Ox86_CMOVcc sz => [:: sbool ; sword sz ; sword sz ]
-  | Omulu sz
-  | Ox86_ADD sz
-  | Ox86_SUB sz
-  | Ox86_MUL sz
-  | Ox86_IMUL sz
-  | Ox86_IMULt sz
-  | Ox86_IMULtimm sz
-  | Ox86_BT sz
-  | Ox86_TEST sz
-  | Ox86_CMP sz
-  | Ox86_AND sz
-  | Ox86_ANDN sz
-  | Ox86_OR sz
-  | Ox86_XOR sz
-    => let t := sword sz in [:: t ; t ]
-  | Ox86_DIV sz
-  | Ox86_IDIV sz
-    => let t := sword sz in [:: t ; t ; t ]
+  | Ox86_ADD sz => let t := sword sz in [:: t ; t ]
+  | Ox86_SUB sz => let t := sword sz in [:: t ; t ]
+  | Ox86_MUL sz => let t := sword sz in [:: t ; t ]
+  | Ox86_IMUL sz => let t := sword sz in [:: t ; t ]
+  | Ox86_IMULt sz => let t := sword sz in [:: t ; t ]
+  | Ox86_IMULtimm sz => let t := sword sz in [:: t ; t ]
+  | Ox86_BT sz => let t := sword sz in [:: t ; t ]
+  | Ox86_TEST sz => let t := sword sz in [:: t ; t ]
+  | Ox86_CMP sz => let t := sword sz in [:: t ; t ]
+  | Ox86_AND sz => let t := sword sz in [:: t ; t ]
+  | Ox86_ANDN sz => let t := sword sz in [:: t ; t ]
+  | Ox86_OR sz => let t := sword sz in [:: t ; t ]
+  | Ox86_XOR sz => let t := sword sz in [:: t ; t ]
+  | Ox86_DIV sz => let t := sword sz in [:: t ; t ; t ]
+  | Ox86_IDIV sz => let t := sword sz in [:: t ; t ; t ]
   | Ox86_SETcc => [:: sbool ]
   | Ox86_LEA sz => let t := sword sz in [:: t ; t ; t ; t ]
-  | Ox86_ROR sz
-  | Ox86_ROL sz
-  | Ox86_SHL sz
-  | Ox86_SHR sz
-  | Ox86_SAR sz
-  | Ox86_VPSLLDQ sz | Ox86_VPSRLDQ sz
-    => [:: sword sz ; sword8 ]
-  | Ox86_SHLD sz
-  | Ox86_SHRD sz
-  | Ox86_VPBLENDD sz
-    => let t := sword sz in [:: t ; t ; sword8 ]
-  | Ox86_VPAND sz | Ox86_VPANDN sz | Ox86_VPOR sz | Ox86_VPXOR sz
-  | Ox86_VPADD _ sz | Ox86_VPSUB _ sz | Ox86_VPMULL _ sz | Ox86_VPMULU sz
-  | Ox86_VPSLLV _ sz | Ox86_VPSRLV _ sz
-  | Ox86_VPSHUFB sz
-  | Ox86_VPUNPCKH _ sz | Ox86_VPUNPCKL _ sz
-    => let t := sword sz in [:: t; t ]
+  | Ox86_ROR sz => [:: sword sz ; sword8 ]
+  | Ox86_ROL sz => [:: sword sz ; sword8 ]
+  | Ox86_SHL sz => [:: sword sz ; sword8 ]
+  | Ox86_SHR sz => [:: sword sz ; sword8 ]
+  | Ox86_SAR sz => [:: sword sz ; sword8 ]
+  | Ox86_VPSLLDQ sz => [:: sword sz ; sword8 ]
+  | Ox86_VPSRLDQ sz => [:: sword sz ; sword8 ]
+  | Ox86_SHLD sz => let t := sword sz in [:: t ; t ; sword8 ]
+  | Ox86_SHRD sz => let t := sword sz in [:: t ; t ; sword8 ]
+  | Ox86_VPBLENDD sz => let t := sword sz in [:: t ; t ; sword8 ]
+  | Ox86_VPAND sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPANDN sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPOR sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPXOR sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPADD _ sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPSUB _ sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPMULL _ sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPMULU sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPSLLV _ sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPSRLV _ sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPSHUFB sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPUNPCKH _ sz => let t := sword sz in [:: t; t ]
+  | Ox86_VPUNPCKL _ sz => let t := sword sz in [:: t; t ]
   | Ox86_VPEXTR _ => [:: sword128 ; sword8 ]
   | Ox86_VPINSR ve => [:: sword128 ; sword ve ; sword8 ]
-  | Ox86_VPSLL _ sz | Ox86_VPSRL _ sz | Ox86_VPSRA _ sz 
-  | Ox86_VPSHUFHW sz | Ox86_VPSHUFLW sz
-  | Ox86_VPSHUFD sz
-    => [:: sword sz; sword8 ]
+  | Ox86_VPSLL _ sz => [:: sword sz; sword8 ]
+  | Ox86_VPSRL _ sz => [:: sword sz; sword8 ]
+  | Ox86_VPSRA _ sz => [:: sword sz; sword8 ]
+  | Ox86_VPSHUFHW sz => [:: sword sz; sword8 ]
+  | Ox86_VPSHUFLW sz => [:: sword sz; sword8 ]
+  | Ox86_VPSHUFD sz => [:: sword sz; sword8 ]
   | Ox86_VPBROADCAST ve _ => [:: sword ve ]
   | Ox86_VBROADCASTI128 => [:: sword128 ]
   | Ox86_VINSERTI128 => [:: sword256 ; sword128 ; sword8 ]
   | Ox86_VPERM2I128 => [:: sword256 ; sword256 ; sword8 ]
-  | Ox86_VEXTRACTI128
-  | Ox86_VPERMQ => [:: sword256 ; sword8 ]
-  end.
-
+  | Ox86_VEXTRACTI128 => [:: sword256 ; sword8 ]
+  | Ox86_VPERMQ => [:: sword256 ; sword8 ] *)
+(*   end.
+ *)
 (* Type of unany operators: input, output *)
 Definition type_of_op1 (o: sop1) : stype * stype :=
   match o with
