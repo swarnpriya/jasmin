@@ -523,12 +523,10 @@ Definition write_lval (l:lval) (v:value) (s:estate) : exec estate :=
 Definition write_lvals (s:estate) xs vs :=
    fold2 ErrType write_lval xs vs s.
 
-End SEM_PEXPR.
-
 Definition pval t1 t2 (p: sem_t t1 * sem_t t2) :=
   [::to_val p.1; to_val p.2].
 
-Definition SF_of_word sz (w : word sz) :=
+(* Definition SF_of_word sz (w : word sz) :=
   msb w.
 
 Definition PF_of_word sz (w : word sz) :=
@@ -589,7 +587,7 @@ Definition rflags_of_bwop_w sz (w : word sz) : exec values :=
 
 Definition vbools bs : exec values := ok (List.map Vbool bs).
 
-(* -------------------------------------------------------------------- *)
+(* -------------------------------------------------------------------- *) *)
 
 
 Definition x86_MOV sz (x: word sz) : exec values :=

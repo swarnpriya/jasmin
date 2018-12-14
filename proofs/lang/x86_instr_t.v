@@ -139,7 +139,7 @@ Definition bw2_ty   sz      := [:: sbool; sword sz; sword sz].
 Definition b2w_ty   sz      := [:: sbool; sbool; sword sz].
 Definition b4w_ty   sz      := [:: sbool; sbool; sbool; sbool; sword sz].
 Definition b5w_ty   sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz].
-Definition b5ww_ty  sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz; sword sz].
+Definition b5w2_ty  sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz; sword sz].
 
 Definition w_ty     sz      := [:: sword sz].
 Definition w2_ty    sz sz'  := [:: sword sz; sword sz'].
@@ -163,13 +163,13 @@ Definition x86_MOV sz (x: word sz) : exec (word sz) :=
   Let _ := check_size_8_64 sz in
   ok x.
 
-Notation mk_instr str tin tout semi := 
+Notation mk_instr str tin tout semi :=
   {| str := str; tin := tin; tout := tout; semi := semi; tin_narr := refl_equal |}.
 
-Definition mk_instr_w name semi sz := 
+Definition mk_instr_w name semi sz :=
   mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz).
 
-Definition mk_instr_w2_b5w name semi sz := 
+Definition mk_instr_w2_b5w name semi sz :=
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz).
 
 Definition Ox86_MOV_instr := mk_instr_w "Ox86_MOV" x86_MOV.
@@ -184,12 +184,12 @@ Definition Ox86_MOVZX32_instr           := {| str:= pp_s  "Ox86_MOVZX32";       
 Definition Ox86_CMOVcc_instr sz         := {| str:= pp_sz "Ox86_CMOVcc" sz;          tout:= w_ty sz ;     tin:= bw2_ty sz |}.
 Definition Ox86_ADD_instr sz            := {| str:= pp_sz "Ox86_ADD" sz;             tout:= b5w_ty sz;    tin:= w2_ty sz sz |}.
 Definition Ox86_SUB_instr sz            := {| str:= pp_sz "Ox86_SUB" sz;             tout:= b5w_ty sz;    tin:= w2_ty sz sz |}.
-Definition Ox86_MUL_instr sz            := {| str:= pp_sz "Ox86_MUL" sz;             tout:= b5ww_ty sz;   tin:= w2_ty sz sz |}.
-Definition Ox86_IMUL_instr sz           := {| str:= pp_sz "Ox86_IMUL" sz;            tout:= b5ww_ty sz;   tin:= w2_ty sz sz |}.
+Definition Ox86_MUL_instr sz            := {| str:= pp_sz "Ox86_MUL" sz;             tout:= b5w2_ty sz;   tin:= w2_ty sz sz |}.
+Definition Ox86_IMUL_instr sz           := {| str:= pp_sz "Ox86_IMUL" sz;            tout:= b5w2_ty sz;   tin:= w2_ty sz sz |}.
 Definition Ox86_IMULt_instr sz          := {| str:= pp_sz "Ox86_IMULt" sz;           tout:= b5w_ty sz;    tin:= w2_ty sz sz |}.
 Definition Ox86_IMULtimm_instr sz       := {| str:= pp_sz "Ox86_IMULtimm" sz;        tout:= b5w_ty sz;    tin:= w2_ty sz sz |}.
-Definition Ox86_DIV_instr sz            := {| str:= pp_sz "Ox86_DIV" sz;             tout:= b5ww_ty sz;   tin:= w3_ty sz |}.
-Definition Ox86_IDIV_instr sz           := {| str:= pp_sz "Ox86_IDIV" sz;            tout:= b5ww_ty sz;   tin:= w3_ty sz |}.
+Definition Ox86_DIV_instr sz            := {| str:= pp_sz "Ox86_DIV" sz;             tout:= b5w2_ty sz;   tin:= w3_ty sz |}.
+Definition Ox86_IDIV_instr sz           := {| str:= pp_sz "Ox86_IDIV" sz;            tout:= b5w2_ty sz;   tin:= w3_ty sz |}.
 Definition Ox86_CQO_instr sz            := {| str:= pp_sz "Ox86_CQO" sz;             tout:= w_ty sz;      tin:= w_ty sz |}.
 Definition Ox86_ADC_instr sz            := {| str:= pp_sz "Ox86_ADC" sz;             tout:= b5w_ty sz;    tin:= w2b_ty sz sz |}.
 Definition Ox86_SBB_instr sz            := {| str:= pp_sz "Ox86_SBB" sz;             tout:= b5w_ty sz;    tin:= w2b_ty sz sz |}.
@@ -249,7 +249,7 @@ Definition Ox86_VPERMQ_instr            := {| str:= pp_s "Ox86_VPERMQ" ;        
 
 
 
-(* 
+(*
   | Ox86_MOV sz => app_w sz (@x86_MOV sz)
   | Ox86_MOVSX sz sz' => app_w sz' (@x86_MOVSX sz sz')
   | Ox86_MOVZX sz sz' => app_w sz' (@x86_MOVZX sz sz')
@@ -418,5 +418,3 @@ Definition x86_instr_t_tin o :=
 
 Definition x86_instr_t_sem o :=
   semi (map_instruction o).
-
-
