@@ -394,3 +394,4 @@ Proof.
   + by case: t2.
   by case: t2.
 Qed.
+

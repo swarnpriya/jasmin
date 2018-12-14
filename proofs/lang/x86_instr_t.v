@@ -28,7 +28,7 @@ Require Import oseq.
 Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
-Require Export strings word utils type var.
+Require Export strings sem_type.
 Require Import xseq.
 Import Utf8 ZArith.
 
@@ -160,13 +160,18 @@ Definition w256w128w8_ty    (_: unit) := [:: sword256; sword128; sword8].
 Definition w256x2w8_ty      (_: unit) := [:: sword256; sword256; sword8].
 
 Record Instruction := mkInstruction {
-  str: unit -> string;
-  tout: unit -> list stype;
-  tin: unit ->  list stype
+  str  : unit -> string;
+  tout : unit -> list stype;
+  tin  : unit -> list stype;
+  semi : sem_prod (tin tt) (exec (sem_tuple (tout tt)));
 }.
 
-Definition Ox86_MOV_instr sz            := {| str:= pp_sz "Ox86_MOV" sz;             tout:= w_ty sz ;     tin:= w_ty sz |}.
-Definition Ox86_MOVSX_instr sz sz'      := {| str:= pp_sz_sz "Ox86_MOVSX" sz sz';    tout:= w_ty sz ;     tin:= w_ty sz' |}.
+Definition x86_MOV sz (x: word sz) : exec (word sz) :=
+  Let _ := check_size_8_64 sz in
+  ok x.
+
+Definition Ox86_MOV_instr sz            := {| str:= pp_sz "Ox86_MOV" sz;             tout:= w_ty sz ;     tin:= w_ty sz; semi := @x86_MOV sz |}.
+(*Definition Ox86_MOVSX_instr sz sz'      := {| str:= pp_sz_sz "Ox86_MOVSX" sz sz';    tout:= w_ty sz ;     tin:= w_ty sz' |}.
 Definition Ox86_MOVZX_instr sz sz'      := {| str:= pp_sz_sz "Ox86_MOVZX" sz sz';    tout:= w_ty sz ;     tin:= w_ty sz' |}.
 Definition Ox86_MOVZX32_instr           := {| str:= pp_s  "Ox86_MOVZX32";            tout:= w64_ty;       tin:= w32_ty |}.
 Definition Ox86_CMOVcc_instr sz         := {| str:= pp_sz "Ox86_CMOVcc" sz;          tout:= w_ty sz ;     tin:= bw2_ty sz |}.
@@ -233,7 +238,7 @@ Definition Ox86_VBROADCASTI128_instr    := {| str:= pp_s "Ox86_VBROADCASTI128" ;
 Definition Ox86_VEXTRACTI128_instr      := {| str:= pp_s "Ox86_VEXTRACTI128" ;       tout:= w128_ty;      tin:= w256w8_ty |}.
 Definition Ox86_VINSERTI128_instr       := {| str:= pp_s "Ox86_VINSERTI128" ;        tout:= w256_ty;      tin:= w256w128w8_ty |}.
 Definition Ox86_VPERM2I128_instr        := {| str:= pp_s "Ox86_VPERM2I128" ;         tout:= w256_ty;      tin:= w256x2w8_ty |}.
-Definition Ox86_VPERMQ_instr            := {| str:= pp_s "Ox86_VPERMQ" ;             tout:= w256_ty;      tin:= w256w8_ty |}.
+Definition Ox86_VPERMQ_instr            := {| str:= pp_s "Ox86_VPERMQ" ;             tout:= w256_ty;      tin:= w256w8_ty |}. *)
 
 
 
@@ -324,7 +329,8 @@ Definition Ox86_VPERMQ_instr            := {| str:= pp_s "Ox86_VPERMQ" ;        
 Definition map_instruction o : Instruction :=
   match o with
   | Ox86_MOV sz             => Ox86_MOV_instr sz
-  | Ox86_MOVSX sz sz'       => Ox86_MOVSX_instr sz sz'
+  | _ => Ox86_MOV_instr U8
+(*  | Ox86_MOVSX sz sz'       => Ox86_MOVSX_instr sz sz'
   | Ox86_MOVZX sz sz'       => Ox86_MOVZX_instr sz sz'
   | Ox86_CMOVcc sz          => Ox86_CMOVcc_instr sz
   | Ox86_BSWAP sz           => Ox86_BSWAP_instr sz
@@ -391,7 +397,7 @@ Definition map_instruction o : Instruction :=
   | Ox86_VPERM2I128         => Ox86_VPERM2I128_instr
   | Ox86_VPERMQ             => Ox86_VPERMQ_instr
   | Ox86_VINSERTI128        => Ox86_VINSERTI128_instr
-  | Ox86_VPEXTR ve          => Ox86_VPEXTR_instr ve
+  | Ox86_VPEXTR ve          => Ox86_VPEXTR_instr ve *)
   end.
 
 Definition string_of_x86_instr_t o : string :=
