@@ -159,6 +159,63 @@ Definition w256w8_ty        := [:: sword256; sword8].
 Definition w256w128w8_ty    := [:: sword256; sword128; sword8].
 Definition w256x2w8_ty      := [:: sword256; sword256; sword8].
 
+Definition SF_of_word sz (w : word sz) :=
+  msb w.
+
+Definition PF_of_word sz (w : word sz) :=
+  lsb w.
+
+Definition ZF_of_word sz (w : word sz) :=
+  w == 0%R.
+
+(* -------------------------------------------------------------------- *)
+  (*  OF; CF; SF;    PF;    ZF  *)
+Definition rflags_of_bwop sz (w : word sz) :=
+  (*  OF;  CF;    SF;           PF;           ZF  *)
+  ( false, false, SF_of_word w, PF_of_word w, ZF_of_word w).
+
+(* -------------------------------------------------------------------- *)
+(*  OF; CF ;SF; PF; ZF  *)
+Definition rflags_of_aluop sz (w : word sz) (vu vs : Z) :=
+  (*  OF;             CF;                SF;           PF;           ZF  *)
+  ( wsigned  w != vs, wunsigned w != vu, SF_of_word w, PF_of_word w, ZF_of_word w ).
+
+(* -------------------------------------------------------------------- *)
+Definition rflags_of_mul (ov : bool) :=
+  (*  OF; CF; SF;    PF;    ZF  *)
+  (   ov, ov, sbool, sbool, sbool ).
+Check rflags_of_mul.
+
+(* -------------------------------------------------------------------- *)
+
+Definition rflags_of_div :=
+  (*  OF;    CF;    SF;    PF;    ZF  *)
+  (   sbool, sbool, sbool, sbool, sbool ).
+
+(* -------------------------------------------------------------------- *)
+(*  OF; SF; PF; ZF  *)
+Definition rflags_of_aluop_nocf sz (w : word sz) (vs : Z) :=
+  (*  OF                 SF          ; PF          ; ZF          ] *)
+  (   wsigned   w != vs, SF_of_word w, PF_of_word w, ZF_of_word w ).
+
+(* Definition flags_w (bs:seq bool) sz (w: word sz) :=
+  ok ((map Vbool bs) ++ [:: Vword w]).
+ *)
+(* Definition rflags_of_aluop_w sz (w : word sz) (vu vs : Z) : exec values :=
+  flags_w (rflags_of_aluop w vu vs) w.
+ *)
+(* Definition rflags_of_aluop_nocf_w sz (w : word sz) (vs : Z) : exec values :=
+  flags_w (rflags_of_aluop_nocf w vs) w.
+ *)
+(* Definition rflags_of_bwop_w sz (w : word sz) : exec values :=
+  flags_w (rflags_of_bwop w) w.
+ *)
+(* Definition vbools bs : exec values := ok (List.map Vbool bs).
+ *)
+(* -------------------------------------------------------------------- *)
+
+
+
 Definition x86_MOV sz (x: word sz) : exec (word sz) :=
   Let _ := check_size_8_64 sz in
   ok x.
