@@ -660,21 +660,11 @@ Qed.
 Lemma sopn_tinP o vs vs' : exec_sopn o vs = ok vs' ->
   all2 subtype (sopn_tin o) (List.map type_of_val vs).
 Proof.
-rewrite /exec_sopn; case: o => //=;
-try by repeat match goal with
-| |- match ?x with _ => _ end = ok _ → _ => case: x => //
-| |- Let _ := _ in _ = ok _ → _ => apply: rbindP => //=
-| |- to_bool ?v = ok _ → _ => move => /to_boolI -> {v}
-| |- is_word ?sz ?w = ok ?u → _ => move => /is_wordI /= -> {u}
-| |- to_word ?sz ?v = ok _ → _ =>
-  let k := fresh in case/to_wordI => ? [?] [k ->?]; rewrite /= k => {k}
-| |- _ → _ => intro
-end.
-rewrite /x86_instr_t_tin /x86_instr_t_sem => /= x.
-case (map_instruction x) => /= _ tout tin semi _.
-t_xrbindP => p hp _.
-elim: tin vs semi hp => /= [ | t tin hrec] [ | v vs] // semi.
-by t_xrbindP => sv /= /of_val_subtype -> /hrec.
+  rewrite /exec_sopn /sopn_tin /sopn_sem.
+  case (get_instr o) => /= _ tin tout semi _ _.
+  t_xrbindP => p hp _.
+  elim: tin vs semi hp => /= [ | t tin hrec] [ | v vs] // semi.
+  by t_xrbindP => sv /= /of_val_subtype -> /hrec.
 Qed.
 
 Lemma on_arr_varP A (f : forall n, WArray.array n -> exec A) v s x P0:
@@ -1732,11 +1722,8 @@ Lemma vuincl_exec_opn_eq o vs vs' v :
   List.Forall2 value_uincl vs vs' -> exec_sopn o vs = ok v ->
   exec_sopn o vs' = ok v.
 Proof.
-rewrite /sem_sopn; case: o; do 2 (try (refine (λ sz: wsize, _)));
-try apply: vuincl_sopn => //.
-move=> x /= h1; t_xrbindP => vs1 h2 h3. 
-have -> /= := vuincl_sopn (tin_narr _) h1 h2.
-by rewrite h3.
+rewrite /exec_sopn /sopn_sem => h1; t_xrbindP => vs1 h2 h3. 
+by have -> /= := vuincl_sopn (tin_narr _) h1 h2;rewrite h3.
 Qed.
 
 Lemma vuincl_exec_opn o vs vs' v :

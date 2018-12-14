@@ -249,7 +249,7 @@ Definition Oaddcarry_instr := mk_instr_w2b_bw "Oaddcarry" waddcarry.
 Definition Osubcarry_instr := mk_instr_w2b_bw "Osubcarry" wsubcarry.
 Definition Oset0_instr     := 
   mk_instr__b5w "Oset0" (fun sz => let vf := Some false in
-                 ok (vf, vf, vf, vf, Some true, (0%R: word sz))).                  
+                 ok (::vf, vf, vf, vf, Some true & (0%R: word sz))).                  
 
 Definition get_instr o := 
   match o with
@@ -262,9 +262,10 @@ Definition get_instr o :=
 
 Definition string_of_sopn o : string := str (get_instr o) tt.
 
-Definition sopn_tint o : list stype := tin (get_instr o).
+Definition sopn_tin o : list stype := tin (get_instr o).
 Definition sopn_tout o : list stype := tout (get_instr o).
 Definition sopn_sem  o := semi (get_instr o).
+Definition wsize_of_sopn o : wsize := wsizei (get_instr o).
 
 (* Type of unany operators: input, output *)
 Definition type_of_op1 (o: sop1) : stype * stype :=

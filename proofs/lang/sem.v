@@ -125,6 +125,15 @@ Definition truncate_val (ty: stype) (v: value) : exec value :=
 Lemma type_of_to_val t (s: sem_t t) : type_of_val (to_val s) = t.
 Proof. by case: t s. Qed.
 
+Definition oto_val t : sem_ot t -> value := 
+  match t return sem_ot t -> value with
+  | sbool => fun ob => if ob is Some b then Vbool b else Vundef sbool
+  | x     => @to_val x
+  end.
+
+Lemma type_of_oto_val t (s: sem_ot t) : type_of_val (oto_val s) = t.
+Proof. by case: t s => //= -[]. Qed.
+
 (* -------------------------------------------------------------------- *)
 Definition subtype (t t': stype) :=
   match t with
@@ -523,8 +532,10 @@ Definition write_lval (l:lval) (v:value) (s:estate) : exec estate :=
 Definition write_lvals (s:estate) xs vs :=
    fold2 ErrType write_lval xs vs s.
 
-Definition pval t1 t2 (p: sem_t t1 * sem_t t2) :=
-  [::to_val p.1; to_val p.2].
+End SEM_PEXPR.
+
+(*Definition pval t1 t2 (p: sem_t t1 * sem_t t2) :=
+  [::to_val p.1; to_val p.2]. *)
 
 (* Definition SF_of_word sz (w : word sz) :=
   msb w.
@@ -1043,12 +1054,6 @@ Notation app_wwb sz o := (app_sopn [:: sword sz; sword sz; sbool] o).
 Notation app_bww o := (app_sopn [:: sbool; sword; sword] o).
 Notation app_w4 sz o  := (app_sopn [:: sword sz; sword sz; sword sz; sword sz] o). *)
 
-Definition oto_val t : sem_ot t -> value := 
-  match t return sem_ot t -> value with
-  | sbool => fun ob => if ob is Some b then Vbool b else Vundef sbool
-  | x     => @to_val x
-  end.
-
 
 Fixpoint list_ltuple (ts:list stype) : sem_tuple ts -> values :=
   match ts return sem_tuple ts -> values with
@@ -1063,22 +1068,10 @@ Fixpoint list_ltuple (ts:list stype) : sem_tuple ts -> values :=
     end rec
   end.
 
-Check wumul.
-Definition mk_instr_w_w2 
-Definition exec_sopn (o:sopn) :  values -> exec values :=
-  match o with
-  | Omulu sz => app_ww sz (fun x y => ok (@pval (sword sz) (sword sz) (wumul x y)))
-  | Oaddcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (waddcarry x y c)))
-  | Osubcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (wsubcarry x y c)))
-  | Oset0 sz => app_sopn [::]
-    (Let _ := check_size_8_64 sz in
-     let vf := Vbool false in
-     ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
-  | Ox86 instr => fun vs =>
-    let sem := x86_instr_t_sem instr in
-    Let t := app_sopn _ sem vs in
-    ok (list_ltuple t)
-  end.
+Definition exec_sopn (o:sopn) (vs:values) : exec values :=
+  let semi := sopn_sem o in
+  Let t := app_sopn _ semi vs in
+  ok (list_ltuple t).
 
   (* Low level x86 operations *)
 (*   | Ox86_MOV sz => app_w sz (@x86_MOV sz)
@@ -1162,7 +1155,8 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
   | Ox86_VPERMQ => app_w8 U256 x86_vpermq
   end.
  *)
-Ltac app_sopn_t := 
+
+(*Ltac app_sopn_t := 
   match goal with
   | |- forall (_:wsize), _     => move=> ?;app_sopn_t
   | |- forall (_:velem), _     => move=> ?;app_sopn_t
@@ -1181,22 +1175,20 @@ Ltac app_sopn_t :=
   | |- _ = ok ?a -> _ => move => /(@ok_inj _ _ _ _); app_sopn_t
   | |- ?a = ?b -> _ => (move => ?; subst a || subst b); app_sopn_t
   | _ => idtac
-  end.
+  end.*)
 
 Lemma type_of_val_ltuple tout (p : sem_tuple tout) :
   List.map type_of_val (list_ltuple p) = tout.
 Proof.
   elim: tout p => //= t1 [|t2 tout] /=.
-  + by rewrite /sem_tuple /= => _ x;rewrite type_of_to_val.
-  by move=> hrec [] x xs /=; rewrite type_of_to_val hrec.
+  + by rewrite /sem_tuple /= => _ x;rewrite type_of_oto_val.
+  by move=> hrec [] x xs /=; rewrite type_of_oto_val hrec.
 Qed.
 
 Lemma sopn_toutP o vs vs' : exec_sopn o vs = ok vs' ->
   List.map type_of_val vs' = sopn_tout o.
 Proof.
-  rewrite /exec_sopn ;case: o => /=;app_sopn_t => //.
-  rewrite /x86_instr_t_sem /x86_instr_t_tout => x.
-  case : map_instruction => /= _ tout tin semi all. 
+  rewrite /exec_sopn /sopn_tout /sopn_sem.
   t_xrbindP => p _ <-;apply type_of_val_ltuple.
 Qed.
 

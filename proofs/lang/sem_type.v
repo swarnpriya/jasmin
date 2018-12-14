@@ -95,9 +95,78 @@ Record Instruction := mkInstruction {
   tin  : list stype;
   tout : list stype;
   semi : sem_prod tin (exec (sem_tuple tout));
-  tin_narr : all is_not_sarr tin
+  tin_narr : all is_not_sarr tin;
+  wsizei : wsize; 
 }.
 
+(*
+The field wsizei ....
+*)
+(*
+Definition wsize_of_sopn (op: sopn) : wsize :=
+  match op with
+  | Ox86_SETcc => U8
+  | Omulu x
+  | Oaddcarry x
+  | Osubcarry x
+  | Oset0 x
+  | Ox86_MOV x
+  | Ox86_MOVSX _ x
+  | Ox86_MOVZX _ x
+  | Ox86_CMOVcc x
+  | Ox86_ADD x
+  | Ox86_SUB x
+  | Ox86_MUL x
+  | Ox86_IMUL x
+  | Ox86_IMULt x
+  | Ox86_IMULtimm x
+  | Ox86_DIV x
+  | Ox86_IDIV x
+  | Ox86_CQO x 
+  | Ox86_ADC x
+  | Ox86_SBB x
+  | Ox86_NEG x
+  | Ox86_INC x
+  | Ox86_DEC x
+  | Ox86_BT x
+  | Ox86_LEA x
+  | Ox86_TEST x
+  | Ox86_CMP x
+  | Ox86_AND x
+  | Ox86_ANDN x
+  | Ox86_OR x
+  | Ox86_XOR x
+  | Ox86_NOT x
+  | Ox86_ROR x
+  | Ox86_ROL x
+  | Ox86_SHL x
+  | Ox86_SHR x
+  | Ox86_SAR x
+  | Ox86_SHLD x
+  | Ox86_SHRD x
+  | Ox86_BSWAP x
+  | Ox86_VMOVDQU x
+  | Ox86_VPAND x | Ox86_VPANDN x | Ox86_VPOR x | Ox86_VPXOR x
+  | Ox86_VPADD _ x | Ox86_VPSUB _ x | Ox86_VPMULL _ x | Ox86_VPMULU x
+  | Ox86_VPSLL _ x | Ox86_VPSRL _ x | Ox86_VPSRA _ x
+  | Ox86_VPSLLV _ x | Ox86_VPSRLV _ x
+  | Ox86_VPSLLDQ x | Ox86_VPSRLDQ x
+  | Ox86_VPSHUFB x | Ox86_VPSHUFHW x | Ox86_VPSHUFLW x | Ox86_VPSHUFD x
+  | Ox86_VPUNPCKH _ x | Ox86_VPUNPCKL _ x
+  | Ox86_VPBLENDD x | Ox86_VPBROADCAST _ x
+    => x
+  | Ox86_MOVZX32 => U32
+  | Ox86_MOVD _
+  | Ox86_VPEXTR _ | Ox86_VPINSR _
+    => U128
+  | Ox86_VBROADCASTI128
+  | Ox86_VEXTRACTI128
+  | Ox86_VINSERTI128
+  | Ox86_VPERM2I128
+  | Ox86_VPERMQ
+    => U256
+  end.
+*)
 (* ----------------------------------------------------------------------------- *)
 Definition pp_s     (s: string)                         (_: unit) : string := s.
 Definition pp_sz    (s: string) (sz: wsize)             (_: unit) : string := s ++ " " ++ string_of_wsize sz.
@@ -136,23 +205,29 @@ Definition w256x2w8_ty      := [:: sword256; sword256; sword8].
 
 (* ----------------------------------------------------------------------------- *)
 
-Notation mk_instr str tin tout semi :=
-  {| str := str; tin := tin; tout := tout; semi := semi; tin_narr := refl_equal |}.
+Notation mk_instr str tin tout semi wsizei:=
+  {| str := str; 
+     tin := tin; 
+     tout := tout; 
+     semi := semi; 
+     tin_narr := refl_equal;
+     wsizei := wsizei;
+  |}.
 
 Definition mk_instr_w2_w2 name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz).
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz) sz.
 
 Definition mk_instr_w2b_bw name semi sz :=
   mk_instr (pp_sz name sz) [::sword sz; sword sz; sbool] (sbool :: (w_ty sz)) 
-   (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)).
+   (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)) sz.
 
 Definition mk_instr__b5w name semi sz :=
-  mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz).
+  mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz) sz.
 
 Definition mk_instr_w name semi sz :=
-  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz).
+  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz) sz.
 
 Definition mk_instr_w2_b5w name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz).
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz) sz.
 
 (* ----------------------------------------------------------------------------- *)
