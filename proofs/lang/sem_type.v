@@ -29,7 +29,7 @@
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
 Require Import Psatz xseq.
-Require Export warray. 
+Require Export strings warray. 
 Import Utf8.
 
 Set Implicit Arguments.
