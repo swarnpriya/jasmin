@@ -115,6 +115,7 @@ Variant sopn : Set :=
 
 | Ox86      of x86_instr_t (* x86 instruction *)
 .
+
 (* | Ox86_MOV     of wsize  (* copy *)
 | Ox86_MOVSX of wsize & wsize (* sign-extension *)
 | Ox86_MOVZX of wsize & wsize (* zero-extension *)
@@ -239,6 +240,40 @@ Qed.
 
 Definition sopn_eqMixin     := Equality.Mixin sopn_eq_axiom.
 Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
+
+
+(* ----------------------------------------------------------------------------- *)
+
+Definition mk_instr_w2_w2 name semi sz :=
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz).
+
+Definition mk_instr_w2b_bw name semi sz :=
+  mk_instr (pp_sz name sz) [::sword sz; sword sz; sbool] (sbool :: (w_ty sz)) 
+   (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)).
+
+Definition mk_instr__b5w name semi sz :=
+  mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz).
+
+Definition Omulu_instr     := mk_instr_w2_w2 "Omulu" (fun sz x y => ok (@wumul sz x y)).
+Definition Oaddcarry_instr := mk_instr_w2b_bw "Oaddcarry" waddcarry.
+Definition Osubcarry_instr := mk_instr_w2b_bw "Osubcarry" wsubcarry.
+Definition Oset0_instr     := 
+  mk_instr__b5w "Oset0" (fun sz => let vf := Some false in
+                 ok (vf, vf, vf, vf, Some true, (0%R: word sz))).                  
+
+
+
+ Definition 
+ | Omulu sz => app_ww sz (fun x y => ok (@pval (sword sz) (sword sz) (wumul x y)))
+  | Oaddcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (waddcarry x y c)))
+  | Osubcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (wsubcarry x y c)))
+  | Oset0 sz => app_sopn [::]
+    (Let _ := check_size_8_64 sz in
+     let vf := Vbool false in
+     ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
+
+
+
 
 Definition string_of_sopn o : string :=
   match o with

@@ -1043,19 +1043,27 @@ Notation app_wwb sz o := (app_sopn [:: sword sz; sword sz; sbool] o).
 Notation app_bww o := (app_sopn [:: sbool; sword; sword] o).
 Notation app_w4 sz o  := (app_sopn [:: sword sz; sword sz; sword sz; sword sz] o).
 
+Definition oto_val t : sem_ot t -> value := 
+  match t return sem_ot t -> value with
+  | sbool => fun ob => if ob is Some b then Vbool b else Vundef sbool
+  | x     => @to_val x
+  end.
+  
 Fixpoint list_ltuple (ts:list stype) : sem_tuple ts -> values :=
   match ts return sem_tuple ts -> values with
   | [::] => fun (u:unit) => [::]
   | t :: ts => 
     let rec := @list_ltuple ts in
     match ts return (sem_tuple ts -> values) -> sem_tuple (t::ts) -> values with
-    | [::] => fun _ x => [:: to_val x]
+    | [::] => fun _ x => [:: oto_val x]
     | t1 :: ts' => 
-      fun rec (p : sem_t t * sem_tuple (t1 :: ts')) =>
-       to_val p.1 :: rec p.2
+      fun rec (p : sem_ot t * sem_tuple (t1 :: ts')) =>
+       oto_val p.1 :: rec p.2
     end rec
   end.
 
+Check wumul.
+Definition mk_instr_w_w2 
 Definition exec_sopn (o:sopn) :  values -> exec values :=
   match o with
   | Omulu sz => app_ww sz (fun x y => ok (@pval (sword sz) (sword sz) (wumul x y)))

@@ -49,11 +49,16 @@ Definition lprod ts tr :=
 
 Definition sem_prod ts tr := lprod (map sem_t ts) tr.
 
-Fixpoint ltuple (ts:list Type) : Type := 
+Fixpoint ltuple_aux (t:Type) (ts:list Type) : Type := 
+  match ts with
+  | [::] => t
+  | t1::ts => ltuple_aux (t * t1) ts
+  end.
+
+Definition ltuple (ts:list Type) : Type := 
   match ts with
   | [::] => unit
-  | [::t] => t
-  | t::ts => t * ltuple ts
+  | t::ts => ltuple_aux t ts
   end.
 
 Definition sem_ot (t:stype) : Type :=
