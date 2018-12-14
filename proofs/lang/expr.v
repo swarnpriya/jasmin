@@ -251,10 +251,10 @@ Definition string_of_sopn o : string :=
 
 Definition sopn_tout (o:sopn) :  list stype :=
   match o with
-  | Omulu sz => w2_ty sz sz tt
-  | Oaddcarry sz => bw_ty sz tt
-  | Osubcarry sz => bw_ty sz tt
-  | Oset0 sz => b5w_ty sz tt
+  | Omulu sz => w2_ty sz sz 
+  | Oaddcarry sz => bw_ty sz
+  | Osubcarry sz => bw_ty sz
+  | Oset0 sz => b5w_ty sz
   | Ox86 inst => x86_instr_t_tout inst
 end.
 

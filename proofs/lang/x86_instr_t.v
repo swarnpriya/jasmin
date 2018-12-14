@@ -131,47 +131,51 @@ Definition pp_sz_sz (s: string) (sz sz': wsize)         (_: unit) : string := s 
 Definition pp_ve_sz (s: string) (ve: velem) (sz: wsize) (_: unit) : string := s ++ " " ++ string_of_velem ve ++ " " ++ string_of_wsize sz.
 Definition pp_ve    (s: string) (ve: velem)             (_: unit)   : string := s ++ " " ++ string_of_velem ve.
 
-Definition b_ty             (_: unit) := [:: sbool].
-Definition b5_ty            (_: unit) := [:: sbool; sbool; sbool; sbool; sbool].
+Definition b_ty             := [:: sbool].
+Definition b5_ty            := [:: sbool; sbool; sbool; sbool; sbool].
 
-Definition bw_ty    sz      (_: unit) := [:: sbool; sword sz].
-Definition bw2_ty   sz      (_: unit) := [:: sbool; sword sz; sword sz].
-Definition b2w_ty   sz      (_: unit) := [:: sbool; sbool; sword sz].
-Definition b4w_ty   sz      (_: unit) := [:: sbool; sbool; sbool; sbool; sword sz].
-Definition b5w_ty   sz      (_: unit) := [:: sbool; sbool; sbool; sbool; sbool; sword sz].
-Definition b5ww_ty  sz      (_: unit) := [:: sbool; sbool; sbool; sbool; sbool; sword sz; sword sz].
+Definition bw_ty    sz      := [:: sbool; sword sz].
+Definition bw2_ty   sz      := [:: sbool; sword sz; sword sz].
+Definition b2w_ty   sz      := [:: sbool; sbool; sword sz].
+Definition b4w_ty   sz      := [:: sbool; sbool; sbool; sbool; sword sz].
+Definition b5w_ty   sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz].
+Definition b5ww_ty  sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz; sword sz].
 
-Definition w_ty     sz      (_: unit) := [:: sword sz].
-Definition w2_ty    sz sz'  (_: unit) := [:: sword sz; sword sz'].
-Definition w3_ty    sz      (_: unit) := [:: sword sz; sword sz; sword sz].
-Definition w4_ty    sz      (_: unit) := [:: sword sz; sword sz; sword sz; sword sz].
-Definition w32_ty           (_: unit) := [:: sword32].
-Definition w64_ty           (_: unit) := [:: sword64].
-Definition w128_ty          (_: unit) := [:: sword128].
-Definition w256_ty          (_: unit) := [:: sword256].
+Definition w_ty     sz      := [:: sword sz].
+Definition w2_ty    sz sz'  := [:: sword sz; sword sz'].
+Definition w3_ty    sz      := [:: sword sz; sword sz; sword sz].
+Definition w4_ty    sz      := [:: sword sz; sword sz; sword sz; sword sz].
+Definition w32_ty           := [:: sword32].
+Definition w64_ty           := [:: sword64].
+Definition w128_ty          := [:: sword128].
+Definition w256_ty          := [:: sword256].
 
-Definition w2b_ty   sz sz'  (_: unit) := [:: sword sz; sword sz'; sbool].
-Definition ww8_ty   sz      (_: unit) := [:: sword sz; sword8].
-Definition w2w8_ty   sz     (_: unit) := [:: sword sz; sword sz; sword8].
-Definition w128w8_ty        (_: unit) := [:: sword128; sword8].
-Definition w128ww8_ty sz    (_: unit) := [:: sword128; sword sz; sword8].
-Definition w256w8_ty        (_: unit) := [:: sword256; sword8].
-Definition w256w128w8_ty    (_: unit) := [:: sword256; sword128; sword8].
-Definition w256x2w8_ty      (_: unit) := [:: sword256; sword256; sword8].
+Definition w2b_ty   sz sz'  := [:: sword sz; sword sz'; sbool].
+Definition ww8_ty   sz      := [:: sword sz; sword8].
+Definition w2w8_ty   sz     := [:: sword sz; sword sz; sword8].
+Definition w128w8_ty        := [:: sword128; sword8].
+Definition w128ww8_ty sz    := [:: sword128; sword sz; sword8].
+Definition w256w8_ty        := [:: sword256; sword8].
+Definition w256w128w8_ty    := [:: sword256; sword128; sword8].
+Definition w256x2w8_ty      := [:: sword256; sword256; sword8].
+
+Definition is_not_sarr t := ~~ is_sarr t.
 
 Record Instruction := mkInstruction {
   str  : unit -> string;
-  tout : unit -> list stype;
-  tin  : unit -> list stype;
-  semi : sem_prod (tin tt) (exec (sem_tuple (tout tt)));
+  tout : list stype;
+  tin  : list stype;
+  semi : sem_prod tin (exec (sem_tuple tout));
+  tin_narr : all is_not_sarr tin
 }.
 
 Definition x86_MOV sz (x: word sz) : exec (word sz) :=
   Let _ := check_size_8_64 sz in
   ok x.
 
-Definition Ox86_MOV_instr sz            := {| str:= pp_sz "Ox86_MOV" sz;             tout:= w_ty sz ;     tin:= w_ty sz; semi := @x86_MOV sz |}.
-(*Definition Ox86_MOVSX_instr sz sz'      := {| str:= pp_sz_sz "Ox86_MOVSX" sz sz';    tout:= w_ty sz ;     tin:= w_ty sz' |}.
+Definition Ox86_MOV_instr sz            := {| str:= pp_sz "Ox86_MOV" sz;             tout:= w_ty sz ;     tin:= w_ty sz; semi := @x86_MOV sz ; tin_narr := refl_equal|}.
+(*
+Definition Ox86_MOVSX_instr sz sz'      := {| str:= pp_sz_sz "Ox86_MOVSX" sz sz';    tout:= w_ty sz ;     tin:= w_ty sz' |}.
 Definition Ox86_MOVZX_instr sz sz'      := {| str:= pp_sz_sz "Ox86_MOVZX" sz sz';    tout:= w_ty sz ;     tin:= w_ty sz' |}.
 Definition Ox86_MOVZX32_instr           := {| str:= pp_s  "Ox86_MOVZX32";            tout:= w64_ty;       tin:= w32_ty |}.
 Definition Ox86_CMOVcc_instr sz         := {| str:= pp_sz "Ox86_CMOVcc" sz;          tout:= w_ty sz ;     tin:= bw2_ty sz |}.
@@ -404,10 +408,12 @@ Definition string_of_x86_instr_t o : string :=
   str (map_instruction o) tt.
 
 Definition x86_instr_t_tout o :=
-  tout (map_instruction o) tt.
+  tout (map_instruction o).
 
 Definition x86_instr_t_tin o :=
-  tin (map_instruction o) tt.
+  tin (map_instruction o).
 
 Definition x86_instr_t_sem o :=
   semi (map_instruction o).
+
+

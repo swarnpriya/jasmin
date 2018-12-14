@@ -1189,8 +1189,8 @@ Lemma sopn_toutP o vs vs' : exec_sopn o vs = ok vs' ->
 Proof.
   rewrite /exec_sopn ;case: o => /=;app_sopn_t => //.
   rewrite /x86_instr_t_sem /x86_instr_t_tout => x.
-  case : map_instruction => /= _ /(_ tt) tout /(_ tt) tin semi. 
-  by t_xrbindP => p _ <-;apply type_of_val_ltuple.
+  case : map_instruction => /= _ tout tin semi all. 
+  t_xrbindP => p _ <-;apply type_of_val_ltuple.
 Qed.
 
 Section SEM.

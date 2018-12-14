@@ -671,7 +671,7 @@ try by repeat match goal with
 | |- _ → _ => intro
 end.
 rewrite /x86_instr_t_tin /x86_instr_t_sem => /= x.
-case (map_instruction x) => /= _ /(_ tt) tout /(_ tt) tin semi.
+case (map_instruction x) => /= _ tout tin semi _.
 t_xrbindP => p hp _.
 elim: tin vs semi hp => /= [ | t tin hrec] [ | v vs] // semi.
 by t_xrbindP => sv /= /of_val_subtype -> /hrec.
@@ -1610,8 +1610,6 @@ Proof.
   all: by have [z' [/= -> ->]] := of_val_uincl Hu Hz.
 Qed.
 
-Definition is_not_sarr t := ~~ is_sarr t.
-
 Lemma vuincl_sopn T ts o vs vs' (v: T) :
   all is_not_sarr ts ->
   List.Forall2 value_uincl vs vs' ->
@@ -1737,16 +1735,8 @@ Proof.
 rewrite /sem_sopn; case: o; do 2 (try (refine (λ sz: wsize, _)));
 try apply: vuincl_sopn => //.
 move=> x /= h1; t_xrbindP => vs1 h2 h3. 
-have := vuincl_sopn _ h1 h2.
-
-move: vs=> [] // vs1 [] // vs2 [] // vs3 [] //.
-case/List_Forall2_inv_l => vs'1 [?] [->] [H1].
-case/List_Forall2_inv_l => vs'2 [?] [->] [H2].
-case/List_Forall2_inv_l => vs'3 [?] [->] [H3].
-move/List_Forall2_inv_l => -> /=.
-t_xrbindP => _ -> /= b /(value_uincl_bool H1) [] _ -> /=.
-move=> w2 hw2 w3 hw3 <-.
-case b; rewrite (value_uincl_word _ hw3) ?(value_uincl_word _ hw2) /=; eauto.
+have -> /= := vuincl_sopn (tin_narr _) h1 h2.
+by rewrite h3.
 Qed.
 
 Lemma vuincl_exec_opn o vs vs' v :
