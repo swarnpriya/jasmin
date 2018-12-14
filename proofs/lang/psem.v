@@ -648,11 +648,20 @@ Proof.
   by exists n', t'.
 Qed.
 
+Lemma of_val_subtype t v sv : of_val t v = ok sv -> subtype t (type_of_val v).
+Proof.
+  case: t sv => /= [ | |p|ws] sv.
+  + by move=> /to_boolI ->.
+  + by move=> /to_intI ->.
+  + by move=> /to_arrI [n' [t' [-> /ZleP hle ?]]] /=.
+  by move=> /to_wordI [ws' [w [? -> ?]]] /=.
+Qed.
+
 Lemma sopn_tinP o vs vs' : exec_sopn o vs = ok vs' ->
   all2 subtype (sopn_tin o) (List.map type_of_val vs).
 Proof.
 rewrite /exec_sopn; case: o => //=;
-repeat match goal with
+try by repeat match goal with
 | |- match ?x with _ => _ end = ok _ → _ => case: x => //
 | |- Let _ := _ in _ = ok _ → _ => apply: rbindP => //=
 | |- to_bool ?v = ok _ → _ => move => /to_boolI -> {v}
@@ -660,8 +669,12 @@ repeat match goal with
 | |- to_word ?sz ?v = ok _ → _ =>
   let k := fresh in case/to_wordI => ? [?] [k ->?]; rewrite /= k => {k}
 | |- _ → _ => intro
-end;
-trivial.
+end.
+rewrite /x86_instr_t_tin /x86_instr_t_sem => /= x.
+case (map_instruction x) => /= _ /(_ tt) tout /(_ tt) tin semi.
+t_xrbindP => p hp _.
+elim: tin vs semi hp => /= [ | t tin hrec] [ | v vs] // semi.
+by t_xrbindP => sv /= /of_val_subtype -> /hrec.
 Qed.
 
 Lemma on_arr_varP A (f : forall n, WArray.array n -> exec A) v s x P0:
@@ -1722,8 +1735,10 @@ Lemma vuincl_exec_opn_eq o vs vs' v :
   exec_sopn o vs' = ok v.
 Proof.
 rewrite /sem_sopn; case: o; do 2 (try (refine (λ sz: wsize, _)));
-try (move => ve sz; exact: vuincl_sopn);
 try apply: vuincl_sopn => //.
+move=> x /= h1; t_xrbindP => vs1 h2 h3. 
+have := vuincl_sopn _ h1 h2.
+
 move: vs=> [] // vs1 [] // vs2 [] // vs3 [] //.
 case/List_Forall2_inv_l => vs'1 [?] [->] [H1].
 case/List_Forall2_inv_l => vs'2 [?] [->] [H2].

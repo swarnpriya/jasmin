@@ -408,3 +408,6 @@ Definition x86_instr_t_tout o :=
 
 Definition x86_instr_t_tin o :=
   tin (map_instruction o) tt.
+
+Definition x86_instr_t_sem o :=
+  semi (map_instruction o).

@@ -1045,6 +1045,19 @@ Notation app_wwb sz o := (app_sopn [:: sword sz; sword sz; sbool] o).
 Notation app_bww o := (app_sopn [:: sbool; sword; sword] o).
 Notation app_w4 sz o  := (app_sopn [:: sword sz; sword sz; sword sz; sword sz] o).
 
+Fixpoint list_ltuple (ts:list stype) : sem_tuple ts -> values :=
+  match ts return sem_tuple ts -> values with
+  | [::] => fun (u:unit) => [::]
+  | t :: ts => 
+    let rec := @list_ltuple ts in
+    match ts return (sem_tuple ts -> values) -> sem_tuple (t::ts) -> values with
+    | [::] => fun _ x => [:: to_val x]
+    | t1 :: ts' => 
+      fun rec (p : sem_t t * sem_tuple (t1 :: ts')) =>
+       to_val p.1 :: rec p.2
+    end rec
+  end.
+
 Definition exec_sopn (o:sopn) :  values -> exec values :=
   match o with
   | Omulu sz => app_ww sz (fun x y => ok (@pval (sword sz) (sword sz) (wumul x y)))
@@ -1054,8 +1067,11 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
     (Let _ := check_size_8_64 sz in
      let vf := Vbool false in
      ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
-  | Ox86 inst => (fun x =>  ok [::])
-end.
+  | Ox86 instr => fun vs =>
+    let sem := x86_instr_t_sem instr in
+    Let t := app_sopn _ sem vs in
+    ok (list_ltuple t)
+  end.
 
   (* Low level x86 operations *)
 (*   | Ox86_MOV sz => app_w sz (@x86_MOV sz)
@@ -1160,24 +1176,21 @@ Ltac app_sopn_t :=
   | _ => idtac
   end.
 
+Lemma type_of_val_ltuple tout (p : sem_tuple tout) :
+  List.map type_of_val (list_ltuple p) = tout.
+Proof.
+  elim: tout p => //= t1 [|t2 tout] /=.
+  + by rewrite /sem_tuple /= => _ x;rewrite type_of_to_val.
+  by move=> hrec [] x xs /=; rewrite type_of_to_val hrec.
+Qed.
+
 Lemma sopn_toutP o vs vs' : exec_sopn o vs = ok vs' ->
   List.map type_of_val vs' = sopn_tout o.
 Proof.
-  rewrite /exec_sopn ;case: o => /=; app_sopn_t => //;
-  try (by apply: rbindP => _ _; app_sopn_t).
-
-  + by move=> ???? w2 w3; case: ifP => ? [<-].
-  + by rewrite /x86_div;t_xrbindP => ??;case: ifP => // ? [<-].
-  + by rewrite /x86_idiv;t_xrbindP => ??;case: ifP => // ? [<-].
-  + by rewrite /x86_lea;t_xrbindP => ??;case: ifP => // ? [<-].
-  + by rewrite /x86_ror;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
-  + by rewrite /x86_rol;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
-  + by rewrite /x86_shl;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
-  + by rewrite /x86_shr;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
-  + by rewrite /x86_sar;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
-  + by rewrite /x86_shld;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
-  + by rewrite /x86_shrd;t_xrbindP => ??;case: ifP => // ? [<-] //; case:ifP.
-  by rewrite /x86_vpmull;t_xrbindP => ?? //;apply: rbindP => _ _; app_sopn_t.
+  rewrite /exec_sopn ;case: o => /=;app_sopn_t => //.
+  rewrite /x86_instr_t_sem /x86_instr_t_tout => x.
+  case : map_instruction => /= _ /(_ tt) tout /(_ tt) tin semi. 
+  by t_xrbindP => p _ <-;apply type_of_val_ltuple.
 Qed.
 
 Section SEM.
