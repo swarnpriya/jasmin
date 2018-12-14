@@ -56,5 +56,20 @@ Fixpoint ltuple (ts:list Type) : Type :=
   | t::ts => t * ltuple ts
   end.
 
-Definition sem_tuple ts := ltuple (map sem_t ts).
+Definition sem_ot (t:stype) : Type :=
+  if t is sbool then option bool
+  else sem_t t.
+
+Definition sem_tuple ts := ltuple (map sem_ot ts).
+
+Definition is_not_sarr t := ~~ is_sarr t.
+
+Record Instruction := mkInstruction {
+  str  : unit -> string;
+  tin  : list stype;
+  tout : list stype;
+  semi : sem_prod tin (exec (sem_tuple tout));
+  tin_narr : all is_not_sarr tin
+}.
+
 

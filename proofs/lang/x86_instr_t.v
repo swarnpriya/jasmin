@@ -159,21 +159,24 @@ Definition w256w8_ty        := [:: sword256; sword8].
 Definition w256w128w8_ty    := [:: sword256; sword128; sword8].
 Definition w256x2w8_ty      := [:: sword256; sword256; sword8].
 
-Definition is_not_sarr t := ~~ is_sarr t.
-
-Record Instruction := mkInstruction {
-  str  : unit -> string;
-  tout : list stype;
-  tin  : list stype;
-  semi : sem_prod tin (exec (sem_tuple tout));
-  tin_narr : all is_not_sarr tin
-}.
-
 Definition x86_MOV sz (x: word sz) : exec (word sz) :=
   Let _ := check_size_8_64 sz in
   ok x.
 
-Definition Ox86_MOV_instr sz            := {| str:= pp_sz "Ox86_MOV" sz;             tout:= w_ty sz ;     tin:= w_ty sz; semi := @x86_MOV sz ; tin_narr := refl_equal|}.
+Notation mk_instr str tin tout semi := 
+  {| str := str; tin := tin; tout := tout; semi := semi; tin_narr := refl_equal |}.
+
+Definition mk_instr_w name semi sz := 
+  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz).
+
+Definition mk_instr_w2_b5w name semi sz := 
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz).
+
+Definition Ox86_MOV_instr := mk_instr_w "Ox86_MOV" x86_MOV.
+
+(*Definition Ox86_ADD_instr := mk_instr_w2_b5w "Ox86_ADD" x86_ADD.
+Definition Ox86_SUB_instr := mk_instr_w2_b5w "Ox86_SUB" x86_SUB.
+*)
 (*
 Definition Ox86_MOVSX_instr sz sz'      := {| str:= pp_sz_sz "Ox86_MOVSX" sz sz';    tout:= w_ty sz ;     tin:= w_ty sz' |}.
 Definition Ox86_MOVZX_instr sz sz'      := {| str:= pp_sz_sz "Ox86_MOVZX" sz sz';    tout:= w_ty sz ;     tin:= w_ty sz' |}.
