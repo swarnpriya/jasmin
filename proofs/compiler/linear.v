@@ -110,7 +110,7 @@ Fixpoint snot e :=
   | Papp1 Onot e => e
   | Papp2 Oand e1 e2 => Papp2 Oor (snot e1) (snot e2)
   | Papp2 Oor e1 e2 => Papp2 Oand (snot e1) (snot e2)
-  | Pif e e1 e2 => Pif e (snot e1) (snot e2)
+  | Pif t e e1 e2 => Pif t e (snot e1) (snot e2)
   | Pbool b => Pbool (~~ b)
   | _ => Papp1 Onot e
   end.

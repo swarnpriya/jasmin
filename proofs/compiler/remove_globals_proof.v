@@ -60,8 +60,8 @@ Module INCL. Section INCL.
       - by move=> ? e hrec v; t_xrbindP => ? /hrec -> <-.
       - by move=> ? e1 hrec1 e2 hrec2 v; t_xrbindP => ? /hrec1 -> ? /= /hrec2 -> <-.
       - by move => op es rec v; rewrite -!/(sem_pexprs _ _); t_xrbindP => vs /rec ->.
-      move=> e1 hrec1 e2 hrec2 e3 hrec3 v.
-      by t_xrbindP => ?? /hrec1 -> /= -> ? /hrec2 -> ? /hrec3 -> /=.
+      move=> t e1 hrec1 e2 hrec2 e3 hrec3 v.
+      by t_xrbindP => ?? /hrec1 -> /= -> ?? /hrec2 -> /= -> ?? /hrec3 -> /= -> /= <-.
     Qed.
 
   End INCL_E.
@@ -343,8 +343,8 @@ Module RGP. Section PROOFS.
       - by move=> ?? hrec1 ? hrec2 ??; t_xrbindP=> ? /hrec1 h1 ? /hrec2 h2 <- ? /= /h1 -> ? /h2 ->.
       - move => ?? ih ??; t_xrbindP => ? /ih{ih} ih <- ? /ih /=.
         by rewrite -/(sem_pexprs _ _) => ->.
-      move=> ? hrec1 ? hrec2 ? hrec3 ??.
-      by t_xrbindP => ? /hrec1 h1 ? /hrec2 h2 ? /hrec3 h3 <- ?? /= /h1 -> /= -> ? /h2 -> ? /h3 ->.
+      move=> ? ? hrec1 ? hrec2 ? hrec3 ??.
+      by t_xrbindP => ? /hrec1 h1 ? /hrec2 h2 ? /hrec3 h3 <- ?? /= /h1 -> /= -> ?? /h2 -> /= -> ?? /h3 -> /= -> <-.
     Qed.
 
   End REMOVE_GLOB_E.

@@ -1184,8 +1184,10 @@ Module CBAreg.
       if o1 == o2
       then fold2 (Cerr_fold2 "allocation: check_e (appN)") check_e es1 es2 m
       else cerror (Cerr_neqopN o1 o2 salloc)
-    | Pif e e1 e2, Pif e' e1' e2' => 
-      check_e e e' m >>= check_e e1 e1' >>= check_e e2 e2'
+    | Pif t e e1 e2, Pif t' e' e1' e2' => 
+      if t == t' then
+        check_e e e' m >>= check_e e1 e1' >>= check_e e2 e2'
+      else err tt
     | _, _ => err tt
     end.
 
@@ -1366,17 +1368,14 @@ Module CBAreg.
       rewrite -/(sem_pexprs _ _).
       move: h => /(_ _ _ ok_vs1) [] vs2 [] -> hs /=.
       by have [] := vuincl_sem_opN ok_v1 hs; eauto.
-    move => e He e11 He11 e12 He12 [] // e2 e21 e22 r re vm1.
-    apply: rbindP => r1;apply: rbindP => r' /He Hr' /He11 Hr1 /He12 Hr2 {He He11 He12}.
+    move => t e He e11 He11 e12 He12 [] // t' e2 e21 e22 r re vm1.
+    case: eqP => // <-.
+    t_xrbindP => r1 r' /He Hr' /He11 Hr1 /He12 Hr2 {He He11 He12}.
     move=> /Hr'{Hr'}[] /Hr1{Hr1}[] /Hr2{Hr2}[] Hre Hs2 Hs1 Hs;split=>// m v1.
-    t_xrbindP => b w /Hs [w'] /= [->] /= /value_uincl_bool H/H{H} [? ->] /= v2 Hv2 v3 Hv3.
-    have [v2' [-> Hv2']] := Hs1 _ _ Hv2.
-    have [v3' [-> Hv3']] := Hs2 _ _ Hv3.
-    case: ifP => //= /andP []. 
-    move=> /(value_uincl_is_defined Hv2') -> /(value_uincl_is_defined Hv3') ->.
-    case: ifP => // /(value_uincl_compat_type Hv2' Hv3') -> [<-] /=.
-    eexists;split;first reflexivity.
-    by case b.
+    t_xrbindP => b w /Hs [w'] /= [->] /= /value_uincl_bool H/H{H}[? ->] /=. 
+    move=> ?? /Hs1 [?[-> /=]] /truncate_value_uincl H/H{H} [? -> ?]. 
+    move=> ?? /Hs2 [?[-> /=]] /truncate_value_uincl H/H{H} [? -> ?] <- /=. 
+    by eexists;split;eauto;case: (b).
   Qed.
 
   End CHECK_EP.
