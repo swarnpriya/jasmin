@@ -67,6 +67,8 @@ Definition sem_ot (t:stype) : Type :=
 
 Definition sem_tuple ts := ltuple (map sem_ot ts).
 
+(* ----------------------------------------------------------------------------- *)
+
 Definition is_not_sarr t := ~~ is_sarr t.
 
 Record Instruction := mkInstruction {
@@ -77,4 +79,61 @@ Record Instruction := mkInstruction {
   tin_narr : all is_not_sarr tin
 }.
 
+(* ----------------------------------------------------------------------------- *)
+Definition pp_s     (s: string)                         (_: unit) : string := s.
+Definition pp_sz    (s: string) (sz: wsize)             (_: unit) : string := s ++ " " ++ string_of_wsize sz.
+Definition pp_sz_sz (s: string) (sz sz': wsize)         (_: unit) : string := s ++ " " ++ string_of_wsize sz ++ " " ++ string_of_wsize sz'.
+Definition pp_ve_sz (s: string) (ve: velem) (sz: wsize) (_: unit) : string := s ++ " " ++ string_of_velem ve ++ " " ++ string_of_wsize sz.
+Definition pp_ve    (s: string) (ve: velem)             (_: unit)   : string := s ++ " " ++ string_of_velem ve.
 
+(* ----------------------------------------------------------------------------- *)
+Definition b_ty             := [:: sbool].
+Definition b5_ty            := [:: sbool; sbool; sbool; sbool; sbool].
+
+Definition bw_ty    sz      := [:: sbool; sword sz].
+Definition bw2_ty   sz      := [:: sbool; sword sz; sword sz].
+Definition b2w_ty   sz      := [:: sbool; sbool; sword sz].
+Definition b4w_ty   sz      := [:: sbool; sbool; sbool; sbool; sword sz].
+Definition b5w_ty   sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz].
+Definition b5w2_ty  sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz; sword sz].
+
+Definition w_ty     sz      := [:: sword sz].
+Definition w2_ty    sz sz'  := [:: sword sz; sword sz'].
+Definition w3_ty    sz      := [:: sword sz; sword sz; sword sz].
+Definition w4_ty    sz      := [:: sword sz; sword sz; sword sz; sword sz].
+Definition w32_ty           := [:: sword32].
+Definition w64_ty           := [:: sword64].
+Definition w128_ty          := [:: sword128].
+Definition w256_ty          := [:: sword256].
+
+Definition w2b_ty   sz sz'  := [:: sword sz; sword sz'; sbool].
+Definition ww8_ty   sz      := [:: sword sz; sword8].
+Definition w2w8_ty   sz     := [:: sword sz; sword sz; sword8].
+Definition w128w8_ty        := [:: sword128; sword8].
+Definition w128ww8_ty sz    := [:: sword128; sword sz; sword8].
+Definition w256w8_ty        := [:: sword256; sword8].
+Definition w256w128w8_ty    := [:: sword256; sword128; sword8].
+Definition w256x2w8_ty      := [:: sword256; sword256; sword8].
+
+(* ----------------------------------------------------------------------------- *)
+
+Notation mk_instr str tin tout semi :=
+  {| str := str; tin := tin; tout := tout; semi := semi; tin_narr := refl_equal |}.
+
+Definition mk_instr_w2_w2 name semi sz :=
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz).
+
+Definition mk_instr_w2b_bw name semi sz :=
+  mk_instr (pp_sz name sz) [::sword sz; sword sz; sbool] (sbool :: (w_ty sz)) 
+   (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)).
+
+Definition mk_instr__b5w name semi sz :=
+  mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz).
+
+Definition mk_instr_w name semi sz :=
+  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz).
+
+Definition mk_instr_w2_b5w name semi sz :=
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz).
+
+(* ----------------------------------------------------------------------------- *)

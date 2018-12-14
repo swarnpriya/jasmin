@@ -244,16 +244,6 @@ Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 
 (* ----------------------------------------------------------------------------- *)
 
-Definition mk_instr_w2_w2 name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz).
-
-Definition mk_instr_w2b_bw name semi sz :=
-  mk_instr (pp_sz name sz) [::sword sz; sword sz; sbool] (sbool :: (w_ty sz)) 
-   (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)).
-
-Definition mk_instr__b5w name semi sz :=
-  mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz).
-
 Definition Omulu_instr     := mk_instr_w2_w2 "Omulu" (fun sz x y => ok (@wumul sz x y)).
 Definition Oaddcarry_instr := mk_instr_w2b_bw "Oaddcarry" waddcarry.
 Definition Osubcarry_instr := mk_instr_w2b_bw "Osubcarry" wsubcarry.
@@ -261,46 +251,19 @@ Definition Oset0_instr     :=
   mk_instr__b5w "Oset0" (fun sz => let vf := Some false in
                  ok (vf, vf, vf, vf, Some true, (0%R: word sz))).                  
 
-
-
- Definition 
- | Omulu sz => app_ww sz (fun x y => ok (@pval (sword sz) (sword sz) (wumul x y)))
-  | Oaddcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (waddcarry x y c)))
-  | Osubcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (wsubcarry x y c)))
-  | Oset0 sz => app_sopn [::]
-    (Let _ := check_size_8_64 sz in
-     let vf := Vbool false in
-     ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
-
-
-
-
-Definition string_of_sopn o : string :=
+Definition get_instr o := 
   match o with
-  | Omulu sz => "Omulu " ++ string_of_wsize sz
-  | Oaddcarry sz => "Oaddcarry " ++ string_of_wsize sz
-  | Osubcarry sz => "Osubcarry " ++ string_of_wsize sz
-  | Oset0 sz => "Oset0 " ++ string_of_wsize sz
-  | Ox86 inst => string_of_x86_instr_t inst
+  | Omulu     sz => Omulu_instr sz 
+  | Oaddcarry sz => Oaddcarry_instr sz
+  | Osubcarry sz => Osubcarry_instr sz
+  | Oset0     sz => Oset0_instr sz
+  | Ox86   instr => map_instruction instr
   end.
 
-Definition sopn_tout (o:sopn) :  list stype :=
-  match o with
-  | Omulu sz => w2_ty sz sz 
-  | Oaddcarry sz => bw_ty sz
-  | Osubcarry sz => bw_ty sz
-  | Oset0 sz => b5w_ty sz
-  | Ox86 inst => x86_instr_t_tout inst
-end.
+Definition string_of_sopn o : string := str (get_instr o) tt.
 
-Definition sopn_tin (o: sopn) : list stype :=
-  match o with
-  | Omulu sz => let t := sword sz in [:: t ; t ]
-  | Oaddcarry sz => let t := sword sz in [:: t ; t ; sbool ]
-  | Osubcarry sz => let t := sword sz in [:: t ; t ; sbool ]
-  | Oset0 _ => [::]
-  | Ox86 inst => x86_instr_t_tin inst
-end.
+Definition sopn_tint o : list stype := tin (get_instr o).
+Definition sopn_tout o : list stype := tout (get_instr o).
 
 (*   | Ox86_ADC sz => let t := sword sz in [:: t ; t ; sbool ]
   | Ox86_SBB sz => let t := sword sz in [:: t ; t ; sbool ]

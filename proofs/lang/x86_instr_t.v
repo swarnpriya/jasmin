@@ -125,39 +125,7 @@ Qed.
 Definition x86_instr_t_eqMixin     := Equality.Mixin x86_instr_t_eq_axiom.
 Canonical  x86_instr_t_eqType      := Eval hnf in EqType x86_instr_t x86_instr_t_eqMixin.
 
-Definition pp_s     (s: string)                         (_: unit) : string := s.
-Definition pp_sz    (s: string) (sz: wsize)             (_: unit) : string := s ++ " " ++ string_of_wsize sz.
-Definition pp_sz_sz (s: string) (sz sz': wsize)         (_: unit) : string := s ++ " " ++ string_of_wsize sz ++ " " ++ string_of_wsize sz'.
-Definition pp_ve_sz (s: string) (ve: velem) (sz: wsize) (_: unit) : string := s ++ " " ++ string_of_velem ve ++ " " ++ string_of_wsize sz.
-Definition pp_ve    (s: string) (ve: velem)             (_: unit)   : string := s ++ " " ++ string_of_velem ve.
-
-Definition b_ty             := [:: sbool].
-Definition b5_ty            := [:: sbool; sbool; sbool; sbool; sbool].
-
-Definition bw_ty    sz      := [:: sbool; sword sz].
-Definition bw2_ty   sz      := [:: sbool; sword sz; sword sz].
-Definition b2w_ty   sz      := [:: sbool; sbool; sword sz].
-Definition b4w_ty   sz      := [:: sbool; sbool; sbool; sbool; sword sz].
-Definition b5w_ty   sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz].
-Definition b5w2_ty  sz      := [:: sbool; sbool; sbool; sbool; sbool; sword sz; sword sz].
-
-Definition w_ty     sz      := [:: sword sz].
-Definition w2_ty    sz sz'  := [:: sword sz; sword sz'].
-Definition w3_ty    sz      := [:: sword sz; sword sz; sword sz].
-Definition w4_ty    sz      := [:: sword sz; sword sz; sword sz; sword sz].
-Definition w32_ty           := [:: sword32].
-Definition w64_ty           := [:: sword64].
-Definition w128_ty          := [:: sword128].
-Definition w256_ty          := [:: sword256].
-
-Definition w2b_ty   sz sz'  := [:: sword sz; sword sz'; sbool].
-Definition ww8_ty   sz      := [:: sword sz; sword8].
-Definition w2w8_ty   sz     := [:: sword sz; sword sz; sword8].
-Definition w128w8_ty        := [:: sword128; sword8].
-Definition w128ww8_ty sz    := [:: sword128; sword sz; sword8].
-Definition w256w8_ty        := [:: sword256; sword8].
-Definition w256w128w8_ty    := [:: sword256; sword128; sword8].
-Definition w256x2w8_ty      := [:: sword256; sword256; sword8].
+(* ----------------------------------------------------------------------------- *)
 
 Definition SF_of_word sz (w : word sz) :=
   msb w.
@@ -184,7 +152,6 @@ Definition rflags_of_aluop sz (w : word sz) (vu vs : Z) :=
 Definition rflags_of_mul (ov : bool) :=
   (*  OF; CF; SF;    PF;    ZF  *)
   (   ov, ov, sbool, sbool, sbool ).
-Check rflags_of_mul.
 
 (* -------------------------------------------------------------------- *)
 
@@ -219,15 +186,6 @@ Definition rflags_of_aluop_nocf sz (w : word sz) (vs : Z) :=
 Definition x86_MOV sz (x: word sz) : exec (word sz) :=
   Let _ := check_size_8_64 sz in
   ok x.
-
-Notation mk_instr str tin tout semi :=
-  {| str := str; tin := tin; tout := tout; semi := semi; tin_narr := refl_equal |}.
-
-Definition mk_instr_w name semi sz :=
-  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz).
-
-Definition mk_instr_w2_b5w name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz).
 
 Definition Ox86_MOV_instr := mk_instr_w "Ox86_MOV" x86_MOV.
 
@@ -390,7 +348,7 @@ Definition Ox86_VPERMQ_instr            := {| str:= pp_s "Ox86_VPERMQ" ;        
  *)
 
 
-Definition map_instruction o : Instruction :=
+Definition get_x86_instr o : Instruction :=
   match o with
   | Ox86_MOV sz             => Ox86_MOV_instr sz
   | _ => Ox86_MOV_instr U8
@@ -464,14 +422,3 @@ Definition map_instruction o : Instruction :=
   | Ox86_VPEXTR ve          => Ox86_VPEXTR_instr ve *)
   end.
 
-Definition string_of_x86_instr_t o : string :=
-  str (map_instruction o) tt.
-
-Definition x86_instr_t_tout o :=
-  tout (map_instruction o).
-
-Definition x86_instr_t_tin o :=
-  tin (map_instruction o).
-
-Definition x86_instr_t_sem o :=
-  semi (map_instruction o).
