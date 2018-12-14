@@ -340,12 +340,12 @@ Section PROOF.
         rewrite /sem_pexprs => -> /= h1 h2. 
         by have [v' ??]:= (vuincl_sem_opN h2 h1);exists v'.
 
-      move=> e He e1 H1 e1' H1' e2 v.   
+      move=> t e He e1 H1 e1' H1' e2 v.   
       t_xrbindP => e_ /He he e1_ /H1 hrec e1'_ /H1' hrec' <-.
       move=> b vb /he [vb' /= [-> ub]] /(value_uincl_bool ub) [??];subst vb vb'.
-      move=> ve1 /hrec [ve1' /= [-> hu] /=] ve2 /hrec' [ve2' /= [-> hu'] /=].
-      case: andP => // -[] /(value_uincl_is_defined hu) -> /(value_uincl_is_defined hu') ->.
-      case: ifP => // /(value_uincl_compat_type hu hu') -> [] <- /=.
+      move=> vte1 ve1 /hrec [ve1' /= [-> hu] /=] ht1 vte2 ve2 /hrec' [ve2' /= [-> hu'] /=] ht2 <-.
+      have [? [-> ?]]:= truncate_value_uincl hu ht1.
+      have [? [-> ?] /=]:= truncate_value_uincl hu' ht2.
       eexists;split;first by reflexivity.
       by case: (b).
     Qed.

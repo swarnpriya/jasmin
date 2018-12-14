@@ -50,7 +50,7 @@ let rec read_mem_e = function
   | Papp1 (_, e) | Pget (_, _, e) -> read_mem_e e
   | Papp2 (_, e1, e2) -> read_mem_e e1 || read_mem_e e2
   | PappN (_, es) -> read_mem_es es
-  | Pif  (e1, e2, e3) -> read_mem_e e1 || read_mem_e e2 || read_mem_e e3
+  | Pif  (_, e1, e2, e3) -> read_mem_e e1 || read_mem_e e2 || read_mem_e e3
 
 and read_mem_es es = List.exists read_mem_e es
 
@@ -115,7 +115,7 @@ let rec leaks_e_rec leaks e =
   | Papp1 (_, e) | Pget (_,_, e) -> leaks_e_rec leaks e
   | Papp2 (_, e1, e2) -> leaks_e_rec (leaks_e_rec leaks e1) e2
   | PappN (_, es) -> leaks_es_rec leaks es
-  | Pif  (e1, e2, e3) -> leaks_e_rec (leaks_e_rec (leaks_e_rec leaks e1) e2) e3
+  | Pif  (_, e1, e2, e3) -> leaks_e_rec (leaks_e_rec (leaks_e_rec leaks e1) e2) e3
 and leaks_es_rec leaks es = List.fold_left leaks_e_rec leaks es
 
 let leaks_e e = leaks_e_rec [] e
@@ -489,7 +489,7 @@ let rec ty_expr = function
   | Papp1 (op,_)   -> out_ty_op1 op
   | Papp2 (op,_,_) -> out_ty_op2 op
   | PappN (op, _)  -> out_ty_opN op
-  | Pif (_,e1,e2)  -> min_ty (ty_expr e1) (ty_expr e2)
+  | Pif (ty,_,_,_) -> Conv.cty_of_ty ty
 
 let wsize = function
   | Coq_sword sz -> sz
@@ -564,7 +564,7 @@ let rec pp_expr env fmt (e:expr) =
   | PappN (_op, _es) ->
     assert false (* TODO: nary *)
 
-  | Pif(e1,et,ef) -> 
+  | Pif(_,e1,et,ef) -> 
     let ty = ty_expr e in
     Format.fprintf fmt "(%a ? %a : %a)"
       (pp_expr env) e1 (pp_wcast env) (ty,et) (pp_wcast env) (ty,ef)
@@ -835,9 +835,7 @@ module Leak = struct
     | Papp2 (op, e1, e2) -> 
       safe_op2 (safe_e_rec env (safe_e_rec env safe e1) e2) e1 e2 op
     | PappN (_op, _es) -> assert false (* TODO: nary *)
-    | Pif  (e1, e2, e3) -> 
-      (* We do not check "is_defined e1 && is_defined e2" since 
-        (safe_e_rec (safe_e_rec safe e1) e2) implies it *)
+    | Pif  (_,e1, e2, e3) -> 
       safe_e_rec env (safe_e_rec env (safe_e_rec env safe e1) e2) e3
 
   let safe_e env = safe_e_rec env [] 

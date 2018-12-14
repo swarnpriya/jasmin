@@ -545,7 +545,7 @@ Inductive pexpr : Type :=
 | Papp1  : sop1 -> pexpr -> pexpr
 | Papp2  : sop2 -> pexpr -> pexpr -> pexpr
 | PappN of opN & seq pexpr
-| Pif    : pexpr -> pexpr -> pexpr -> pexpr.
+| Pif    : stype -> pexpr -> pexpr -> pexpr -> pexpr.
 
 Notation pexprs := (seq pexpr).
 
@@ -587,7 +587,7 @@ Section PEXPR_RECT.
     (Happ1: ∀ op e, P e → P (Papp1 op e))
     (Happ2: ∀ op e1 e2, P e1 → P e2 → P (Papp2 op e1 e2))
     (HappN: ∀ op es, allT P es → P (PappN op es))
-    (Hif: ∀ e e1 e2, P e → P e1 → P e2 → P (Pif e e1 e2))
+    (Hif: ∀ t e e1 e2, P e → P e1 → P e2 → P (Pif t e e1 e2))
   .
 
   Definition pexpr_rect_rec (f: ∀ e, P e) : ∀ es, allT P es :=
@@ -608,7 +608,7 @@ Section PEXPR_RECT.
     | Papp1 op e => Happ1 op (pexpr_rect e)
     | Papp2 op e1 e2 => Happ2 op (pexpr_rect e1) (pexpr_rect e2)
     | PappN op es => HappN op (pexpr_rect_rec pexpr_rect es)
-    | Pif e e1 e2 => Hif (pexpr_rect e) (pexpr_rect e1) (pexpr_rect e2)
+    | Pif t e e1 e2 => Hif t (pexpr_rect e) (pexpr_rect e1) (pexpr_rect e2)
     end.
 
 End PEXPR_RECT.
@@ -631,6 +631,7 @@ Definition var_i_eqMixin     := Equality.Mixin var_i_eq_axiom.
 Canonical  var_i_eqType      := Eval hnf in EqType var_i var_i_eqMixin.
 
 Module Eq_pexpr.
+
 Fixpoint eqb (e1 e2:pexpr) : bool :=
   match e1, e2 with
   | Pconst n1   , Pconst n2    => n1 == n2
@@ -645,8 +646,8 @@ Fixpoint eqb (e1 e2:pexpr) : bool :=
      (o1 == o2) && eqb e11 e21 && eqb e12 e22
   | PappN o1 es1, PappN o2 es2 =>
     (o1 == o2) && all2 eqb es1 es2
-  | Pif b1 e11 e12, Pif b2 e21 e22  =>
-     eqb b1 b2 && eqb e11 e21 && eqb e12 e22
+  | Pif t1 b1 e11 e12, Pif t2 b2 e21 e22  =>
+     (t1 == t2) && eqb b1 b2 && eqb e11 e21 && eqb e12 e22
   | _, _ => false
   end.
 
@@ -663,8 +664,8 @@ Fixpoint eqb (e1 e2:pexpr) : bool :=
   Lemma eq_axiom : Equality.axiom eqb.
   Proof.
     elim => [n1|b1| n1 |x1|g1|w1 x1 e1 He1|w1 x1 e1 He1
-            |o1 e1 He1|o1 e11 e12 He11 He12 | o1 es1 Hes1 | t1 e11 e12 Ht1 He11 He12]
-            [n2|b2| n2 |x2|g2|w2 x2 e2|w2 x2 e2|o2 e2|o2 e21 e22 | o2 es2 |t2 e21 e22] /=;
+            |o1 e1 He1|o1 e11 e12 He11 He12 | o1 es1 Hes1 | st1 t1 e11 e12 Ht1 He11 He12]
+            [n2|b2| n2 |x2|g2|w2 x2 e2|w2 x2 e2|o2 e2|o2 e21 e22 | o2 es2 |st2 t2 e21 e22] /=;
         try by constructor.
     + apply (@equivP (n1 = n2));first by apply: eqP.
       by split => [->|[]->].
@@ -697,9 +698,9 @@ Fixpoint eqb (e1 e2:pexpr) : bool :=
       move => {h} [??]; subst es2 o2; split; first exact: eqxx.
       elim: es1 Hes1 => // e es ih [h] /ih{ih}ih /=.
       by case: (h e).
-    apply (@equivP ((eqb t1 t2 && eqb e11 e21) /\ eqb e12 e22));first by apply andP.
-    split => [[] /andP[] /Ht1 -> /He11 -> /He12 ->| [] <- <- <-] //.
-    by split;[apply /andP;split|]; [apply /Ht1 | apply /He11 | apply /He12].
+    apply (@equivP (((st1 == st2) && eqb t1 t2 && eqb e11 e21) /\ eqb e12 e22));first by apply andP.
+    split => [ [] /andP[]/andP[] /eqP -> /Ht1 -> /He11 -> /He12 ->| [<- <- <- <-]] //.
+    by split;[apply /andP;split;[apply /andP;split|]|]; [apply /eqP | apply /Ht1 | apply /He11 | apply /He12].
   Qed.
 
   Definition pexpr_eqMixin := Equality.Mixin eq_axiom.
@@ -722,7 +723,7 @@ Section PEXPR_IND.
     (Happ1: ∀ op e, P e → P (Papp1 op e))
     (Happ2: ∀ op e1, P e1 → ∀ e2, P e2 → P (Papp2 op e1 e2))
     (HappN: ∀ op es, (∀ e, e \in es → P e) → P (PappN op es))
-    (Hif: ∀ e, P e → ∀ e1, P e1 → ∀ e2, P e2 → P (Pif e e1 e2))
+    (Hif: ∀ t e, P e → ∀ e1, P e1 → ∀ e2, P e2 → P (Pif t e e1 e2))
   .
 
   Definition pexpr_ind_rec (f: ∀ e, P e) : ∀ es : pexprs, ∀ e, e \in es → P e.
@@ -749,7 +750,7 @@ Section PEXPR_IND.
     | Papp1 op e => Happ1 op (pexpr_ind e)
     | Papp2 op e1 e2 => Happ2 op (pexpr_ind e1) (pexpr_ind e2)
     | PappN op es => HappN op (@pexpr_ind_rec pexpr_ind es)
-    | Pif e e1 e2 => Hif (pexpr_ind e) (pexpr_ind e1) (pexpr_ind e2)
+    | Pif t e e1 e2 => Hif t (pexpr_ind e) (pexpr_ind e1) (pexpr_ind e2)
     end.
 
 End PEXPR_IND.
@@ -774,7 +775,7 @@ Section PEXPRS_IND.
     pexprs_app1: ∀ op e, P e → P (Papp1 op e);
     pexprs_app2: ∀ op e1, P e1 → ∀ e2, P e2 → P (Papp2 op e1 e2);
     pexprs_appN: ∀ op es, Q es → P (PappN op es);
-    pexprs_if: ∀ e, P e → ∀ e1, P e1 → ∀ e2, P e2 → P (Pif e e1 e2);
+    pexprs_if: ∀ t e, P e → ∀ e1, P e1 → ∀ e2, P e2 → P (Pif t e e1 e2);
   }.
 
   Context (h: pexpr_ind_hypotheses).
@@ -797,7 +798,7 @@ Section PEXPRS_IND.
     | Papp1 op e => pexprs_app1 h op (pexpr_mut_ind e)
     | Papp2 op e1 e2 => pexprs_app2 h op (pexpr_mut_ind e1) (pexpr_mut_ind e2)
     | PappN op es => pexprs_appN h op (pexprs_ind pexpr_mut_ind es)
-    | Pif e e1 e2 => pexprs_if h (pexpr_mut_ind e) (pexpr_mut_ind e1) (pexpr_mut_ind e2)
+    | Pif t e e1 e2 => pexprs_if h t (pexpr_mut_ind e) (pexpr_mut_ind e1) (pexpr_mut_ind e2)
     end.
 
   Definition pexprs_ind_pair :=
@@ -1300,7 +1301,7 @@ Fixpoint read_e_rec (s:Sv.t) (e:pexpr) : Sv.t :=
   | Papp1  _ e     => read_e_rec s e
   | Papp2  _ e1 e2 => read_e_rec (read_e_rec s e2) e1
   | PappN _ es     => foldl read_e_rec s es
-  | Pif    t e1 e2 => read_e_rec (read_e_rec (read_e_rec s e2) e1) t
+  | Pif  _ t e1 e2 => read_e_rec (read_e_rec (read_e_rec s e2) e1) t
   end.
 
 Definition read_e := read_e_rec Sv.empty.
@@ -1351,18 +1352,20 @@ Definition read_c := read_c_rec Sv.empty.
 
 Lemma read_eE e s : Sv.Equal (read_e_rec s e) (Sv.union (read_e e) s).
 Proof.
-  elim: e s => //= [v | w v e He | w v e He | o e1 He1 e2 He2 | o es Hes | e He e1 He1 e2 He2] s;
+  elim: e s => //= [v | w v e He | w v e He | o e1 He1 e2 He2 | o es Hes | t e He e1 He1 e2 He2] s;
    rewrite /read_e /= ?He ?He1 ?He2; try SvD.fsetdec.
   rewrite -/read_es_rec -/read_es.
   elim: es Hes s.
-  + move => _ /= s; SvD.fsetdec.
+  + by move => _ /= s; SvD.fsetdec.
   move => e es ih Hes s /=.
-  rewrite /read_es /= -/read_e ih. rewrite Hes. rewrite ih.
-  + SvD.fsetdec.
-  + move => e' he' s'. apply: Hes.
-    by rewrite in_cons he' orbT.
-  + by rewrite in_cons eqxx.
-  move => e' he' s'. apply: Hes.
+  rewrite /read_es /= -/read_e ih. 
+  + rewrite Hes. 
+    + rewrite ih. 
+      + by SvD.fsetdec.
+      move => e' he' s'; apply: Hes.
+      by rewrite in_cons he' orbT.
+    by rewrite in_cons eqxx.
+  move => e' he' s'; apply: Hes.
   by rewrite in_cons he' orbT.
 Qed.
 
@@ -1540,14 +1543,14 @@ Fixpoint eq_expr e e' :=
   | Papp1  o e    , Papp1  o' e'      => (o == o') && eq_expr e e'
   | Papp2  o e1 e2, Papp2  o' e1' e2' => (o == o') && eq_expr e1 e1' && eq_expr e2 e2'
   | PappN o es, PappN o' es' => (o == o') && (all2 eq_expr es es')
-  | Pif    e e1 e2, Pif    e' e1' e2' => 
-    eq_expr e e' && eq_expr e1 e1' && eq_expr e2 e2'
+  | Pif t e e1 e2, Pif t' e' e1' e2' => 
+    (t == t') && eq_expr e e' && eq_expr e1 e1' && eq_expr e2 e2'
   | _             , _                 => false
   end.
 
 Lemma eq_expr_refl e : eq_expr e e.
 Proof.
-elim: e => //= [ ??? -> | ??? -> | ?? -> | ?? -> ? -> | ? es ih | ?-> ? -> ? -> ] //=;
+elim: e => //= [ ??? -> | ??? -> | ?? -> | ?? -> ? -> | ? es ih | ??-> ? -> ? -> ] //=;
   rewrite ?eqxx //=.
 elim: es ih => // e es ih h /=; rewrite h.
 + by apply: ih => e' he'; apply: h; rewrite in_cons he' orbT.

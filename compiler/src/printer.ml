@@ -122,7 +122,7 @@ let pp_ge pp_var =
       pp_expr e1 (string_of_op2 op) pp_expr e2
   | PappN (op, es) ->
     F.fprintf fmt "@[(%s [%a])@]" (string_of_opN op) (pp_list ",@ " pp_expr) es
-  | Pif(e,e1,e2) ->
+  | Pif(_, e,e1,e2) ->
     F.fprintf fmt "@[(%a ?@ %a :@ %a)@]"
       pp_expr e pp_expr e1  pp_expr e2
   in

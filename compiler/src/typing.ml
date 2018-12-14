@@ -783,7 +783,7 @@ let rec tt_expr ?(mode=`AllVar) (env : Env.env) pe =
 
     check_ty_bool ~loc:(L.loc pe1) ty1;
     check_ty_eq ~loc:(L.loc pe) ~from:ty2 ~to_:ty3;
-    P.Pif(e1, e2, e3), ty2
+    P.Pif(ty2, e1, e2, e3), ty2
 
 
 and tt_expr_cast64 ?(mode=`AllVar) (env : Env.env) pe =
@@ -1136,7 +1136,7 @@ let rec is_constant e =
   | P.Papp1 (_, e) -> is_constant e
   | P.Papp2 (_, e1, e2) -> is_constant e1 && is_constant e2
   | P.PappN (_, es) -> List.for_all is_constant es
-  | P.Pif(e1, e2, e3)   -> is_constant e1 && is_constant e2 && is_constant e3
+  | P.Pif(_, e1, e2, e3)   -> is_constant e1 && is_constant e2 && is_constant e3
 
 let check_call loc doInline lvs f es =
   (* Check that arguments have the same kind than parameters *)
@@ -1261,7 +1261,7 @@ let rec tt_instr (env : Env.env) (pi : S.pinstr) : unit P.pinstr  =
       let x, _, ty, e = P.destruct_move i in
       let e' = ofdfl (fun _ -> rs_tyerror ~loc exn) (P.expr_of_lval x) in
       let c = tt_expr_bool env cp in
-      P.Cassgn (x, AT_none, ty, Pif (c, e, e'))
+      P.Cassgn (x, AT_none, ty, Pif (ty, c, e, e'))
 
     | PIIf (cp, st, sf) ->
       let c  = tt_expr_bool env cp in
