@@ -257,85 +257,15 @@ Definition get_instr o :=
   | Oaddcarry sz => Oaddcarry_instr sz
   | Osubcarry sz => Osubcarry_instr sz
   | Oset0     sz => Oset0_instr sz
-  | Ox86   instr => map_instruction instr
+  | Ox86   instr => get_x86_instr instr
   end.
 
 Definition string_of_sopn o : string := str (get_instr o) tt.
 
 Definition sopn_tint o : list stype := tin (get_instr o).
 Definition sopn_tout o : list stype := tout (get_instr o).
+Definition sopn_sem  o := semi (get_instr o).
 
-(*   | Ox86_ADC sz => let t := sword sz in [:: t ; t ; sbool ]
-  | Ox86_SBB sz => let t := sword sz in [:: t ; t ; sbool ]
-  | Ox86_MOV sz => [:: sword sz ]
-  | Ox86_MOVSX _ sz => [:: sword sz ]
-  | Ox86_MOVZX _ sz => [:: sword sz ]
-  | Ox86_NEG sz => [:: sword sz ]
-  | Ox86_INC sz => [:: sword sz ]
-  | Ox86_DEC sz => [:: sword sz ]
-  | Ox86_NOT sz => [:: sword sz ]
-  | Ox86_BSWAP sz => [:: sword sz ]
-  | Ox86_CQO sz => [:: sword sz ]
-  | Ox86_MOVD sz => [:: sword sz ]
-  | Ox86_VMOVDQU sz => [:: sword sz ]
-  | Ox86_MOVZX32 => [:: sword32 ]
-  | Ox86_CMOVcc sz => [:: sbool ; sword sz ; sword sz ]
-  | Ox86_ADD sz => let t := sword sz in [:: t ; t ]
-  | Ox86_SUB sz => let t := sword sz in [:: t ; t ]
-  | Ox86_MUL sz => let t := sword sz in [:: t ; t ]
-  | Ox86_IMUL sz => let t := sword sz in [:: t ; t ]
-  | Ox86_IMULt sz => let t := sword sz in [:: t ; t ]
-  | Ox86_IMULtimm sz => let t := sword sz in [:: t ; t ]
-  | Ox86_BT sz => let t := sword sz in [:: t ; t ]
-  | Ox86_TEST sz => let t := sword sz in [:: t ; t ]
-  | Ox86_CMP sz => let t := sword sz in [:: t ; t ]
-  | Ox86_AND sz => let t := sword sz in [:: t ; t ]
-  | Ox86_ANDN sz => let t := sword sz in [:: t ; t ]
-  | Ox86_OR sz => let t := sword sz in [:: t ; t ]
-  | Ox86_XOR sz => let t := sword sz in [:: t ; t ]
-  | Ox86_DIV sz => let t := sword sz in [:: t ; t ; t ]
-  | Ox86_IDIV sz => let t := sword sz in [:: t ; t ; t ]
-  | Ox86_SETcc => [:: sbool ]
-  | Ox86_LEA sz => let t := sword sz in [:: t ; t ; t ; t ]
-  | Ox86_ROR sz => [:: sword sz ; sword8 ]
-  | Ox86_ROL sz => [:: sword sz ; sword8 ]
-  | Ox86_SHL sz => [:: sword sz ; sword8 ]
-  | Ox86_SHR sz => [:: sword sz ; sword8 ]
-  | Ox86_SAR sz => [:: sword sz ; sword8 ]
-  | Ox86_VPSLLDQ sz => [:: sword sz ; sword8 ]
-  | Ox86_VPSRLDQ sz => [:: sword sz ; sword8 ]
-  | Ox86_SHLD sz => let t := sword sz in [:: t ; t ; sword8 ]
-  | Ox86_SHRD sz => let t := sword sz in [:: t ; t ; sword8 ]
-  | Ox86_VPBLENDD sz => let t := sword sz in [:: t ; t ; sword8 ]
-  | Ox86_VPAND sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPANDN sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPOR sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPXOR sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPADD _ sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPSUB _ sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPMULL _ sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPMULU sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPSLLV _ sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPSRLV _ sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPSHUFB sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPUNPCKH _ sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPUNPCKL _ sz => let t := sword sz in [:: t; t ]
-  | Ox86_VPEXTR _ => [:: sword128 ; sword8 ]
-  | Ox86_VPINSR ve => [:: sword128 ; sword ve ; sword8 ]
-  | Ox86_VPSLL _ sz => [:: sword sz; sword8 ]
-  | Ox86_VPSRL _ sz => [:: sword sz; sword8 ]
-  | Ox86_VPSRA _ sz => [:: sword sz; sword8 ]
-  | Ox86_VPSHUFHW sz => [:: sword sz; sword8 ]
-  | Ox86_VPSHUFLW sz => [:: sword sz; sword8 ]
-  | Ox86_VPSHUFD sz => [:: sword sz; sword8 ]
-  | Ox86_VPBROADCAST ve _ => [:: sword ve ]
-  | Ox86_VBROADCASTI128 => [:: sword128 ]
-  | Ox86_VINSERTI128 => [:: sword256 ; sword128 ; sword8 ]
-  | Ox86_VPERM2I128 => [:: sword256 ; sword256 ; sword8 ]
-  | Ox86_VEXTRACTI128 => [:: sword256 ; sword8 ]
-  | Ox86_VPERMQ => [:: sword256 ; sword8 ] *)
-(*   end.
- *)
 (* Type of unany operators: input, output *)
 Definition type_of_op1 (o: sop1) : stype * stype :=
   match o with
@@ -1399,15 +1329,6 @@ Proof.
   change (d e (Some a)).
   case H; simpl; auto.
 Qed.
-
-(*
-Lemma is_wconstP sz e : is_reflect (@wconst sz) e (is_wconst sz e).
-Proof.
-  case e => //=;auto using Is_reflect_none.
-  move=> sz1 e1; case: (is_constP e1);auto using Is_reflect_none.
-  move=> z;apply: Is_reflect_some.
-Qed.
-*)
 
 Lemma is_wconst_of_sizeP sz e :
   is_reflect (fun z => Papp1 (Oword_of_int sz) (Pconst z)) e (is_wconst_of_size sz e).

@@ -589,7 +589,7 @@ Definition vbools bs : exec values := ok (List.map Vbool bs).
 
 (* -------------------------------------------------------------------- *) *)
 
-
+(*
 Definition x86_MOV sz (x: word sz) : exec values :=
   Let _ := check_size_8_64 sz in
   ok [:: Vword x].
@@ -1018,7 +1018,7 @@ Definition x86_vperm2i128 (v1 v2: u256) (m: u8) : exec values :=
 
 Definition x86_vpermq (v: u256) (m: u8) : exec values :=
   ok [:: Vword (wpermq v m) ].
-
+*)
 (* ---------------------------------------------------------------- *)
 Definition is_word (sz: wsize) (v: value) : exec unit :=
   match v with
@@ -1033,7 +1033,7 @@ Lemma is_wordI sz v u :
 Proof. case: v => // [ sz' w | [] // ] _; exact: wsize_le_U8. Qed.
 
 (* ---------------------------------------------------------------- *)
-Notation app_b   o := (app_sopn [:: sbool] o).
+(*Notation app_b   o := (app_sopn [:: sbool] o).
 Notation app_w sz o := (app_sopn [:: sword sz] o).
 Notation app_ww sz o := (app_sopn [:: sword sz; sword sz] o).
 Notation app_w8 sz o := (app_sopn [:: sword sz; sword U8] o).
@@ -1041,14 +1041,15 @@ Notation app_www sz o := (app_sopn [:: sword sz; sword sz; sword sz] o).
 Notation app_ww8 sz o := (app_sopn [:: sword sz; sword sz; sword U8] o).
 Notation app_wwb sz o := (app_sopn [:: sword sz; sword sz; sbool] o).
 Notation app_bww o := (app_sopn [:: sbool; sword; sword] o).
-Notation app_w4 sz o  := (app_sopn [:: sword sz; sword sz; sword sz; sword sz] o).
+Notation app_w4 sz o  := (app_sopn [:: sword sz; sword sz; sword sz; sword sz] o). *)
 
 Definition oto_val t : sem_ot t -> value := 
   match t return sem_ot t -> value with
   | sbool => fun ob => if ob is Some b then Vbool b else Vundef sbool
   | x     => @to_val x
   end.
-  
+
+
 Fixpoint list_ltuple (ts:list stype) : sem_tuple ts -> values :=
   match ts return sem_tuple ts -> values with
   | [::] => fun (u:unit) => [::]

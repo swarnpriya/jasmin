@@ -161,7 +161,8 @@ Definition rflags_of_div :=
 
 (* -------------------------------------------------------------------- *)
 (*  OF; SF; PF; ZF  *)
-Definition rflags_of_aluop_nocf sz (w : word sz) (vs : Z) :=
+Definition rflags_of_aluop_nocf sz (w : word sz) (vs : Z)
+:=
   (*  OF                 SF          ; PF          ; ZF          ] *)
   (   wsigned   w != vs, SF_of_word w, PF_of_word w, ZF_of_word w ).
 

@@ -49,17 +49,36 @@ Definition lprod ts tr :=
 
 Definition sem_prod ts tr := lprod (map sem_t ts) tr.
 
-Fixpoint ltuple_aux (t:Type) (ts:list Type) : Type := 
+Fixpoint ltuple (ts:list Type) : Type := 
   match ts with
-  | [::] => t
-  | t1::ts => ltuple_aux (t * t1) ts
+  | [::]   => unit 
+  | [::t1] => t1
+  | t1::ts => t1 * ltuple ts
   end.
 
-Definition ltuple (ts:list Type) : Type := 
-  match ts with
-  | [::] => unit
-  | t::ts => ltuple_aux t ts
-  end.
+Notation "(:: x , .. , y & z )" := (pair x .. (pair y z) ..).
+
+Definition toto : ltuple [:: (nat:Type); (nat:Type); (nat:Type); (nat:Type)] := 
+  (:: 0, 0, 0 & 0).
+
+Fixpoint merge_tuple (l1 l2: list Type) : ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2) := 
+  match l1 return ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2) with 
+  | [::] => fun _ p => p
+  | t1 :: l1 => 
+    let rec := @merge_tuple l1 l2 in 
+    match l1 return (ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2)) -> 
+                    ltuple (t1::l1) -> ltuple l2 -> ltuple (t1 :: l1 ++ l2) with
+    | [::] => fun _ (x:t1) =>
+      match l2 return ltuple l2 -> ltuple (t1::l2) with
+      | [::] => fun _ => x
+      | t2::l2    => fun (p:ltuple (t2::l2)) => (x, p)
+      end
+    | t1' :: l1' => fun rec (x:t1 * ltuple (t1'::l1')) p =>
+      (x.1, rec x.2 p)
+    end rec
+   end.
+   
+Definition titi : ltuple [:: (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type)]:= merge_tuple toto toto.
 
 Definition sem_ot (t:stype) : Type :=
   if t is sbool then option bool
