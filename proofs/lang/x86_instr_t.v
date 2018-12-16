@@ -38,6 +38,8 @@ Unset Printing Implicit Defensive.
 
 Local Unset Elimination Schemes.
 
+Local Open Scope Z_scope.
+
 Variant x86_instr_t : Set :=
 | Ox86_MOV     of wsize  (* copy *)
 | Ox86_MOVSX of wsize & wsize (* sign-extension *)
@@ -140,31 +142,33 @@ Definition ZF_of_word sz (w : word sz) :=
   (*  OF; CF; SF;    PF;    ZF  *)
 Definition rflags_of_bwop sz (w : word sz) :=
   (*  OF;  CF;    SF;           PF;           ZF  *)
-  ( false, false, SF_of_word w, PF_of_word w, ZF_of_word w).
+  (:: Some false, Some false, Some (SF_of_word w), Some (PF_of_word w) & Some (ZF_of_word w)).
 
 (* -------------------------------------------------------------------- *)
 (*  OF; CF ;SF; PF; ZF  *)
 Definition rflags_of_aluop sz (w : word sz) (vu vs : Z) :=
   (*  OF;             CF;                SF;           PF;           ZF  *)
-  ( wsigned  w != vs, wunsigned w != vu, SF_of_word w, PF_of_word w, ZF_of_word w ).
+  (:: Some (wsigned  w != vs), Some (wunsigned w != vu), Some (SF_of_word w), Some (PF_of_word w) & Some (ZF_of_word w )).
 
 (* -------------------------------------------------------------------- *)
-Definition rflags_of_mul (ov : bool) :=
+Definition rflags_of_mul (ov : bool) : option bool * (option bool * (option bool * (option bool * option bool))) :=
   (*  OF; CF; SF;    PF;    ZF  *)
-  (   ov, ov, sbool, sbool, sbool ).
+  (:: Some ov, Some ov, None, None & None).
 
 (* -------------------------------------------------------------------- *)
 
-Definition rflags_of_div :=
+Definition rflags_of_div: option bool * (option bool * (option bool * (option bool * option bool))) :=
   (*  OF;    CF;    SF;    PF;    ZF  *)
-  (   sbool, sbool, sbool, sbool, sbool ).
+  (:: None, None, None, None & None).
 
 (* -------------------------------------------------------------------- *)
 (*  OF; SF; PF; ZF  *)
-Definition rflags_of_aluop_nocf sz (w : word sz) (vs : Z)
+Definition rflags_of_aluop_nocf sz (w : word sz) (vs : Z) : option bool * (option bool * (option bool * option bool))
 :=
   (*  OF                 SF          ; PF          ; ZF          ] *)
-  (   wsigned   w != vs, SF_of_word w, PF_of_word w, ZF_of_word w ).
+  (:: Some (wsigned   w != vs), Some (SF_of_word w), Some (PF_of_word w) & Some (ZF_of_word w)).
+
+
 
 (* Definition flags_w (bs:seq bool) sz (w: word sz) :=
   ok ((map Vbool bs) ++ [:: Vword w]).
@@ -188,8 +192,18 @@ Definition x86_MOV sz (x: word sz) : exec (word sz) :=
   Let _ := check_size_8_64 sz in
   ok x.
 
-Definition Ox86_MOV_instr := mk_instr_w "Ox86_MOV" x86_MOV.
+Definition x86_ADD sz (v1 v2 : word sz) :=
+  Let _ := check_size_8_64 sz in
+  ok (
+  @merge_tuple (map sem_ot b5_ty) (map sem_ot (w_ty sz))
+  (rflags_of_aluop (v1 + v2)%R
+    (wunsigned v1 + wunsigned v2)%Z (wsigned   v1 + wsigned   v2)%Z) ((v1 + v2)%R)).
 
+
+
+
+Definition Ox86_MOV_instr := mk_instr_w_w "Ox86_MOV" x86_MOV.
+Definition Ox86_ADD_instr := mk_instr_w2_b5w "Ox86_ADD" x86_ADD.
 (*Definition Ox86_ADD_instr := mk_instr_w2_b5w "Ox86_ADD" x86_ADD.
 Definition Ox86_SUB_instr := mk_instr_w2_b5w "Ox86_SUB" x86_SUB.
 *)
@@ -352,6 +366,7 @@ Definition Ox86_VPERMQ_instr            := {| str:= pp_s "Ox86_VPERMQ" ;        
 Definition get_x86_instr o : Instruction :=
   match o with
   | Ox86_MOV sz             => Ox86_MOV_instr sz
+  | Ox86_ADD sz             => Ox86_ADD_instr sz
   | _ => Ox86_MOV_instr U8
 (*  | Ox86_MOVSX sz sz'       => Ox86_MOVSX_instr sz sz'
   | Ox86_MOVZX sz sz'       => Ox86_MOVZX_instr sz sz'

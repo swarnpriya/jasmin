@@ -77,7 +77,7 @@ Fixpoint merge_tuple (l1 l2: list Type) : ltuple l1 -> ltuple l2 -> ltuple (l1 +
       (x.1, rec x.2 p)
     end rec
    end.
-   
+
 Definition titi : ltuple [:: (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type)]:= merge_tuple toto toto.
 
 Definition sem_ot (t:stype) : Type :=
@@ -214,6 +214,9 @@ Notation mk_instr str tin tout semi wsizei:=
      wsizei := wsizei;
   |}.
 
+Definition mk_instr_w_w name semi sz :=
+  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz) sz.
+
 Definition mk_instr_w2_w2 name semi sz :=
   mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz) sz.
 
@@ -224,10 +227,57 @@ Definition mk_instr_w2b_bw name semi sz :=
 Definition mk_instr__b5w name semi sz :=
   mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz) sz.
 
-Definition mk_instr_w name semi sz :=
-  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz) sz.
+Definition mk_instr_w_b5w name semi sz :=
+  mk_instr (pp_sz name sz) (w_ty sz) (b5w_ty sz) (semi sz) sz.
+
+Definition mk_instr_w_b4w name semi sz :=
+  mk_instr (pp_sz name sz) (w_ty sz) (b4w_ty sz) (semi sz) sz.
+
+Definition mk_instr_w2_b name semi sz :=
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b_ty) (semi sz) sz.
+
+Definition mk_instr_w2_b5 name semi sz :=
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5_ty) (semi sz) sz.
 
 Definition mk_instr_w2_b5w name semi sz :=
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz) sz.
+
+Definition mk_instr_w2_b5w2 name semi sz :=
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) (semi sz) sz.
+
+Definition mk_instr_w3_b5w2 name semi sz :=
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) (semi sz) sz.
+
+Definition mk_instr_w2_w name semi sz :=
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) (semi sz) sz.
+
+Definition mk_instr_w4_w name semi sz :=
+  mk_instr (pp_sz name sz) (w4_ty sz) (w_ty sz) (semi sz) sz.
+
+Definition mk_instr_ww8_w name semi sz :=
+  mk_instr (pp_sz name sz) (ww8_ty sz) (w_ty sz) (semi sz) sz.
+
+Definition mk_instr_ww8_b2w name semi sz :=
+  mk_instr (pp_sz name sz) (ww8_ty sz) (b2w_ty sz) (semi sz) sz.
+
+Definition mk_instr_ww8_b5w name semi sz :=
+  mk_instr (pp_sz name sz) (ww8_ty sz) (b5w_ty sz) (semi sz) sz.
+
+Definition mk_instr_w2w8_b5w name semi sz :=
+  mk_instr (pp_sz name sz) (w2w8_ty sz) (b5w_ty sz) (semi sz) sz.
+
+Definition mk_instr_w2w8_w name semi sz :=
+  mk_instr (pp_sz name sz) (w2w8_ty sz) (w_ty sz) (semi sz) sz.
+
+Definition mk_instr_w_w128 name semi sz :=
+  mk_instr (pp_sz name sz) (w_ty sz) (w128_ty) (semi sz) sz.
+
+Definition mk_instr_w128w8_w name semi sz :=
+  mk_instr (pp_sz name sz) (w128w8_ty) (w_ty sz) (semi sz) sz.
+
+
+
+
+
 
 (* ----------------------------------------------------------------------------- *)
