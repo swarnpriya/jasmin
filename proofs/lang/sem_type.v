@@ -58,9 +58,6 @@ Fixpoint ltuple (ts:list Type) : Type :=
 
 Notation "(:: x , .. , y & z )" := (pair x .. (pair y z) ..).
 
-Definition toto : ltuple [:: (nat:Type); (nat:Type); (nat:Type); (nat:Type)] := 
-  (:: 0, 0, 0 & 0).
-
 Fixpoint merge_tuple (l1 l2: list Type) : ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2) := 
   match l1 return ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2) with 
   | [::] => fun _ p => p
@@ -78,8 +75,8 @@ Fixpoint merge_tuple (l1 l2: list Type) : ltuple l1 -> ltuple l2 -> ltuple (l1 +
     end rec
    end.
 
-Definition titi : ltuple [:: (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type)]:= merge_tuple toto toto.
-
+(* Definition example : ltuple [:: (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type); (nat:Type)]:= merge_tuple toto toto.
+ *)
 Definition sem_ot (t:stype) : Type :=
   if t is sbool then option bool
   else sem_t t.
@@ -176,6 +173,7 @@ Definition pp_ve    (s: string) (ve: velem)             (_: unit)   : string := 
 
 (* ----------------------------------------------------------------------------- *)
 Definition b_ty             := [:: sbool].
+Definition b4_ty            := [:: sbool; sbool; sbool; sbool].
 Definition b5_ty            := [:: sbool; sbool; sbool; sbool; sbool].
 
 Definition bw_ty    sz      := [:: sbool; sword sz].
@@ -189,6 +187,7 @@ Definition w_ty     sz      := [:: sword sz].
 Definition w2_ty    sz sz'  := [:: sword sz; sword sz'].
 Definition w3_ty    sz      := [:: sword sz; sword sz; sword sz].
 Definition w4_ty    sz      := [:: sword sz; sword sz; sword sz; sword sz].
+Definition w8_ty            := [:: sword8].
 Definition w32_ty           := [:: sword32].
 Definition w64_ty           := [:: sword64].
 Definition w128_ty          := [:: sword128].
@@ -217,6 +216,12 @@ Notation mk_instr str tin tout semi wsizei:=
 Definition mk_instr_w_w name semi sz :=
   mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) (semi sz) sz.
 
+Definition mk_instr_w_w' name semi szi szo :=
+  mk_instr (pp_sz_sz name szo szi) (w_ty szi) (w_ty szo) (semi szi szo) szi.
+
+(* Definition mk_instr_w_w' name semi sz sz' :=
+  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz') (semi sz sz') sz.
+ *)
 Definition mk_instr_w2_w2 name semi sz :=
   mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz) sz.
 
@@ -226,6 +231,12 @@ Definition mk_instr_w2b_bw name semi sz :=
 
 Definition mk_instr__b5w name semi sz :=
   mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz) sz.
+
+Definition mk_instr_b_w name semi sz :=
+  mk_instr (pp_sz name sz) (b_ty) (w_ty sz) (semi sz) sz.
+
+Definition mk_instr_bw2_w name semi sz :=
+  mk_instr (pp_sz name sz) (bw2_ty sz) (w_ty sz) (semi sz) sz.
 
 Definition mk_instr_w_b5w name semi sz :=
   mk_instr (pp_sz name sz) (w_ty sz) (b5w_ty sz) (semi sz) sz.
@@ -242,11 +253,14 @@ Definition mk_instr_w2_b5 name semi sz :=
 Definition mk_instr_w2_b5w name semi sz :=
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz) sz.
 
+Definition mk_instr_w2b_b5w name semi sz :=
+  mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) (semi sz) sz.
+
 Definition mk_instr_w2_b5w2 name semi sz :=
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) (semi sz) sz.
 
 Definition mk_instr_w3_b5w2 name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) (semi sz) sz.
+  mk_instr (pp_sz name sz) (w3_ty sz) (b5w2_ty sz) (semi sz) sz.
 
 Definition mk_instr_w2_w name semi sz :=
   mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) (semi sz) sz.
@@ -275,7 +289,14 @@ Definition mk_instr_w_w128 name semi sz :=
 Definition mk_instr_w128w8_w name semi sz :=
   mk_instr (pp_sz name sz) (w128w8_ty) (w_ty sz) (semi sz) sz.
 
+Definition mk_ve_instr_w_w name semi ve sz :=
+  mk_instr (pp_ve_sz name ve sz) (w_ty ve) (w_ty sz) (semi ve sz) sz.
 
+Definition mk_ve_instr_w2_w name semi ve sz :=
+  mk_instr (pp_ve_sz name ve sz) (w2_ty sz sz) (w_ty sz) (semi ve sz) sz.
+
+Definition mk_ve_instr_ww8_w name semi ve sz :=
+  mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) (semi ve sz) sz.
 
 
 
