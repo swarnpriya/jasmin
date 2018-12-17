@@ -214,7 +214,7 @@ Variant argument :=
  | Aimm   of u64
  | Aglob  of global
  | Areg   of register
- | Axreg   of xmm_register
+ | Axreg  of xmm_register
  | Aaddr  of wsize & address
  | Acondt of condt.
 
