@@ -25,10 +25,11 @@
 
 
 (* -------------------------------------------------------------------- *)
+Require Import Setoid Morphisms.
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
 Require oseq.
-Require Import ZArith utils strings low_memory word sem_type global (* expr psem *) oseq.
+Require Import ZArith utils strings low_memory word global oseq.
 Import Utf8 Relation_Operators.
 Import Memory.
 
@@ -197,18 +198,17 @@ Definition eval_arg_in_bool (s:x86_mem) (args:asm_args) (ad:arg_desc) : exec boo
     end
   end.
 
-Definition eval_arg_in (s:x86_mem) (args:asm_args) (ty:stype) (ad:arg_desc) : exec (sem_t ty) := 
+Definition eval_arg_in (s:x86_mem) (args:asm_args) (ty:xtype) (ad:arg_desc) : exec (sem_xt ty) := 
   match ty with
-  | sword sz => eval_arg_in_word s args sz ad
-  | sbool    => eval_arg_in_bool s args ad
-  | _        => type_error
+  | xword sz => eval_arg_in_word s args sz ad
+  | xbool    => eval_arg_in_bool s args ad
   end.
 
-Fixpoint app_asm_op T (s:x86_mem) (args:asm_args) (tin : seq (arg_desc * stype)) : 
-   sem_prod (map snd tin) (exec T) -> exec T :=
-  match tin return sem_prod (map snd tin) (exec T) → exec T with
+Fixpoint app_asm_op T (s:x86_mem) (args:asm_args) (tin : seq (arg_desc * xtype)) : 
+   sem_xprod (map snd tin) (exec T) -> exec T :=
+  match tin return sem_xprod (map snd tin) (exec T) → exec T with
   | [::] => λ (o : exec T),  o 
-  | aty :: tin => λ (o : sem_prod (aty.2:: map snd tin) (exec T)),
+  | aty :: tin => λ (o : sem_xprod (aty.2:: map snd tin) (exec T)),
     Let v := eval_arg_in s args aty.2 aty.1 in
     @app_asm_op T s args tin (o v)
   end.
@@ -308,23 +308,22 @@ Definition mem_write_bool(s:x86_mem) (args:asm_args) (ad:arg_desc) (b:option boo
   | _ => type_error
   end.
 
-Definition mem_write_ty (f:msb_flag) (s:x86_mem) (args:asm_args) (ad:arg_desc) (ty:stype) : sem_ot ty -> exec x86_mem := 
-  match ty return sem_ot ty -> exec x86_mem with
-   | sword sz => @mem_write_word f s args ad sz
-   | sbool    => mem_write_bool s args ad
-   | _        => fun _ => type_error
+Definition mem_write_ty (f:msb_flag) (s:x86_mem) (args:asm_args) (ad:arg_desc) (ty:xtype) : sem_oxt ty -> exec x86_mem := 
+  match ty return sem_oxt ty -> exec x86_mem with
+   | xword sz => @mem_write_word f s args ad sz
+   | xbool    => mem_write_bool s args ad
    end.
    
-Fixpoint mem_write_res (f:msb_flag) (args:asm_args) (tout : seq (arg_desc * stype)) (s:x86_mem) : sem_tuple (map snd tout) -> exec x86_mem :=
-  match tout return sem_tuple (map snd tout) -> exec x86_mem with
+Fixpoint mem_write_res (f:msb_flag) (args:asm_args) (tout : seq (arg_desc * xtype)) (s:x86_mem) : sem_xtuple (map snd tout) -> exec x86_mem :=
+  match tout return sem_xtuple (map snd tout) -> exec x86_mem with
   | [::] => fun _ => ok s
   | aty1 :: tout1 => 
     let rec := @mem_write_res f args tout1 in
-    match tout1 return (x86_mem -> sem_tuple (map snd tout1) -> exec x86_mem) -> (sem_tuple (map snd (aty1 :: tout1))) -> exec x86_mem with
-    | [::] => λ _ (v : sem_ot aty1.2), @mem_write_ty f s args aty1.1 aty1.2 v
+    match tout1 return (x86_mem -> sem_xtuple (map snd tout1) -> exec x86_mem) -> (sem_xtuple (map snd (aty1 :: tout1))) -> exec x86_mem with
+    | [::] => λ _ (v : sem_oxt aty1.2), @mem_write_ty f s args aty1.1 aty1.2 v
     | aty2 :: tout2 => 
-      λ (rec:x86_mem -> sem_tuple (map snd (aty2::tout2)) -> exec x86_mem)
-        (p: sem_ot aty1.2 * sem_tuple (map snd (aty2::tout2))),
+      λ (rec:x86_mem -> sem_xtuple (map snd (aty2::tout2)) -> exec x86_mem)
+        (p: sem_oxt aty1.2 * sem_xtuple (map snd (aty2::tout2))),
         Let s := @mem_write_ty f s args aty1.1 aty1.2 p.1 in
         rec s p.2 
     end rec

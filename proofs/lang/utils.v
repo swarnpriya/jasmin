@@ -1019,3 +1019,34 @@ Definition funname := positive.
 
 Definition get_fundef {T} (p: seq (funname * T)) (f: funname) :=
   assoc p f.
+
+(* ------------------------------------------------------------------------- *)
+
+Definition lprod ts tr :=
+  foldr (fun t tr => t -> tr) tr ts.
+
+Fixpoint ltuple (ts:list Type) : Type := 
+  match ts with
+  | [::]   => unit 
+  | [::t1] => t1
+  | t1::ts => t1 * ltuple ts
+  end.
+
+Notation "(:: x , .. , y & z )" := (pair x .. (pair y z) ..).
+
+Fixpoint merge_tuple (l1 l2: list Type) : ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2) := 
+  match l1 return ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2) with 
+  | [::] => fun _ p => p
+  | t1 :: l1 => 
+    let rec := @merge_tuple l1 l2 in 
+    match l1 return (ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2)) -> 
+                    ltuple (t1::l1) -> ltuple l2 -> ltuple (t1 :: l1 ++ l2) with
+    | [::] => fun _ (x:t1) =>
+      match l2 return ltuple l2 -> ltuple (t1::l2) with
+      | [::] => fun _ => x
+      | t2::l2    => fun (p:ltuple (t2::l2)) => (x, p)
+      end
+    | t1' :: l1' => fun rec (x:t1 * ltuple (t1'::l1')) p =>
+      (x.1, rec x.2 p)
+    end rec
+   end.

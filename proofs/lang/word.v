@@ -31,7 +31,8 @@ From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ word.
 Require ssrring.
 Require Zquot.
-Require Import Psatz ZArith utils type.
+Require Import Psatz ZArith utils.
+Require Export wsize.
 Import Utf8.
 Import ssrZ.
 
@@ -43,6 +44,7 @@ Import GRing.Theory Num.Theory.
 
 Local Open Scope Z_scope.
 
+(* -------------------------------------------------------------- *)
 Ltac elim_div :=
    unfold Z.div, Zmod;
      match goal with

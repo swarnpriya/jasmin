@@ -28,13 +28,13 @@
   Stack allocation is not described.
 *)
 
-Require memory_model array.
+Require type memory_model array.
 
 Import Utf8.
 Import all_ssreflect all_algebra.
 Import ZArith.
 Import ssrZ.
-Import type word utils gen_map.
+Import word utils gen_map.
 Import memory_model.
 Import GRing.Theory.
 
