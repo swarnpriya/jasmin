@@ -1,5 +1,5 @@
 From mathcomp Require Import all_ssreflect all_algebra.
-Require Import low_memory x86_sem compiler_util.
+Require Import low_memory x86_sem x86_decl compiler_util.
 Import Utf8 String.
 Import all_ssreflect.
 Import xseq expr.
