@@ -40,7 +40,7 @@ Require Import x86_decl.
 
 (* -------------------------------------------------------------------- *)
 
-Variant asm_op : Type := 
+Variant asm_op : Type :=
   (* Data transfert *)
 | MOV    of wsize              (* copy *)
 | MOVSX  of wsize & wsize      (* sign-extend *)
@@ -98,38 +98,38 @@ Variant asm_op : Type :=
 | BSWAP  of wsize                     (* byte swap *)
 
   (* SSE instructions *)
-| MOVD     of wsize 
-| VMOVDQU  `(wsize) 
-| VPAND    `(wsize) 
-| VPANDN   `(wsize) 
-| VPOR     `(wsize) 
-| VPXOR    `(wsize) 
-| VPADD    `(velem) `(wsize) 
-| VPSUB    `(velem) `(wsize) 
-| VPMULL   `(velem) `(wsize) 
-| VPMULU   `(wsize) 
+| MOVD     of wsize
+| VMOVDQU  `(wsize)
+| VPAND    `(wsize)
+| VPANDN   `(wsize)
+| VPOR     `(wsize)
+| VPXOR    `(wsize)
+| VPADD    `(velem) `(wsize)
+| VPSUB    `(velem) `(wsize)
+| VPMULL   `(velem) `(wsize)
+| VPMULU   `(wsize)
 | VPEXTR   `(wsize)
-| VPINSR   `(velem) 
-| VPSLL    `(velem) `(wsize) 
-| VPSRL    `(velem) `(wsize) 
-| VPSRA    `(velem) `(wsize) 
-| VPSLLV   `(velem) `(wsize) 
-| VPSRLV   `(velem) `(wsize) 
-| VPSLLDQ  `(wsize) 
-| VPSRLDQ  `(wsize) 
-| VPSHUFB  `(wsize) 
+| VPINSR   `(velem)
+| VPSLL    `(velem) `(wsize)
+| VPSRL    `(velem) `(wsize)
+| VPSRA    `(velem) `(wsize)
+| VPSLLV   `(velem) `(wsize)
+| VPSRLV   `(velem) `(wsize)
+| VPSLLDQ  `(wsize)
+| VPSRLDQ  `(wsize)
+| VPSHUFB  `(wsize)
 | VPSHUFD  `(wsize)
 | VPSHUFHW `(wsize)
 | VPSHUFLW `(wsize)
-| VPBLENDD `(wsize) 
-| VPBROADCAST of velem & wsize 
-| VBROADCASTI128 
-| VPUNPCKH `(velem) `(wsize) 
-| VPUNPCKL `(velem) `(wsize) 
-| VEXTRACTI128 
-| VINSERTI128 
-| VPERM2I128 
-| VPERMQ 
+| VPBLENDD `(wsize)
+| VPBROADCAST of velem & wsize
+| VBROADCASTI128
+| VPUNPCKH `(velem) `(wsize)
+| VPUNPCKL `(velem) `(wsize)
+| VEXTRACTI128
+| VINSERTI128
+| VPERM2I128
+| VPERMQ
 .
 
 (* ----------------------------------------------------------------------------- *)
@@ -183,11 +183,11 @@ Definition w256x2w8_ty      := [:: xword256; xword256; xword8].
 Notation mk_instr str_jas tin tout ain aout msb semi check wsizei := {|
   id_msb_flag := msb;
   id_in       := zip ain tin;
-  id_out      := zip aout tout; 
-  id_semi     := semi; 
+  id_out      := zip aout tout;
+  id_semi     := semi;
   id_check    := check;
   id_str_jas  := str_jas;
-  id_wsize    := wsizei; 
+  id_wsize    := wsizei;
 |}.
 
 Notation mk_instr_w_w name semi sz msb ain aout check :=
@@ -196,114 +196,114 @@ Notation mk_instr_w_w name semi sz msb ain aout check :=
 Notation mk_instr_w_w' name semi szi szo msb ain aout check :=
   (mk_instr (pp_sz_sz name szo szi) (w_ty szi) (w_ty szo) ain aout msb (semi szi szo) check szi) (only parsing).
 
-Definition mk_instr_w2_w2 name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz) sz.
+Notation mk_instr_w2_w2 name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) ain aout msb (semi sz) check sz)  (only parsing).
+(*
+Notation mk_instr_w2b_bw name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) [::xword sz; xword sz; xbool] (xbool :: (w_ty sz))
+   (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)) check sz)  (only parsing).*)
 
-Definition mk_instr_w2b_bw name semi sz :=
-  mk_instr (pp_sz name sz) [::xword sz; xword sz; xbool] (xbool :: (w_ty sz)) 
-   (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)) sz.
+Notation mk_instr__b5w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) [::] (b5w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr__b5w name semi sz :=
-  mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz) sz.
+Notation mk_instr_b_w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (b_ty) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_b_w name semi sz :=
-  mk_instr (pp_sz name sz) (b_ty) (w_ty sz) (semi sz) sz.
+Notation mk_instr_bw2_w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (bw2_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_bw2_w name semi sz :=
-  mk_instr (pp_sz name sz) (bw2_ty sz) (w_ty sz) (semi sz) sz.
+Notation mk_instr_w_b5w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w_ty sz) (b5w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w_b5w name semi sz :=
-  mk_instr (pp_sz name sz) (w_ty sz) (b5w_ty sz) (semi sz) sz.
+Notation mk_instr_w_b4w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w_ty sz) (b4w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w_b4w name semi sz :=
-  mk_instr (pp_sz name sz) (w_ty sz) (b4w_ty sz) (semi sz) sz.
+Notation mk_instr_w2_b name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2_ty sz sz) (b_ty) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w2_b name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b_ty) (semi sz) sz.
+Notation mk_instr_w2_b5 name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2_ty sz sz) (b5_ty) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w2_b5 name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5_ty) (semi sz) sz.
+Notation mk_instr_w2_b5w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w2_b5w name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) (semi sz) sz.
+Notation mk_instr_w2b_b5w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w2b_b5w name semi sz :=
-  mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) (semi sz) sz.
+Notation mk_instr_w2_b5w2 name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w2_b5w2 name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) (semi sz) sz.
+Notation mk_instr_w3_b5w2 name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w3_ty sz) (b5w2_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w3_b5w2 name semi sz :=
-  mk_instr (pp_sz name sz) (w3_ty sz) (b5w2_ty sz) (semi sz) sz.
+Notation mk_instr_w2_w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w2_w name semi sz :=
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) (semi sz) sz.
+Notation mk_instr_w4_w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w4_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w4_w name semi sz :=
-  mk_instr (pp_sz name sz) (w4_ty sz) (w_ty sz) (semi sz) sz.
+Notation mk_instr_ww8_w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (ww8_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_ww8_w name semi sz :=
-  mk_instr (pp_sz name sz) (ww8_ty sz) (w_ty sz) (semi sz) sz.
+Notation mk_instr_ww8_b2w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (ww8_ty sz) (b2w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_ww8_b2w name semi sz :=
-  mk_instr (pp_sz name sz) (ww8_ty sz) (b2w_ty sz) (semi sz) sz.
+Notation mk_instr_ww8_b5w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (ww8_ty sz) (b5w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_ww8_b5w name semi sz :=
-  mk_instr (pp_sz name sz) (ww8_ty sz) (b5w_ty sz) (semi sz) sz.
+Notation mk_instr_w2w8_b5w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2w8_ty sz) (b5w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w2w8_b5w name semi sz :=
-  mk_instr (pp_sz name sz) (w2w8_ty sz) (b5w_ty sz) (semi sz) sz.
+Notation mk_instr_w2w8_w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w2w8_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w2w8_w name semi sz :=
-  mk_instr (pp_sz name sz) (w2w8_ty sz) (w_ty sz) (semi sz) sz.
+Notation mk_instr_w_w128 name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w_ty sz) (w128_ty) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w_w128 name semi sz :=
-  mk_instr (pp_sz name sz) (w_ty sz) (w128_ty) (semi sz) sz.
+Notation mk_instr_w128w8_w name semi sz msb ain aout check :=
+  (mk_instr (pp_sz name sz) (w128w8_ty) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Definition mk_instr_w128w8_w name semi sz :=
-  mk_instr (pp_sz name sz) (w128w8_ty) (w_ty sz) (semi sz) sz.
+Notation mk_ve_instr_w_w name semi ve sz msb ain aout check :=
+  (mk_instr (pp_ve_sz name ve sz) (w_ty ve) (w_ty sz) ain aout msb (semi ve sz) check sz)  (only parsing).
 
-Definition mk_ve_instr_w_w name semi ve sz :=
-  mk_instr (pp_ve_sz name ve sz) (w_ty ve) (w_ty sz) (semi ve sz) sz.
+Notation mk_ve_instr_w2_w name semi ve sz msb ain aout check :=
+  (mk_instr (pp_ve_sz name ve sz) (w2_ty sz sz) (w_ty sz) ain aout msb (semi ve sz) check sz)  (only parsing).
 
-Definition mk_ve_instr_w2_w name semi ve sz :=
-  mk_instr (pp_ve_sz name ve sz) (w2_ty sz sz) (w_ty sz) (semi ve sz) sz.
-
-Definition mk_ve_instr_ww8_w name semi ve sz :=
-  mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) (semi ve sz) sz.
+Notation mk_ve_instr_ww8_w name semi ve sz msb ain aout check :=
+  (mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) ain aout msb (semi ve sz) check sz)  (only parsing).
 
 (* -------------------------------------------------------------------- *)
 
 Require Import x86_instr_t.
 (* -------------------------------------------------------------------- *)
 
-Definition check_opdr a1 := 
+Definition check_opdr a1 :=
   match a1 with
   | Imm _ _ | Glob _ | Reg _  | Adr _  => true
   | _ => false
   end.
-  
-Definition check_ri a1 := 
+
+Definition check_ri a1 :=
   match a1 with
   | Imm _ _  | Reg _  => true
   | _ => false
   end.
 
-Definition check2_regmemi (args: list asm_arg) := 
+Definition check2_regmemi (args: list asm_arg) :=
   match args with
   | [::Reg _; a1] => check_opdr a1
   | [::Adr _; a1] => check_ri a1
   | _               => false
   end.
 
-Definition MOV_desc sz := 
-  {| id_msb_flag := MSB_CLEAR; 
+Definition MOV_desc sz :=
+  {| id_msb_flag := MSB_CLEAR;
      id_in  := [:: (E sz 1, xword sz) ];
      id_out := [:: (E sz 0, xword sz) ];
      id_semi := @x86_MOV sz;
      id_check := check2_regmemi |}.
 
-Definition instr_desc (o:asm_op) : instr_desc_t := 
+Definition instr_desc (o:asm_op) : instr_desc_t :=
   match o with
   | MOV sz => MOV_desc sz
   | _ => MOV_desc U8
