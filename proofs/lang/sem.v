@@ -51,8 +51,6 @@ Definition undef_b := Vundef sbool.
 
 Definition values := seq value.
 
-Definition undef_error {t} := @Error error t ErrAddrUndef.
-
 Definition to_bool v :=
   match v with
   | Vbool b      => ok b
@@ -440,19 +438,15 @@ Definition Vword_inj sz sz' w w' (e: @Vword sz w = @Vword sz' w') :
   ∃ e : sz = sz', eq_rect sz (λ s, (word s)) w sz' e = w' :=
   let 'Logic.eq_refl := e in (ex_intro _ erefl erefl).
 
-Definition get_global_value (gd: glob_decls) (g: global) : option Z :=
-  assoc gd g.
-
 Definition get_global gd g : exec value :=
-  if get_global_value gd g is Some z then 
-    ok (Vword (wrepr (size_of_global g) z))
-  else type_error.
+  Let w := get_global_word gd g in
+  ok (Vword w).
 
 Lemma get_globalI gd g v :
   get_global gd g = ok v →
-  exists2 z : Z, get_global_value gd g = Some z & v = Vword (wrepr (size_of_global g) z).
+  exists2 z : Z, get_global_Z gd g = Some z & v = Vword (wrepr (size_of_global g) z).
 Proof.
-  rewrite /get_global; case: get_global_value => // z [<-];eauto.
+  rewrite /get_global /get_global_word; case: get_global_Z => // z [<-];eauto.
 Qed.
 
 Definition is_defined (v: value) : bool :=

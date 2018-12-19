@@ -28,7 +28,7 @@
 From mathcomp Require Import all_ssreflect.
 From Coq.Unicode Require Import Utf8.
 Require Import ZArith Setoid Morphisms CMorphisms CRelationClasses.
-Require Import oseq.
+Require Import xseq oseq.
 Require Psatz.
 From CoqWord Require Import ssrZ.
 
@@ -173,6 +173,7 @@ Canonical error_eqType := Eval hnf in EqType error error_eqMixin.
 Definition exec t := result error t.
 
 Definition type_error {t} := @Error _ t ErrType.
+Definition undef_error {t} := @Error error t ErrAddrUndef.
 
 Lemma bindW {T U} (v : exec T) (f : T -> exec U) r :
   v >>= f = ok r -> exists2 a, v = ok a & f a = ok r.
@@ -1013,3 +1014,8 @@ Lemma sumbool_of_boolEF (b: bool) (h: b = false) :
   Sumbool.sumbool_of_bool b = right h.
 Proof. by move: h; rewrite /is_true => ?; subst. Qed.
 
+(* ------------------------------------------------------------------------- *)
+Definition funname := positive.
+
+Definition get_fundef {T} (p: seq (funname * T)) (f: funname) :=
+  assoc p f.

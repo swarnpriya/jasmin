@@ -44,9 +44,9 @@ compiler/x86_variables.v
 compiler/x86_variables_proofs.v
 lang/array.v
 lang/expr.v
-lang/x86_instr_t.v
 lang/extraction.v
 lang/gen_map.v
+lang/global.v
 lang/memory_example.v
 lang/memory_model.v
 lang/low_memory.v
@@ -60,6 +60,7 @@ lang/utils.v
 lang/var.v
 lang/warray.v
 lang/word.v
+lang/x86_instr_t.v
 #lang/prog_notation.v
 #logic/Ssem.v
 #logic/Ssem_props.v

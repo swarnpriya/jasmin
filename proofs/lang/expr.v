@@ -28,7 +28,7 @@ Require Import oseq.
 Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
-Require Export strings word utils type var x86_instr_t.
+Require Export strings word utils type var global x86_instr_t.
 Require Import xseq.
 Import Utf8 ZArith.
 
@@ -337,23 +337,6 @@ Definition var_info_to_attr (vi: var_info) :=
   | xI _ => VarA true
   | _ => VarA false
   end.
-
-Record global := Global { size_of_global : wsize ; ident_of_global:> Ident.ident }.
-
-Definition global_beq (g1 g2: global) : bool :=
-  let 'Global s1 n1 := g1 in
-  let 'Global s2 n2 := g2 in
-  (s1 == s2) && (n1 == n2).
-
-Lemma global_eq_axiom : Equality.axiom global_beq.
-Proof.
-  case => s1 g1 [] s2 g2 /=; case: andP => h; constructor.
-  - by case: h => /eqP -> /eqP ->.
-  by case => ??; apply: h; subst.
-Qed.
-
-Definition global_eqMixin := Equality.Mixin global_eq_axiom.
-Canonical global_eqType := Eval hnf in EqType global global_eqMixin.
 
 Inductive pexpr : Type :=
 | Pconst :> Z -> pexpr
@@ -715,8 +698,6 @@ Canonical  assgn_tag_eqType      := Eval hnf in EqType assgn_tag assgn_tag_eqMix
 
 (* -------------------------------------------------------------------- *)
 
-Definition funname := positive.
-
 Variant inline_info :=
   | InlineFun
   | DoNotInline.
@@ -762,9 +743,6 @@ Definition function_signature : Type :=
 
 Definition signature_of_fundef (fd: fundef) : function_signature :=
   (f_tyin fd, f_tyout fd).
-
-Definition glob_decl := (global * Z)%type.
-Notation glob_decls  := (seq glob_decl).
 
 Definition fun_decl := (funname * fundef)%type.
 Notation fun_decls  := (seq fun_decl).
@@ -878,9 +856,6 @@ Qed.
 
 Definition prog_eqMixin     := Equality.Mixin prog_eq_axiom.
 Canonical  prog_eqType      := Eval hnf in EqType prog prog_eqMixin.
-
-Definition get_fundef {T} (p: seq (funname * T)) (f: funname) :=
-  assoc p f.
 
 Definition map_prog (F: fundef -> fundef) (p:prog) :=
   {| p_globs := p_globs p;
