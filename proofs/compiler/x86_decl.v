@@ -277,3 +277,45 @@ Definition rflagv_eqMixin := comparableClass rflagv_eq_dec.
 Canonical rflagv_eqType := EqType _ rflagv_eqMixin.
 
 (* -------------------------------------------------------------------- *)
+
+Variant asm_arg : Type := 
+  | Condt  `(condt)
+  | Imm    `(ws:wsize) `(word ws)
+  | Glob   `(global)
+  | Reg    `(register)
+  | Adr    `(address)
+  | XMM    `(xmm_register).
+
+Notation asm_args := (seq asm_arg).
+
+Variant implicite_arg : Type := 
+  | IArflag of rflag
+  | IAreg   of register.
+
+Variant arg_desc :=
+| ADImplicit  of implicite_arg
+| ADExplicit  of option wsize & nat & option register.
+
+Coercion Eb n := ADExplicit None n None.
+Definition E w n := ADExplicit (Some w) n None.
+
+(* -------------------------------------------------------------------- *)
+(* Writing a large word to register or memory *)
+(* When writing to a register, depending on the instruction,
+  the most significant bits are either preserved or cleared. *)
+Variant msb_flag := MSB_CLEAR | MSB_MERGE.
+
+Scheme Equality for msb_flag.
+Definition msb_flag_eqMixin := comparableClass msb_flag_eq_dec.
+Canonical msb_flag_eqType := EqType msb_flag msb_flag_eqMixin.
+
+(* -------------------------------------------------------------------- *)
+Record instr_desc_t := mk_instr_desc {
+(*  id_name : sopn; *)
+  id_msb_flag : msb_flag; 
+  id_in       : seq (arg_desc * stype);
+  id_out      : seq (arg_desc * stype);
+  id_semi     : sem_prod (map snd id_in) (exec (sem_tuple (map snd id_out)));
+  id_check    : list asm_arg -> bool
+}.
+
