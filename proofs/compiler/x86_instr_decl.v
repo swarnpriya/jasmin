@@ -662,32 +662,14 @@ Notation mk_instr_w_w name semi msb ain aout check := (fun sz =>
 Notation mk_instr_w_w' name semi msb ain aout check := (fun szi szo =>
   mk_instr (pp_sz_sz name szo szi) (w_ty szi) (w_ty szo) ain aout msb (semi szi szo) check szi) (only parsing).
 
-(*
-Notation mk_instr_w2_w2 name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) ain aout msb (semi sz) check sz)  (only parsing).
-
-Notation mk_instr_w2b_bw name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) [::xword sz; xword sz; xbool] (xbool :: (w_ty sz))
-   msb ain aout (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)) check sz)  (only parsing).
-
-Notation mk_instr__b5w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) [::] (b5w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
-
-Notation mk_instr_b_w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (b_ty) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
-*)
-
 Notation mk_instr_bw2_w name semi msb ain aout check := (fun sz => 
   mk_instr (pp_sz name sz) (bw2_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
-
 
 Notation mk_instr_w_b5w name semi msb ain aout check := (fun sz => 
   mk_instr (pp_sz name sz) (w_ty sz) (b5w_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
 
-
 Notation mk_instr_w_b4w name semi msb ain aout check := (fun sz => 
   mk_instr (pp_sz name sz) (w_ty sz) (b4w_ty sz) ain (implicit_flags_noCF ++ aout) msb (semi sz) check sz)  (only parsing).
-
 
 Notation mk_instr_w2_b name semi msb ain aout check := (fun sz => 
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b_ty) ain aout msb (semi sz) check sz)  (only parsing).
@@ -695,13 +677,11 @@ Notation mk_instr_w2_b name semi msb ain aout check := (fun sz =>
 Notation mk_instr_w2_b5 name semi msb ain  check := (fun sz => 
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5_ty) ain implicit_flags msb (semi sz) check sz)  (only parsing).
 
-
 Notation mk_instr_w2_b5w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) ain (implicit_flags ++ aout) msb (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2b_b5w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) (ain ++ [::iCF]) (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
-
+  mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) (ain ++ [::iCF]) (implicit_flags ++ aout) msb (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2_b5w2 name semi msb ain aout check := (fun sz => 
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
@@ -748,17 +728,40 @@ Notation mk_ve_instr_ww8_w name semi msb ain aout check := (fun ve sz =>
   mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) ain aout msb (semi ve sz) check sz)  (only parsing).
 
 Definition fake_check (_:list asm_arg) : bool := true.
+Definition fake_check_sz (_:list asm_arg) (sz:wsize) : bool := true.
 
 Definition msb_dfl := MSB_CLEAR.
+
+Definition check_imm32 sz sz' := if sz == U64 then sz' == U32 else sz == sz'.
+
+Definition check_opdr32 sz a1 :=
+  match a1 with
+  | Imm sz' _ => check_imm32 sz sz' 
+  | Glob _ | Reg _  | Adr _  => true
+  | _ => false
+  end.
+
+Definition check_ri32 sz a1 :=
+  match a1 with
+  | Imm sz' _ => check_imm32 sz sz' 
+  | Reg _  => true
+  | _ => false
+  end.
+
+Definition check2_regmemi32 sz (args: list asm_arg) :=
+  match args with
+  | [::Reg _; a1] => check_opdr32 sz a1
+  | [::Adr _; a1] => check_ri32 sz a1
+  | _               => false
+  end. 
 
 Definition Ox86_MOV_instr               := mk_instr_w_w "MOV" x86_MOV msb_dfl [:: E 1] [:: E 0] fake_check.
 Definition Ox86_MOVSX_instr             := mk_instr_w_w' "MOVSX" x86_MOVSX msb_dfl [:: E 1] [:: E 0] fake_check. 
 Definition Ox86_MOVZX_instr             := mk_instr_w_w' "MOVZX" x86_MOVZX msb_dfl [:: E 1] [:: E 0] fake_check.
 Definition Ox86_CMOVcc_instr            := mk_instr_bw2_w "CMOVcc" x86_CMOVcc msb_dfl [:: E 0; E 2; E 1] [:: E 1] fake_check.
 
-(*Definition Ox86_MOVZX32_instr           := mk_instr (pp_s "MOVZX32") w32_ty w64_ty (λ x : u32, ok (zero_extend U64 x)) U32. *)
-Definition Ox86_ADD_instr               := mk_instr_w2_b5w "ADD" x86_ADD msb_dfl [:: E 0; E 1] [:: E 0] fake_check.
-Definition Ox86_SUB_instr               := mk_instr_w2_b5w "SUB" x86_SUB msb_dfl [:: E 0; E 1] [:: E 0] fake_check.
+Definition Ox86_ADD_instr               := mk_instr_w2_b5w "ADD" x86_ADD msb_dfl [:: E 0; E 1] [:: E 0] check2_regmemi32.
+Definition Ox86_SUB_instr               := mk_instr_w2_b5w "SUB" x86_SUB msb_dfl [:: E 0; E 1] [:: E 0] check2_regmemi32.
 
 Definition Ox86_MUL_instr               := mk_instr_w2_b5w2 "MUL"  x86_MUL  msb_dfl [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
 Definition Ox86_IMUL_instr              := mk_instr_w2_b5w2 "IMUL" x86_IMUL msb_dfl [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
@@ -767,8 +770,8 @@ Definition Ox86_IMULri_instr            := mk_instr_w2_b5w "IMULri" x86_IMULt ms
 Definition Ox86_DIV_instr               := mk_instr_w3_b5w2 "DIV" x86_DIV msb_dfl [:: R RDX; R RAX; E 0] [:: R RAX; R RDX] fake_check.
 Definition Ox86_IDIV_instr              := mk_instr_w3_b5w2 "IDIV" x86_IDIV msb_dfl [:: R RDX; R RAX; E 0] [:: R RAX; R RDX] fake_check.
 Definition Ox86_CQO_instr               := mk_instr_w_w "CQO" x86_CQO msb_dfl [:: R RAX] [:: R RDX] fake_check.
-Definition Ox86_ADC_instr               := mk_instr_w2b_b5w "ADC" x86_ADC msb_dfl [:: E 0; E 1] [:: E 0] fake_check.
-Definition Ox86_SBB_instr               := mk_instr_w2b_b5w "SBB" x86_SBB msb_dfl [:: E 0; E 1] [:: E 0] fake_check.
+Definition Ox86_ADC_instr               := mk_instr_w2b_b5w "ADC" x86_ADC msb_dfl [:: E 0; E 1] [:: E 0] check2_regmemi32.
+Definition Ox86_SBB_instr               := mk_instr_w2b_b5w "SBB" x86_SBB msb_dfl [:: E 0; E 1] [:: E 0] check2_regmemi32.
 Definition Ox86_NEG_instr               := mk_instr_w_b5w "NEG" x86_NEG msb_dfl [:: E 0] [:: E 0] fake_check.
 Definition Ox86_INC_instr               := mk_instr_w_b4w "INC" x86_INC msb_dfl [:: E 0] [:: E 0] fake_check.
 Definition Ox86_DEC_instr               := mk_instr_w_b4w "DEC" x86_DEC msb_dfl [:: E 0] [:: E 0] fake_check.
