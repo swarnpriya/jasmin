@@ -728,7 +728,7 @@ Notation mk_ve_instr_ww8_w name semi msb ain aout check := (fun ve sz =>
   mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) ain aout msb (semi ve sz) check sz)  (only parsing).
 
 Definition fake_check (_:list asm_arg) : bool := true.
-Definition fake_check_sz (_:list asm_arg) (sz:wsize) : bool := true.
+Definition fake_check_sz (sz:wsize) (_:list asm_arg) : bool := true.
 
 Definition msb_dfl := MSB_CLEAR.
 
@@ -765,8 +765,8 @@ Definition Ox86_SUB_instr               := mk_instr_w2_b5w "SUB" x86_SUB msb_dfl
 
 Definition Ox86_MUL_instr               := mk_instr_w2_b5w2 "MUL"  x86_MUL  msb_dfl [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
 Definition Ox86_IMUL_instr              := mk_instr_w2_b5w2 "IMUL" x86_IMUL msb_dfl [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
-Definition Ox86_IMULr_instr             := mk_instr_w2_b5w "IMULr" x86_IMULt msb_dfl [:: E 0; E 1] [:: E 0] fake_check.
-Definition Ox86_IMULri_instr            := mk_instr_w2_b5w "IMULri" x86_IMULt msb_dfl [:: E 1; E 2] [:: E 0] fake_check. (* /!\ same as above *)
+Definition Ox86_IMULr_instr             := mk_instr_w2_b5w "IMULr" x86_IMULt msb_dfl [:: E 0; E 1] [:: E 0] fake_check_sz.
+Definition Ox86_IMULri_instr            := mk_instr_w2_b5w "IMULri" x86_IMULt msb_dfl [:: E 1; E 2] [:: E 0] fake_check_sz. (* /!\ same as above *)
 Definition Ox86_DIV_instr               := mk_instr_w3_b5w2 "DIV" x86_DIV msb_dfl [:: R RDX; R RAX; E 0] [:: R RAX; R RDX] fake_check.
 Definition Ox86_IDIV_instr              := mk_instr_w3_b5w2 "IDIV" x86_IDIV msb_dfl [:: R RDX; R RAX; E 0] [:: R RAX; R RDX] fake_check.
 Definition Ox86_CQO_instr               := mk_instr_w_w "CQO" x86_CQO msb_dfl [:: R RAX] [:: R RDX] fake_check.
@@ -780,10 +780,10 @@ Definition Ox86_BT_instr                := mk_instr_w2_b "BT" x86_BT msb_dfl [::
 Definition Ox86_LEA_instr               := mk_instr_w4_w "LEA" x86_LEA msb_dfl [:: E 1; E 2; E 3; E 4] [:: E 0] fake_check.
 Definition Ox86_TEST_instr              := mk_instr_w2_b5 "TEST" x86_TEST msb_dfl [:: E 0; E 1] fake_check.
 Definition Ox86_CMP_instr               := mk_instr_w2_b5 "CMP" x86_CMP msb_dfl [:: E 0; E 1] fake_check.
-Definition Ox86_AND_instr               := mk_instr_w2_b5w "AND" x86_AND msb_dfl [:: E 0; E 1] [:: E 0] fake_check.
-Definition Ox86_ANDN_instr              := mk_instr_w2_b5w "ANDN" x86_ANDN msb_dfl [:: E 1; E 2] [:: E 0] fake_check.
-Definition Ox86_OR_instr                := mk_instr_w2_b5w "OR" x86_OR msb_dfl [:: E 0; E 1] [:: E 0] fake_check.
-Definition Ox86_XOR_instr               := mk_instr_w2_b5w "XOR" x86_XOR msb_dfl [:: E 0; E 1] [:: E 0] fake_check.
+Definition Ox86_AND_instr               := mk_instr_w2_b5w "AND" x86_AND msb_dfl [:: E 0; E 1] [:: E 0] fake_check_sz.
+Definition Ox86_ANDN_instr              := mk_instr_w2_b5w "ANDN" x86_ANDN msb_dfl [:: E 1; E 2] [:: E 0] fake_check_sz.
+Definition Ox86_OR_instr                := mk_instr_w2_b5w "OR" x86_OR msb_dfl [:: E 0; E 1] [:: E 0] fake_check_sz.
+Definition Ox86_XOR_instr               := mk_instr_w2_b5w "XOR" x86_XOR msb_dfl [:: E 0; E 1] [:: E 0] fake_check_sz.
 Definition Ox86_NOT_instr               := mk_instr_w_w "NOT" x86_NOT msb_dfl [:: E 0] [:: E 0] fake_check.
 Definition Ox86_ROR_instr               := mk_instr_ww8_b2w "ROR" x86_ROR msb_dfl [::E 0; ADExplicit 1 (Some RCX)] [::F OF; F CF; E 0] fake_check.
 Definition Ox86_ROL_instr               := mk_instr_ww8_b2w "ROL" x86_ROL msb_dfl [::E 0; ADExplicit 1 (Some RCX)] [::F OF; F CF; E 0] fake_check.
