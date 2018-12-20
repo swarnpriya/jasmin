@@ -659,7 +659,7 @@ Notation mk_instr str_jas tin tout ain aout msb semi check wsizei := {|
 Notation mk_instr_w_w name semi msb ain aout check := (fun sz => 
   mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) ain aout msb (semi sz) check sz) (only parsing).
 
-Notation mk_instr_w_w' name semi msb ain aout check := (fun szi szo =>
+Notation mk_instr_w_w' name semi msb ain aout check := (fun szo szi =>
   mk_instr (pp_sz_sz name szo szi) (w_ty szi) (w_ty szo) ain aout msb (semi szi szo) check szi) (only parsing).
 
 Notation mk_instr_bw2_w name semi msb ain aout check := (fun sz => 

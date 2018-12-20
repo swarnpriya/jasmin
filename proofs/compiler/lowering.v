@@ -190,7 +190,7 @@ Definition lower_condition vi (pe: pexpr) : seq instr_r * pexpr :=
   match lower_cond_classify vi pe with
   | Some (l, sz, r, x, y) =>
     if (sz ≤ U64)%CMP then
-    ([:: Copn l AT_none (Ox86 (Ox86_CMP sz)) [:: x; y] ],
+    ([:: Copn l AT_none (Ox86 (CMP sz)) [:: x; y] ],
     match r with
     | Cond1 CondVar v => Pvar v
     | Cond1 CondNotVar v => Papp1 Onot (Pvar v)
@@ -251,14 +251,14 @@ Variant divmod_pos :=
 
 Variant lower_cassgn_t : Type :=
   | LowerMov of bool (* whether it needs a intermediate register *)
-  | LowerCopn of x86_instr_t & list pexpr
-  | LowerInc  of x86_instr_t & pexpr
+  | LowerCopn of sopn & list pexpr
+  | LowerInc  of sopn & pexpr
   | LowerLea of wsize & lea
-  | LowerFopn of x86_instr_t & list pexpr & option wsize
+  | LowerFopn of sopn & list pexpr & option wsize
   | LowerEq   of wsize & pexpr & pexpr
   | LowerLt   of wsize & pexpr & pexpr
   | LowerIf   of stype & pexpr & pexpr & pexpr
-  | LowerDivMod of divmod_pos & signedness & wsize &  x86_instr_t & pexpr & pexpr 
+  | LowerDivMod of divmod_pos & signedness & wsize & sopn & pexpr & pexpr 
   | LowerAssgn.
 
 Context (is_var_in_memory : var_i → bool).
@@ -382,20 +382,20 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
   | Pload sz _ _ => chk (sz ≤ U64)%CMP (LowerMov (is_lval_in_memory x))
 
   | Papp1 (Oword_of_int sz) (Pconst _) => chk (sz' ≤ U64)%CMP (LowerMov false)
-  | Papp1 (Olnot sz) a => k8 sz (LowerCopn (Ox86_NOT sz) [:: a ])
-  | Papp1 (Oneg (Op_w sz)) a => k8 sz (LowerFopn (Ox86_NEG sz) [:: a] None)
+  | Papp1 (Olnot sz) a => k8 sz (LowerCopn (Ox86 (NOT sz)) [:: a ])
+  | Papp1 (Oneg (Op_w sz)) a => k8 sz (LowerFopn (Ox86 (NEG sz)) [:: a] None)
   | Papp1 (Osignext szo szi) a =>
     match szi with
     | U8 => k16 szo
     | U16 => k32 szo
     | U32 => kb (szo == U64) szo
     | _ => chk false
-    end (LowerCopn (Ox86_MOVSX szo szi) [:: a])
+    end (LowerCopn (Ox86 (MOVSX szo szi)) [:: a])
   | Papp1 (Ozeroext szo szi) a =>
     match szi with
-    | U8 => k16 szo (LowerCopn (Ox86_MOVZX szo szi) [:: a])
-    | U16 => k32 szo (LowerCopn (Ox86_MOVZX szo szi) [:: a])
-    | U32 => kb (szo == U64) szo (LowerCopn Ox86_MOVZX32 [:: a])
+    | U8 => k16 szo (LowerCopn (Ox86 (MOVZX szo szi)) [:: a])
+    | U16 => k32 szo (LowerCopn (Ox86 (MOVZX szo szi)) [:: a])
+    | U32 => kb (szo == U64) szo (LowerCopn Ox86MOVZX32 [:: a])
     | _ => LowerAssgn
     end
 
@@ -407,9 +407,9 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
       | Some l => LowerLea sz l
       | None   => 
         match add_inc_dec_classify sz a b with
-        | AddInc y => LowerInc (Ox86_INC sz) y
-        | AddDec y => LowerInc (Ox86_DEC sz) y
-        | AddNone  => LowerFopn (Ox86_ADD sz) [:: a ; b ] (Some U32)
+        | AddInc y => LowerInc (Ox86 (INC sz)) y
+        | AddDec y => LowerInc (Ox86 (DEC sz)) y
+        | AddNone  => LowerFopn (Ox86 (ADD sz)) [:: a ; b ] (Some U32)
         end
       end
     | Osub (Op_w sz) =>
@@ -418,9 +418,9 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
       | Some l => LowerLea sz l
       | None   => 
         match sub_inc_dec_classify sz b with
-        | SubInc => LowerInc (Ox86_INC sz) a
-        | SubDec => LowerInc (Ox86_DEC sz) a
-        | SubNone => LowerFopn (Ox86_SUB sz) [:: a ; b ] (Some U32)
+        | SubInc => LowerInc (Ox86 (INC sz)) a
+        | SubDec => LowerInc (Ox86 (DEC sz)) a
+        | SubNone => LowerFopn (Ox86 (SUB sz)) [:: a ; b ] (Some U32)
         end
       end
     | Omul (Op_w sz) =>
@@ -429,27 +429,27 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
       | Some l => LowerLea sz l
       | _      => 
         match is_wconst sz a with
-        | Some _ => LowerFopn (Ox86_IMULtimm sz) [:: b ; a ] (Some U32)
+        | Some _ => LowerFopn (Ox86 (IMULri sz)) [:: b ; a ] (Some U32)
         | _      =>
         match is_wconst sz b with
-        | Some _ => LowerFopn (Ox86_IMULtimm sz) [:: a ; b ] (Some U32)
-        | _ => LowerFopn (Ox86_IMULt sz) [:: a ; b ] (Some U32)
+        | Some _ => LowerFopn (Ox86 (IMULri sz)) [:: a ; b ] (Some U32)
+        | _ => LowerFopn (Ox86 (IMULr sz)) [:: a ; b ] (Some U32)
         end
         end
       end
     | Odiv (Cmp_w u sz) =>
       let opn := 
         match u with
-        | Unsigned => Ox86_DIV sz
-        | Signed   => Ox86_IDIV sz
+        | Unsigned => Ox86 (DIV sz)
+        | Signed   => Ox86 (IDIV sz)
         end in
       k16 sz (LowerDivMod DM_Fst u sz opn a b)
 
     | Omod (Cmp_w u sz) =>
        let opn := 
         match u with
-        | Unsigned => Ox86_DIV sz
-        | Signed   => Ox86_IDIV sz
+        | Unsigned => Ox86 (DIV sz)
+        | Signed   => Ox86 (IDIV sz)
         end in
       k16 sz (LowerDivMod DM_Snd u sz opn a b)
         
@@ -457,41 +457,41 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
       match is_andn a b with
       | Some (a,b) => 
         if (sz ≤ U64)%CMP
-        then k32 sz (LowerFopn (Ox86_ANDN sz) [:: a ; b ] None)
-        else kb true sz (LowerCopn (Ox86_VPANDN sz) [:: a ; b ])
+        then k32 sz (LowerFopn (Ox86 (ANDN sz)) [:: a ; b ] None)
+        else kb true sz (LowerCopn (Ox86 (VPANDN sz)) [:: a ; b ])
       | None =>
         if (sz ≤ U64)%CMP
-        then k8 sz (LowerFopn (Ox86_AND sz) [:: a ; b ] (Some U32))
-        else kb true sz (LowerCopn (Ox86_VPAND sz) [:: a ; b ])
+        then k8 sz (LowerFopn (Ox86 (AND sz)) [:: a ; b ] (Some U32))
+        else kb true sz (LowerCopn (Ox86 (VPAND sz)) [:: a ; b ])
       end
         
 
     | Olor sz =>
       if (sz ≤ U64)%CMP
-      then k8 sz (LowerFopn (Ox86_OR sz) [:: a ; b ] (Some U32))
-      else kb true sz (LowerCopn (Ox86_VPOR sz) [:: a ; b ])
+      then k8 sz (LowerFopn (Ox86 (OR sz)) [:: a ; b ] (Some U32))
+      else kb true sz (LowerCopn (Ox86 (VPOR sz)) [:: a ; b ])
     | Olxor sz =>
       if (sz ≤ U64)%CMP
-      then k8 sz (LowerFopn (Ox86_XOR sz) [:: a ; b ] (Some U32))
-      else kb true sz (LowerCopn (Ox86_VPXOR sz) [:: a ; b ])
-    | Olsr sz => k8 sz (LowerFopn (Ox86_SHR sz) [:: a ; b ] (Some U8))
-    | Olsl sz => k8 sz (LowerFopn (Ox86_SHL sz) [:: a ; b ] (Some U8))
-    | Oasr sz => k8 sz (LowerFopn (Ox86_SAR sz) [:: a ; b ] (Some U8))
+      then k8 sz (LowerFopn (Ox86 (XOR sz)) [:: a ; b ] (Some U32))
+      else kb true sz (LowerCopn (Ox86 (VPXOR sz)) [:: a ; b ])
+    | Olsr sz => k8 sz (LowerFopn (Ox86 (SHR sz)) [:: a ; b ] (Some U8))
+    | Olsl sz => k8 sz (LowerFopn (Ox86 (SHL sz)) [:: a ; b ] (Some U8))
+    | Oasr sz => k8 sz (LowerFopn (Ox86 (SAR sz)) [:: a ; b ] (Some U8))
     | Oeq (Op_w sz) => k8 sz (LowerEq sz a b)
     | Olt (Cmp_w Unsigned sz) => k8 sz (LowerLt sz a b)
 
     | Ovadd ve sz =>
-      kb (U128 <= sz)%CMP sz (LowerCopn (Ox86_VPADD ve sz) [::a; b])
+      kb (U128 <= sz)%CMP sz (LowerCopn (Ox86 (VPADD ve sz)) [::a; b])
     | Ovsub ve sz => 
-      kb (U128 <= sz)%CMP sz (LowerCopn (Ox86_VPSUB ve sz) [::a; b])
+      kb (U128 <= sz)%CMP sz (LowerCopn (Ox86 (VPSUB ve sz)) [::a; b])
     | Ovmul ve sz => 
-      kb ((U32 <= ve) && (U128 <= sz))%CMP sz (LowerCopn (Ox86_VPMULL ve sz) [::a; b])
+      kb ((U32 <= ve) && (U128 <= sz))%CMP sz (LowerCopn (Ox86 (VPMULL ve sz)) [::a; b])
     | Ovlsl ve sz =>
-      kb ((U16 <= ve) && (U128 <= sz))%CMP sz (LowerCopn (Ox86_VPSLL ve sz) [::a; b])
+      kb ((U16 <= ve) && (U128 <= sz))%CMP sz (LowerCopn (Ox86 (VPSLL ve sz)) [::a; b])
     | Ovlsr ve sz =>
-      kb ((U16 <= ve) && (U128 <= sz))%CMP sz (LowerCopn (Ox86_VPSRL ve sz) [::a; b])
+      kb ((U16 <= ve) && (U128 <= sz))%CMP sz (LowerCopn (Ox86 (VPSRL ve sz)) [::a; b])
     | Ovasr ve sz => 
-      kb ((U16 <= ve) && (U128 <= sz))%CMP sz (LowerCopn (Ox86_VPSRA ve sz) [::a; b])
+      kb ((U16 <= ve) && (U128 <= sz))%CMP sz (LowerCopn (Ox86 (VPSRA ve sz)) [::a; b])
 
     | _ => LowerAssgn
     end
@@ -537,18 +537,18 @@ Definition opn_5flags_cases (a: pexprs) (m: option wsize) (sz: wsize) : opn_5fla
 
 Definition opn_no_imm op :=
   match op with
-  | Ox86_IMULtimm sz => Ox86_IMULt sz
+  | Ox86 (IMULri sz) => Ox86 (IMULr sz)
   | _ => op 
   end.
 
 Definition opn_5flags (immed_bound: option wsize) (vi: var_info)
-           (cf: lval) (x: lval) tg (o: x86_instr_t) (a: pexprs) : seq instr_r :=
+           (cf: lval) (x: lval) tg (o: sopn) (a: pexprs) : seq instr_r :=
   let f := Lnone_b vi in
-  let fopn o a := [:: Copn [:: f ; cf ; f ; f ; f ; x ] tg (Ox86 o) a ] in
-  match opn_5flags_cases a immed_bound (wsize_of_sopn (Ox86 o)) with
+  let fopn o a := [:: Copn [:: f ; cf ; f ; f ; f ; x ] tg o a ] in
+  match opn_5flags_cases a immed_bound (wsize_of_sopn o) with
   | Opn5f_large_immed x y n z _ _ =>
     let c := {| v_var := {| vtype := sword U64; vname := fresh_multiplicand fv U64 |} ; v_info := vi |} in
-    Copn [:: Lvar c ] tg (Ox86 (Ox86_MOV U64)) [:: y] :: fopn (opn_no_imm o) (x :: Pvar c :: z)
+    Copn [:: Lvar c ] tg (Ox86 (MOV U64)) [:: y] :: fopn (opn_no_imm o) (x :: Pvar c :: z)
   | Opn5f_other => fopn o a
   end.
 
@@ -560,8 +560,8 @@ Definition reduce_wconst sz (e: pexpr) : pexpr :=
 Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e: pexpr) : cmd :=
   let vi := var_info_of_lval x in
   let f := Lnone_b vi in
-  let copn o a := [:: MkI ii (Copn [:: x ] tg (Ox86 o) a) ] in
-  let inc o a := [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg (Ox86 o) [:: a ]) ] in
+  let copn o a := [:: MkI ii (Copn [:: x ] tg o a) ] in
+  let inc o a := [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg o [:: a ]) ] in
   let szty := wsize_of_stype ty in
   match lower_cassgn_classify szty e x with
   | LowerMov b =>
@@ -569,13 +569,13 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
     if b
     then
       let c := {| v_var := {| vtype := sword szty; vname := fresh_multiplicand fv szty |} ; v_info := vi |} in
-      [:: MkI ii (Copn [:: Lvar c] tg (Ox86 (Ox86_MOV szty)) [:: e ])
-       ; MkI ii (Copn [:: x ] tg (Ox86 (Ox86_MOV szty)) [:: Pvar c ]) ]
+      [:: MkI ii (Copn [:: Lvar c] tg (Ox86 (MOV szty)) [:: e ])
+       ; MkI ii (Copn [:: x ] tg (Ox86 (MOV szty)) [:: Pvar c ]) ]
     else 
       (* IF e is 0 then use Oset0 instruction *)
       if (e == @wconst szty 0) && ~~ is_lval_in_memory x && options.(use_set0) then
         [:: MkI ii (Copn [:: f ; f ; f ; f ; f ; x] tg (Oset0 szty) [::]) ]
-      else copn (Ox86_MOV szty) [:: e ]
+      else copn (Ox86 (MOV szty)) [:: e ]
   | LowerCopn o e => copn o e
   | LowerInc o e => inc o e
   | LowerFopn o es m => map (MkI ii) (opn_5flags m vi f x tg o es)
@@ -586,7 +586,7 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
     let o := oapp Pvar (@wconst sz 0) o in
     let lea tt := 
       let ii := warning ii Use_lea in
-      [:: MkI ii (Copn [::x] tg (Ox86 (Ox86_LEA sz)) [:: de; b; sce; o]) ] in
+      [:: MkI ii (Copn [::x] tg (Ox86 (LEA sz)) [:: de; b; sce; o]) ] in
     if options.(use_lea) then lea tt
     (* d + b + sc * o *)
     else 
@@ -594,32 +594,32 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
         (* b + sc * o *)
         if sc == 1%R then
           (* b + o *)
-          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (Ox86_ADD sz)) [:: b ; o])]
+          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (ADD sz)) [:: b ; o])]
         else if b == @wconst sz 0 then
           (* sc * o *)
-          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (Ox86_IMULt sz)) [:: o; sce])]
+          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (IMULr sz)) [:: o; sce])]
         else lea tt
       else if o == @wconst sz 0 then
           (* d + b *)
-          if d == 1%R then inc (Ox86_INC sz) b
+          if d == 1%R then inc (Ox86 (INC sz)) b
           else
             let w := wunsigned d in
             if check_signed_range (Some U32) sz w
-            then [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (Ox86_ADD sz)) [:: b ; de ])]
+            then [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (ADD sz)) [:: b ; de ])]
             else if w == (wbase U32 / 2)%Z
-            then [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (Ox86_SUB sz)) [:: b ; wconst (wrepr sz (-w)) ])]
+            then [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (SUB sz)) [:: b ; wconst (wrepr sz (-w)) ])]
             else
               let c := {| v_var := {| vtype := sword U64; vname := fresh_multiplicand fv U64 |} ; v_info := vi |} in
-              [:: MkI ii (Copn [:: Lvar c ] tg (Ox86 (Ox86_MOV U64)) [:: de]);
-                 MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (Ox86_ADD sz)) [:: b ; Pvar c ])]
+              [:: MkI ii (Copn [:: Lvar c ] tg (Ox86 (MOV U64)) [:: de]);
+                 MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (ADD sz)) [:: b ; Pvar c ])]
       else lea tt
       
-  | LowerEq sz a b => [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg (Ox86 (Ox86_CMP sz)) [:: a ; b ]) ]
-  | LowerLt sz a b => [:: MkI ii (Copn [:: f ; x ; f ; f ; f ] tg (Ox86 (Ox86_CMP sz)) [:: a ; b ]) ]
+  | LowerEq sz a b => [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg (Ox86 (CMP sz)) [:: a ; b ]) ]
+  | LowerLt sz a b => [:: MkI ii (Copn [:: f ; x ; f ; f ; f ] tg (Ox86 (CMP sz)) [:: a ; b ]) ]
   | LowerIf t e e1 e2 =>
      let (l, e) := lower_condition vi e in
      let sz := wsize_of_lval x in
-     map (MkI ii) (l ++ [:: Copn [:: x] tg (Ox86 (Ox86_CMOVcc sz)) [:: e; e1; e2]])
+     map (MkI ii) (l ++ [:: Copn [:: x] tg (Ox86 (CMOVcc sz)) [:: e; e1; e2]])
   | LowerDivMod p s sz op a b =>
     let c := {| v_var := {| vtype := sword sz; vname := fresh_multiplicand fv sz |} ; v_info := vi |} in
     let lv := 
@@ -629,11 +629,11 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
       end in
     let i1 := 
       match s with
-      | Signed => Copn [:: Lvar c ] tg (Ox86 (Ox86_CQO sz)) [:: a]
-      | Unsigned => Copn [:: Lvar c ] tg (Ox86 (Ox86_MOV sz)) [:: Papp1 (Oword_of_int sz) (Pconst 0)]
+      | Signed => Copn [:: Lvar c ] tg (Ox86 (CQO sz)) [:: a]
+      | Unsigned => Copn [:: Lvar c ] tg (Ox86 (MOV sz)) [:: Papp1 (Oword_of_int sz) (Pconst 0)]
       end in
 
-    [::MkI ii i1; MkI ii (Copn lv tg (Ox86 op) [::Pvar c; a; b]) ]
+    [::MkI ii i1; MkI ii (Copn lv tg op [::Pvar c; a; b]) ]
     
   | LowerAssgn => [::  MkI ii (Cassgn x tg ty e)]
   end.
@@ -648,17 +648,17 @@ Definition lower_addcarry_classify (sub: bool) (xs: lvals) (es: pexprs) :=
   match xs, es with
   | [:: cf ; r ], [:: x ; y ; Pbool false ] =>
     let vi := var_info_of_lval r in
-    Some (vi, if sub then Ox86_SUB else Ox86_ADD, [:: x ; y ], cf, r)
+    Some (vi, if sub then SUB else ADD, [:: x ; y ], cf, r)
   | [:: cf ; r ], [:: _ ; _ ; Pvar cfi ] =>
     let vi := v_info cfi in
-    Some (vi, (if sub then Ox86_SBB else Ox86_ADC), es, cf, r)
+    Some (vi, (if sub then SBB else ADC), es, cf, r)
   | _, _ => None
   end.
 
 Definition lower_addcarry sz (sub: bool) (xs: lvals) tg (es: pexprs) : seq instr_r :=
   if (sz ≤ U64)%CMP then
   match lower_addcarry_classify sub xs es with
-  | Some (vi, o, es, cf, r) => opn_5flags (Some U32) vi cf r tg (o sz) es
+  | Some (vi, o, es, cf, r) => opn_5flags (Some U32) vi cf r tg (Ox86 (o sz)) es
   | None => [:: Copn xs tg ((if sub then Osubcarry else Oaddcarry) sz) es ]
   end
   else [:: Copn xs tg ((if sub then Osubcarry else Oaddcarry) sz) es ].
@@ -672,15 +672,15 @@ Definition lower_mulu sz (xs: lvals) tg (es: pexprs) : seq instr_r :=
     match is_wconst sz x with
     | Some _ =>
       let c := {| v_var := {| vtype := sword sz; vname := fresh_multiplicand fv sz |} ; v_info := vi |} in
-      [:: Copn [:: Lvar c ] tg (Ox86 (Ox86_MOV sz)) [:: x ] ;
-          Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86 (Ox86_MUL sz)) [:: y ; Pvar c ] ]
+      [:: Copn [:: Lvar c ] tg (Ox86 (MOV sz)) [:: x ] ;
+          Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86 (MUL sz)) [:: y ; Pvar c ] ]
     | None =>
     match is_wconst sz y with
     | Some _ =>
       let c := {| v_var := {| vtype := sword sz; vname := fresh_multiplicand fv sz |} ; v_info := vi |} in
-      [:: Copn [:: Lvar c ] tg (Ox86 (Ox86_MOV sz)) [:: y ] ;
-          Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86 (Ox86_MUL sz)) [:: x ; Pvar c ] ]
-    | None => [:: Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86 (Ox86_MUL sz)) es ]
+      [:: Copn [:: Lvar c ] tg (Ox86 (MOV sz)) [:: y ] ;
+          Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86 (MUL sz)) [:: x ; Pvar c ] ]
+    | None => [:: Copn [:: f ; f ; f ; f ; f ; r1 ; r2 ] tg (Ox86 (MUL sz)) es ]
     end end
   | _, _ => [:: Copn xs tg (Omulu sz) es ]
   end
