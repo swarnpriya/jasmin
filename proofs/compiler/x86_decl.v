@@ -293,10 +293,9 @@ Variant implicite_arg : Type :=
 
 Variant arg_desc :=
 | ADImplicit  of implicite_arg
-| ADExplicit  of option wsize & nat & option register.
+| ADExplicit  of nat & option register.
 
-Coercion Eb n := ADExplicit None n None.
-Definition E w n := ADExplicit (Some w) n None.
+Definition E n := ADExplicit n None.
 
 (* -------------------------------------------------------------------- *)
 (* Writing a large word to register or memory *)

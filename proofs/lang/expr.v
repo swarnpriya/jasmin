@@ -28,7 +28,7 @@ Require Import oseq.
 Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
-Require Export strings word utils type var global x86_instr_t.
+Require Export strings word utils type var global sem_type x86_decl x86_instr_decl.
 Require Import xseq.
 Import Utf8 ZArith.
 
@@ -112,85 +112,10 @@ Variant sopn : Set :=
 
 (* Low level x86 operations *)
 | Oset0     of wsize  (* set register + flags to 0 (implemented using XOR x x) *)
-
-| Ox86      of x86_instr_t (* x86 instruction *)
+| Ox86MOVZX32 
+| Ox86      of asm_op  (* x86 instruction *)
 .
 
-(* | Ox86_MOV     of wsize  (* copy *)
-| Ox86_MOVSX of wsize & wsize (* sign-extension *)
-| Ox86_MOVZX of wsize & wsize (* zero-extension *)
-| Ox86_MOVZX32  (* Pseudo instruction for 32-bit to 64-bit zero-extension *)
-| Ox86_CMOVcc  of wsize  (* conditional copy *)
-| Ox86_ADD     of wsize  (* add unsigned / signed *)
-| Ox86_SUB     of wsize  (* sub unsigned / signed *)
-| Ox86_MUL     of wsize  (* mul unsigned *)
-| Ox86_IMUL    of wsize  (* excat multiplication *)
-| Ox86_IMULt   of wsize  (* truncated multiplication *)
-| Ox86_IMULtimm of wsize (* truncated multiplication by an immediate value *)
-| Ox86_DIV     of wsize  (* div unsigned *)
-| Ox86_IDIV    of wsize  (* div   signed *)
-| Ox86_CQO     of wsize  (* return 0 if the highest bit is 0 or -1 otherwise *)
-| Ox86_ADC     of wsize  (* add with carry *)
-| Ox86_SBB     of wsize  (* sub with borrow *)
-| Ox86_NEG     of wsize  (* negation *)
-| Ox86_INC     of wsize  (* increment *)
-| Ox86_DEC     of wsize  (* decrement *)
-| Ox86_SETcc             (* Set byte on condition *)
-| Ox86_BT      of wsize  (* Bit test, sets CF *)
-| Ox86_LEA     of wsize  (* Load Effective Address *)
-| Ox86_TEST    of wsize  (* Bit-wise logical and CMP *)
-| Ox86_CMP     of wsize  (* Signed sub CMP *)
-| Ox86_AND     of wsize  (* bit-wise and *)
-| Ox86_ANDN    of wsize  (* bit-wise and *)
-| Ox86_OR      of wsize  (* bit-wise or  *)
-| Ox86_XOR     of wsize  (* bit-wise xor *)
-| Ox86_NOT     of wsize  (* bit-wise not *)
-| Ox86_ROR     of wsize  (* right rotation *)
-| Ox86_ROL     of wsize  (* left rotation *)
-| Ox86_SHL     of wsize  (* unsigned / left  *)
-| Ox86_SHR     of wsize  (* unsigned / right *)
-| Ox86_SAR     of wsize  (*   signed / right *)
-| Ox86_SHLD    of wsize  (* unsigned double-word / left  *)
-| Ox86_SHRD    of wsize  (* unsigned double-word / right  *)
-
-| Ox86_BSWAP of wsize (* byte swap *)
-
-| Ox86_MOVD of wsize (* zero-extend to 128 bits *)
-| Ox86_VMOVDQU of wsize (* 128/256-bit copy *)
-| Ox86_VPAND of wsize (* 128/256-bit AND *)
-| Ox86_VPANDN of wsize (* 128/256-bit AND-NOT *)
-| Ox86_VPOR of wsize (* 128/256-bit OR *)
-| Ox86_VPXOR of wsize (* 128/256-bit XOR *)
-
-| Ox86_VPADD of velem & wsize (* Parallel addition over 128/256-bit vectors *)
-| Ox86_VPSUB of velem & wsize (* Parallel addition over 128/256-bit vectors *)
-| Ox86_VPMULL of velem & wsize (* Parallel addition over 128/256-bit vectors *)
-| Ox86_VPMULU of wsize (* Parallel 32-bit → 64-bit multiplication *)
-| Ox86_VPEXTR of wsize (* Element extraction from a 128-bit vector *)
-| Ox86_VPINSR of velem (* Insert element into a 128-bit vector *)
-
-| Ox86_VPSLL of velem & wsize (* Parallel shift left logical over 128/256-bit vectors *)
-| Ox86_VPSRL of velem & wsize (* Parallel shift right logical over 128/256-bit vectors *)
-| Ox86_VPSRA of velem & wsize (* Parallel shift right arithmetic over 128/256-bit vectors *)
-| Ox86_VPSLLV of velem & wsize (* Parallel variable shift left logical over 128/256-bit vectors *)
-| Ox86_VPSRLV of velem & wsize (* Parallel variable shift right logical over 128/256-bit vectors *)
-| Ox86_VPSLLDQ of wsize (* Shift double quadword left logical *)
-| Ox86_VPSRLDQ of wsize (* Shift double quadword right logical *)
-| Ox86_VPSHUFB of wsize (* Shuffle bytes *)
-| Ox86_VPSHUFHW of wsize (* Shuffle high 16-bit words *)
-| Ox86_VPSHUFLW of wsize (* Shuffle low 16-bit words *)
-| Ox86_VPSHUFD of wsize (* Shuffle 32-bit words *)
-| Ox86_VPUNPCKH of velem & wsize (* Unpack High Data *)
-| Ox86_VPUNPCKL of velem & wsize (* Unpack Low Data *)
-| Ox86_VPBLENDD of wsize (* Blend 32-bit words *)
-| Ox86_VPBROADCAST of velem & wsize (* Load integer and broadcast *)
-| Ox86_VBROADCASTI128 (* Load integer and broadcast *)
-| Ox86_VEXTRACTI128 (* Extract 128-bit value from a 256-bit vector *)
-| Ox86_VINSERTI128 (* Insert a 128-bit element into a 256-bit vector *)
-| Ox86_VPERM2I128 (* Permutation of 128-bit words *)
-| Ox86_VPERMQ (* Permutation of 64-bit words *)
-.
- *)
 Scheme Equality for sop1.
 (* Definition sop1_beq : sop1 -> sop1 -> bool *)
 
@@ -250,6 +175,16 @@ Definition Osubcarry_instr := mk_instr_w2b_bw "Osubcarry" wsubcarry.
 Definition Oset0_instr     := 
   mk_instr__b5w "Oset0" (fun sz => let vf := Some false in
                  ok (::vf, vf, vf, vf, Some true & (0%R: word sz))).                  
+Definition Ox86MOVZX32_instr := sem_type.mk_instr (pp_s "Ox86_MOVZX32") [:: sword32] [:: sword64] (λ x : u32, ok (zero_extend U64 x)) U32.
+
+Definition xtype2stype (ty:xtype) := 
+  match ty with
+  | xword sz => sword sz
+  | xbool    => sbool
+  end.
+
+Lemma noarr_xtype (tin : seq (arg_desc * xtype)) : all is_not_sarr [seq xtype2stype i | i <- [seq i.2 | i <- tin]].
+Proof. elim: tin => [ | [ a [sz | ]] tin hrec] //=. Qed.
 
 Definition get_instr o := 
   match o with
@@ -257,7 +192,21 @@ Definition get_instr o :=
   | Oaddcarry sz => Oaddcarry_instr sz
   | Osubcarry sz => Osubcarry_instr sz
   | Oset0     sz => Oset0_instr sz
-  | Ox86   instr => get_x86_instr instr
+  | Ox86MOVZX32   => Ox86MOVZX32_instr
+  | Ox86   instr => 
+    (* Work around silly optimisation of Coq for pattern matching *)
+    match instr with
+    | ADD _ as instr1 | instr1 => 
+      let id := instr_desc instr1 in
+      {|
+        str  := id.(id_str_jas);
+        tin  := [seq xtype2stype i.2 | i <- id.(id_in)];
+        tout := [seq xtype2stype i.2 | i <- id.(id_out)];
+        semi := id.(id_semi); 
+        tin_narr := noarr_xtype id.(id_in);
+        wsizei := id.(id_wsize);
+      |} 
+    end
   end.
 
 Definition string_of_sopn o : string := str (get_instr o) tt.

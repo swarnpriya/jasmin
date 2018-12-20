@@ -1032,7 +1032,7 @@ Fixpoint ltuple (ts:list Type) : Type :=
   | t1::ts => t1 * ltuple ts
   end.
 
-Notation "(:: x , .. , y & z )" := (pair x .. (pair y z) ..).
+Notation "(:: x , .. , y & z )" := (pair x .. (pair y z) ..) (only parsing).
 
 Fixpoint merge_tuple (l1 l2: list Type) : ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2) := 
   match l1 return ltuple l1 -> ltuple l2 -> ltuple (l1 ++ l2) with 
