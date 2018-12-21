@@ -125,7 +125,16 @@ Definition string_of_condt (c: condt) : string :=
   end.
 
 (* -------------------------------------------------------------------- *)
-
+(*
+Scheme Equality for sopn.
+(* Definition sopn_beq : sopn -> sopn -> bool *)
+Lemma sopn_eq_axiom : Equality.axiom sopn_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_sopn_dec_bl.
+  by apply: internal_sopn_dec_lb.
+Qed.
+*)
 
 Scheme Equality for register.
 Scheme Equality for xmm_register.
@@ -133,16 +142,44 @@ Scheme Equality for rflag.
 Scheme Equality for scale.
 Scheme Equality for condt.
 
-Definition reg_eqMixin := comparableClass register_eq_dec.
+Lemma reg_eq_axiom : Equality.axiom register_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_register_dec_bl.
+  by apply: internal_register_dec_lb.
+Qed.
+
+Definition reg_eqMixin := Equality.Mixin reg_eq_axiom. 
 Canonical reg_eqType := EqType register reg_eqMixin.
 
-Definition xreg_eqMixin := comparableClass xmm_register_eq_dec.
+Lemma xreg_eq_axiom : Equality.axiom xmm_register_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_xmm_register_dec_bl.
+  by apply: internal_xmm_register_dec_lb.
+Qed.
+
+Definition xreg_eqMixin := Equality.Mixin xreg_eq_axiom. 
 Canonical xreg_eqType := EqType _ xreg_eqMixin.
 
-Definition rflag_eqMixin := comparableClass rflag_eq_dec.
+Lemma rflag_eq_axiom : Equality.axiom rflag_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_rflag_dec_bl.
+  by apply: internal_rflag_dec_lb.
+Qed.
+
+Definition rflag_eqMixin := Equality.Mixin rflag_eq_axiom. 
 Canonical rflag_eqType := EqType rflag rflag_eqMixin.
 
-Definition scale_eqMixin := comparableClass scale_eq_dec.
+Lemma scale_eq_axiom : Equality.axiom scale_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_scale_dec_bl.
+  by apply: internal_scale_dec_lb.
+Qed.
+
+Definition scale_eqMixin := Equality.Mixin scale_eq_axiom. 
 Canonical scale_eqType := EqType scale scale_eqMixin.
 
 Definition address_beq (addr1: address) addr2 :=
@@ -161,7 +198,14 @@ Qed.
 Definition address_eqMixin := Equality.Mixin address_eq_axiom.
 Canonical address_eqType := EqType address address_eqMixin.
 
-Definition condt_eqMixin := comparableClass condt_eq_dec.
+Lemma condt_eq_axiom : Equality.axiom condt_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_condt_dec_bl.
+  by apply: internal_condt_dec_lb.
+Qed.
+
+Definition condt_eqMixin := Equality.Mixin condt_eq_axiom. 
 Canonical condt_eqType := EqType condt condt_eqMixin.
 
 (* -------------------------------------------------------------------- *)
@@ -299,14 +343,47 @@ Variant arg_desc :=
 
 Definition E n := ADExplicit n None.
 
+Definition asm_arg_beq (a1 a2:asm_arg) := 
+  match a1, a2 with
+  | Condt t1, Condt t2 => t1 == t2
+  | Imm sz1 w1, Imm sz2 w2 => (sz1 == sz2) && (wunsigned w1 == wunsigned w2)
+  | Glob g1, Glob g2 => g1 == g2
+  | Reg r1, Reg r2 => r1 == r2
+  | Adr a1, Adr a2 => a1 == a2
+  | XMM r1, XMM r2 => r1 == r2
+  | _, _ => false
+  end.
+
+Definition Imm_inj sz sz' w w' (e: @Imm sz w = @Imm sz' w') :
+  ∃ e : sz = sz', eq_rect sz (λ s, (word s)) w sz' e = w' :=
+  let 'Logic.eq_refl := e in (ex_intro _ erefl erefl).
+
+Lemma asm_arg_eq_axiom : Equality.axiom asm_arg_beq.
+Proof.
+  case => [t1 | sz1 w1 | g1 | r1 | a1 | xr1] [t2 | sz2 w2 | g2 | r2 | a2 | xr2]; apply: (iffP idP) => //=;
+   try (move => /eqP -> // || move=> [] -> //).
+  + by move=> /andP [] /eqP ? /eqP; subst => /wunsigned_inj ->.
+  by move=> /Imm_inj [? ];subst => /= ->;rewrite !eqxx.
+Qed.
+
+Definition asm_arg_eqMixin := Equality.Mixin asm_arg_eq_axiom. 
+Canonical asm_arg_eqType := EqType asm_arg asm_arg_eqMixin.
+
 (* -------------------------------------------------------------------- *)
 (* Writing a large word to register or memory *)
 (* When writing to a register, depending on the instruction,
   the most significant bits are either preserved or cleared. *)
 Variant msb_flag := MSB_CLEAR | MSB_MERGE.
-
 Scheme Equality for msb_flag.
-Definition msb_flag_eqMixin := comparableClass msb_flag_eq_dec.
+
+Lemma msb_flag_eq_axiom : Equality.axiom msb_flag_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_msb_flag_dec_bl.
+  by apply: internal_msb_flag_dec_lb.
+Qed.
+
+Definition msb_flag_eqMixin := Equality.Mixin msb_flag_eq_axiom. 
 Canonical msb_flag_eqType := EqType msb_flag msb_flag_eqMixin.
 
 (* -------------------------------------------------------------------- *)
@@ -336,6 +413,7 @@ Record instr_desc_t := mk_instr_desc {
   id_out      : seq (arg_desc * stype);
   id_semi     : sem_prod (map snd id_in) (exec (sem_tuple (map snd id_out)));
   id_check    : list asm_arg -> bool;
+  id_nargs    : nat;
   (* Info for jasmin *)
   id_str_jas  : unit -> string;
   id_wsize    : wsize;  (* ..... *)

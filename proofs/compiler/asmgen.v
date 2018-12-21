@@ -1,12 +1,340 @@
 From mathcomp Require Import all_ssreflect all_algebra.
-Require Import low_memory x86_sem compiler_util.
+Require Import low_memory psem x86_sem compiler_util.
 Require Import x86_variables_proofs.
 Import Utf8.
-Import oseq psem x86_variables.
+Import oseq x86_variables.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
+
+(*Variant source_position :=
+  | InArgs of nat
+  | InRes  of nat. *)
+
+Definition pexpr_of_lval ii (lv:lval) : ciexec pexpr :=
+  match lv with
+  | Lvar x    => ok (Pvar x)
+  | Lmem s x e  => ok (Pload s x e)
+  | Lnone _ _
+  | Laset _ _ _ => cierror ii (Cerr_assembler (AsmErr_string "pexpr_of_lval"))
+  end.
+
+(*
+Definition get_loarg ii (outx: seq lval) (inx:seq pexpr) (d:source_position) : ciexec pexpr :=
+  let o2e {A} (m: option A) :=
+      match m with
+      | Some pe => ok pe
+      | None => cierror ii (Cerr_assembler (AsmErr_string "get_loarg"))
+      end in
+  match d with
+  | InArgs x => o2e (onth inx x)
+  | InRes  x => o2e (onth outx x) >>= pexpr_of_lval ii
+  end.
+*)
+Definition nmap (T:Type) := nat -> option T.
+Definition nget (T:Type) (m:nmap T) (n:nat) := m n.
+Definition nset (T:Type) (m:nmap T) (n:nat) (t:T) :=
+  fun x => if x == n then Some t else nget m x.
+Definition nempty (T:Type) := fun n:nat => @None T.
+ 
+Definition var_of_implicit i := 
+  match i with
+  | IArflag f => var_of_flag f
+  | IAreg r   => var_of_register r
+  end.
+
+Definition check_oreg o a := 
+  match o, a with
+  | None  , _       => true
+  | Some r, Reg r'  => r == r'
+  | Some _, Imm _ _ => true
+  | Some _, _       => false
+  end.
+
+Definition compile_arg ii (ade: (arg_desc * xtype) * pexpr) (m: nmap asm_arg) : ciexec (nmap asm_arg) :=
+  let ad := ade.1 in
+  let e := ade.2 in
+  match ad.1 with
+  | ADImplicit i => 
+    Let _ := 
+      assert (eq_expr (Pvar (VarI (var_of_implicit i) xH)) e) 
+             (ii, Cerr_assembler (AsmErr_string "compile_arg : bad implicit")) in
+    ok m
+  | ADExplicit n o => 
+    Let a := arg_of_pexpr ii ad.2 e in
+    Let _ := 
+      assert (check_oreg o a) 
+             (ii, Cerr_assembler (AsmErr_string "compile_arg : bad forced register")) in
+    match nget m n with
+    | None => ok (nset m n a)
+    | Some a' => 
+      if a == a' then ok m
+      else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : not compatible asm_arg"))              
+    end
+  end.
+    
+Definition compile_args ii adts (es:pexprs) (m: nmap asm_arg) := 
+  foldM (compile_arg ii) m (zip adts es).
+
+Definition check_sopn_arg ii (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc * xtype) :=
+  match adt.1 with
+  | ADImplicit i => eq_expr x (Pvar (VarI (var_of_implicit i) xH))
+  | ADExplicit n o =>
+    match onth loargs n with
+    | Some a => 
+      if arg_of_pexpr ii adt.2 x is Ok a' then (a == a') && check_oreg o a
+      else false 
+    | None => false
+    end
+  end.
+
+Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) := 
+  let id := instr_desc op in 
+  Let m := compile_args ii id.(id_in) inx (nempty _) in
+  Let eoutx := mapM (pexpr_of_lval ii) outx in
+  Let m := compile_args ii id.(id_out) eoutx m in
+  match oseq.omap (nget m) (iota 0 id.(id_nargs)) with
+  | None => cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false nget")) 
+  | Some asm_args =>
+    if id.(id_check) asm_args then ok asm_args
+    else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false check")) 
+  end.
+
+Lemma sem_ot_oxt ty : sem_ot (xtype2stype ty) = sem_oxt ty.
+Proof. by case: ty. Qed.
+
+Lemma sem_t_xt ty : sem_t (xtype2stype ty) = sem_xt ty.
+Proof. by case: ty. Qed.
+
+Lemma sem_tuple_xtuple (tout : seq (arg_desc * xtype)) : 
+  sem_tuple [seq xtype2stype i.2 | i <- tout] =
+  sem_xtuple [seq i.2 | i <- tout].
+Proof.
+  rewrite /sem_tuple /sem_xtuple.
+  by elim: tout => // -[a ty] /= [ | aty tout] /= hrec;rewrite sem_ot_oxt // hrec.
+Qed.
+  
+Lemma sem_prod_xprod_T (tin : seq (arg_desc * xtype)) T : 
+  sem_prod [seq xtype2stype i.2 | i <- tin] T =
+  sem_xprod [seq i.2 | i <- tin] T.
+Proof.
+  rewrite /sem_prod /sem_xprod.
+  by elim: tin => // -[a ty] l /= ->;rewrite sem_t_xt.
+Qed.
+
+Lemma sem_prod_xprod (tin tout : seq (arg_desc * xtype)) : 
+  sem_xprod [seq i.2 | i <- tin] (exec (sem_xtuple [seq i.2 | i <- tout])) =
+  sem_prod [seq xtype2stype i.2 | i <- tin] (exec (sem_tuple [seq xtype2stype i.2 | i <- tout])).
+Proof.
+  by rewrite sem_prod_xprod_T sem_tuple_xtuple.
+Qed.
+
+Definition Instr_of_instr (id:instr_desc_t) : Instruction := 
+  {|
+     str  := id.(id_str_jas);
+     tin  := [seq xtype2stype i.2 | i <- id.(id_in)];
+     tout := [seq xtype2stype i.2 | i <- id.(id_out)];
+     semi := eq_rect _ (λ A : Type, A) (id_semi id) _ 
+                    (sem_prod_xprod (id_in id) (id_out id)); 
+     tin_narr := noarr_xtype id.(id_in);
+     wsizei := id.(id_wsize);
+  |}. 
+
+Lemma get_instr_desc o : get_instr (Ox86 o) = Instr_of_instr
+(* -------------------------------------------------------------------- *)
+Theorem assemble_x86_opnP gd ii out op args loargs s1 m1 s2 :
+  lom_eqv s1 m1 →
+  assemble_x86_opn ii op out args = ok loargs →
+  sem_sopn gd (Ox86 op) s1 out args = ok s2 →
+  ∃ m2,
+    eval_instr_op gd (instr_desc op) loargs m1 = ok m2 
+    ∧ lom_eqv s2 m2.
+Proof.
+  move=> hlom; rewrite /assemble_x86_opn.
+  pose id := instr_desc op.
+  t_xrbindP => ma hma eout heout mo hmo.
+  case heq : [oseq nget mo i | i <- iota 0 (id_nargs (instr_desc op))] => [loargs' | // ].
+  case: ifP => // hcheck [?]; subst loargs'.
+  rewrite /sem_sopn /exec_sopn.
+  t_xrbindP => vout vargs hvargs lout hsem <- hwrite.
+  have : all2 (check_sopn_arg ii loargs) args id.(id_in).
+  + admit.
+  
+  
+
+
+
+
+
+(* -------------------------------------------------------------------- *)
+(* Generated mixed semantics                                            *)
+
+
+
+(*Definition is_var (ia:implicite_arg) e :=
+  match e, ia with
+  | Pvar x, IArflag f => var_of_flag f == x
+  | Pvar x, IAreg r   => var_of_register r == x
+  | _, _ => false
+  end.
+*)
+(*
+
+Definition check_esize (s: option wsize) e :=
+  match e with
+  | Papp1 (Oword_of_int ws) (Pconst _) => (ws ≤ U64)%CMP
+  | Pload s' _ _
+  | Pglobal (Global s' _)
+    => s == Some s'
+  | _            => true
+  end.
+*)
+
+Definition var_of_implicit i := 
+  match i with
+  | IArflag f => var_of_flag f
+  | IAreg r   => var_of_register r
+  end.
+
+Definition is_var_or_immediate (x:var) e :=
+  match e with
+  | Papp1 (Oword_of_int _) (Pconst _) => true
+  | Pvar x' => x == x'
+  | _ => false 
+  end.
+
+Definition mixed_sem_ad_in (xs : seq pexpr) (ad : arg_desc) : option pexpr :=
+  match ad with
+  | ADImplicit i => Some (Pvar (VarI (var_of_implicit i) xH))
+  | ADExplicit n None => onth xs n 
+  | ADExplicit n (Some x) =>
+    onth xs n >>= fun e => if is_var_or_immediate (var_of_register x) e then Some e else None
+  end%O.
+
+Definition lval_of_pexpr e :=
+  match e with
+  | Pvar v => Some (Lvar v)
+  | Pload s x e => Some (Lmem s x e) 
+  | _        => None
+  end.
+
+Definition mixed_sem_ad_out (xs : seq pexpr) (ad : arg_desc) : option lval :=
+  match ad with
+  | ADImplicit i => Some (Lvar (VarI (var_of_implicit i) xH))
+  | ADExplicit n _ => onth xs n >>= lval_of_pexpr 
+  end%O.
+
+Definition mixed_sem gd m (o:asm_op) (xs : seq pexpr) :=
+  let id := instr_desc o in
+  let: inx  := oseq.omap (mixed_sem_ad_in xs) (map fst id.(id_in )) in
+  let: outx := oseq.omap (mixed_sem_ad_out xs) (map fst id.(id_out)) in
+  if (inx, outx) is (Some inx, Some outx) then
+    sem_sopn gd (Ox86 o) m outx inx
+  else type_error.
+
+(* -------------------------------------------------------------------- *)
+(* High level to mixed semantics                                        *)
+
+Definition check_sopn_arg (loargs : seq pexpr) (x : pexpr) (ad : arg_desc) :=
+  match ad with
+  | ADImplicit i => eq_expr x (Pvar (VarI (var_of_implicit i) xH))
+  | ADExplicit n o =>
+    (n < size loargs) && (x == nth x loargs n) &&
+    match o with
+    | None => true
+    | Some y => is_var_or_immediate (var_of_register y) x
+    end
+  end.
+
+Definition is_lvar (x:var) lv :=
+  match lv with
+  | Lvar y => x == y
+  | _ => false
+  end.
+
+Definition check_sopn_res (loargs : seq pexpr) (x : lval) (ad : arg_desc) :=
+  match ad with
+  | ADImplicit i => is_lvar (var_of_implicit i) x
+  | ADExplicit n _ =>
+    if (onth loargs n >>= lval_of_pexpr)%O is Some y
+    then eq_lval x y
+    else false
+  end.
+
+(*Lemma is_varP x e : is_var x e ->  eq_expr e {| v_var := x; v_info := xH |}.
+Proof. by case e => //= v /eqP ->. Qed.
+*)
+Lemma is_var_or_immediateP x e :
+  is_var_or_immediate x e →
+  eq_expr e {| v_var := x ; v_info := xH |} ∨ ∃ s n, e = Papp1 (Oword_of_int s) (Pconst n).
+Proof.
+case: e => //=; eauto.
+case => // sz [] //; eauto.
+Qed.
+
+Lemma check_sopn_argP (loargs hiargs : seq pexpr) (ads : seq arg_desc) :
+     all2 (check_sopn_arg loargs) hiargs ads →
+     ∃ hiargs',
+       oseq.omap (mixed_sem_ad_in loargs) ads = Some hiargs'
+       ∧ all2 eq_expr hiargs hiargs'.
+Proof.
+  elim: hiargs ads => [ | e hiargs Hrec] [ | a ads] //=.
+  + by move=> _;exists nil.
+  move=> /andP [Hc /Hrec [hiargs' [-> Hall]]] /=.
+  rewrite /mixed_sem_ad_in; case: a Hc => //=.
+  + move=> i heq;eexists;split;first reflexivity.
+    by rewrite /= heq.
+  move=> n o /andP [].
+
+by move=> y /is_varP Hy;eexists;split;[by eauto | ];rewrite /= Hy.
+  move=> s n o /andP [] /andP [] Hlt /eqP -> Ho.
+  exists  (nth e loargs n :: hiargs').
+  rewrite (onth_nth_size e Hlt) /= Hall andbT;split;last by apply eq_expr_refl.
+  by case: o Ho => [ y -> | ->].
+Qed.
+
+Lemma is_lvarP x e : is_lvar x e ->  eq_lval e {| v_var := x; v_info := xH |}.
+Proof. by case e => //= v /eqP ->. Qed.
+
+Lemma check_sopn_resP (loargs : seq pexpr) (lval : seq lval) (ads : seq arg_desc) :
+     all2 (check_sopn_res loargs) lval ads →
+     ∃ lval',
+       oseq.omap (mixed_sem_ad_out loargs) ads = Some lval'
+       ∧ all2 eq_lval lval lval'.
+Proof.
+  elim: lval ads => [ | lv lval Hrec] [ | a ads] //=.
+  + by move=> _; exists nil.
+  move=> /andP [Hc /Hrec [lval' [-> Hall]]] /=.
+  rewrite /mixed_sem_ad_out; case: a Hc => //=.
+  + by move=> y /is_lvarP Hy;eexists;split;[by eauto | ];rewrite /= Hy.
+  move => s n [] //; case: (_ >>= _)%O => // lv' h; eexists; split; first by eauto.
+  by rewrite /= h.
+Qed.
+
+Definition check_sopn_args ii
+  (id: instr_desc) (outx : seq lval) (inx : seq pexpr) (loargs : seq pexpr) : ciexec unit :=
+  if all2 (check_sopn_res loargs) outx id.(id_out)
+  then
+  if all2 (check_sopn_arg loargs) inx  id.(id_in )
+  then ok tt
+  else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_arg"))
+  else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_res")).
+
+Theorem check_sopnP ii gd o descr outx inx loargs m1 m2 :
+  id_name descr = o →
+  check_sopn_args ii descr outx inx loargs = ok tt
+  -> sem_sopn gd o m1 outx inx = ok m2
+  -> mixed_sem gd m1 descr loargs = ok m2.
+Proof.
+  rewrite /check_sopn_args => Hdesc.
+  case: ifP => // h1; case: ifP => // h2 _.
+  rewrite /mixed_sem /sem_sopn.
+  have [inx' [-> /eq_exprsP ->]] := check_sopn_argP h2.
+  have [outx' [-> /eq_lvalsP H]]:= check_sopn_resP h1.
+  rewrite Hdesc.
+  by t_xrbindP => vs ws -> /= ->;rewrite H.
+Qed.
 
 (* -------------------------------------------------------------------- *)
 (* Compilation of variables                                             *)
@@ -417,160 +745,7 @@ Notation gen_sem_correct := (λ tys, gen_sem_correct' tys MSB_CLEAR).
 Definition low_sem gd m (id: instr_desc) (gargs: seq garg) : x86_result :=
   low_sem_aux gd m id.(id_msb_flag) id.(id_name) id.(id_out) id.(id_in) gargs.
 
-(* -------------------------------------------------------------------- *)
-(* Generated mixed semantics                                            *)
 
-Definition is_var (x:var) e :=
-  match e with
-  | Pvar x' => x == x'
-  | _ => false
-  end.
-
-Definition is_var_or_immediate (x:var) e :=
-  match e with
-  | Papp1 (Oword_of_int _) (Pconst _) => true
-  | Pvar x' => x == x'
-  | _ => false end.
-
-Definition check_esize (s: option wsize) e :=
-  match e with
-  | Papp1 (Oword_of_int ws) (Pconst _) => (ws ≤ U64)%CMP
-  | Pload s' _ _
-  | Pglobal (Global s' _)
-    => s == Some s'
-  | _            => true
-  end.
-
-Definition mixed_sem_ad_in (xs : seq pexpr) (ad : arg_desc) : option pexpr :=
-  match ad with
-  | ADImplicit x => Some (Pvar (VarI x xH))
-  | ADExplicit s n None => onth xs n >>= fun e => if check_esize s e then Some e else None
-  | ADExplicit _ n (Some x) =>
-    onth xs n >>= fun e => if is_var_or_immediate (var_of_register x) e then Some e else None
-  end%O.
-
-Definition lval_of_pexpr (s: option wsize) e :=
-  match e, s with
-  | Pvar v, Some _ =>
-    if vtype v == sbool then None else Some (Lvar v)
-  | Pload s' x e, Some s => if s == s' then Some (Lmem s x e) else None
-  | _, _        => None
-  end.
-
-Definition mixed_sem_ad_out (xs : seq pexpr) (ad : arg_desc) : option lval :=
-  match ad with
-  | ADImplicit x => Some (Lvar (VarI x xH))
-  | ADExplicit s n None =>
-    onth xs n >>= lval_of_pexpr s
-  | _ => None
-  end%O.
-
-Definition mixed_sem gd m (id : instr_desc) (xs : seq pexpr) :=
-  let: inx  := oseq.omap (mixed_sem_ad_in xs) id.(id_in ) in
-  let: outx := oseq.omap (mixed_sem_ad_out xs) id.(id_out) in
-  if (inx, outx) is (Some inx, Some outx) then
-    sem_sopn gd id.(id_name) m outx inx
-  else type_error.
-
-(* -------------------------------------------------------------------- *)
-(* High level to mixed semantics                                        *)
-
-Definition check_sopn_arg (loargs : seq pexpr) (x : pexpr) (ad : arg_desc) :=
-  match ad with
-  | ADImplicit y => is_var y x
-  | ADExplicit s n o =>
-    (n < size loargs) && (x == nth x loargs n) &&
-    match o with
-    | None => check_esize s x 
-    | Some y => is_var_or_immediate (var_of_register y) x
-    end
-  end.
-
-Definition is_lvar (x:var) lv :=
-  match lv with
-  | Lvar y => x == y
-  | _ => false
-  end.
-
-Definition check_sopn_res (loargs : seq pexpr) (x : lval) (ad : arg_desc) :=
-  match ad with
-  | ADImplicit y => is_lvar y x
-  | ADExplicit _ n (Some _) => false
-  | ADExplicit s n None =>
-    if (onth loargs n >>= lval_of_pexpr s)%O is Some y
-    then eq_lval x y
-    else false
-  end.
-
-Lemma is_varP x e : is_var x e ->  eq_expr e {| v_var := x; v_info := xH |}.
-Proof. by case e => //= v /eqP ->. Qed.
-
-Lemma is_var_or_immediateP x e :
-  is_var_or_immediate x e →
-  eq_expr e {| v_var := x ; v_info := xH |} ∨ ∃ s n, e = Papp1 (Oword_of_int s) (Pconst n).
-Proof.
-case: e => //=; eauto.
-case => // sz [] //; eauto.
-Qed.
-
-Lemma check_sopn_argP (loargs hiargs : seq pexpr) (ads : seq arg_desc) :
-     all2 (check_sopn_arg loargs) hiargs ads →
-     ∃ hiargs',
-       oseq.omap (mixed_sem_ad_in loargs) ads = Some hiargs'
-       ∧ all2 eq_expr hiargs hiargs'.
-Proof.
-  elim: hiargs ads => [ | e hiargs Hrec] [ | a ads] //=.
-  + by move=> _;exists nil.
-  move=> /andP [Hc /Hrec [hiargs' [-> Hall]]] /=.
-  rewrite /mixed_sem_ad_in; case: a Hc => //=.
-  + by move=> y /is_varP Hy;eexists;split;[by eauto | ];rewrite /= Hy.
-  move=> s n o /andP [] /andP [] Hlt /eqP -> Ho.
-  exists  (nth e loargs n :: hiargs').
-  rewrite (onth_nth_size e Hlt) /= Hall andbT;split;last by apply eq_expr_refl.
-  by case: o Ho => [ y -> | ->].
-Qed.
-
-Lemma is_lvarP x e : is_lvar x e ->  eq_lval e {| v_var := x; v_info := xH |}.
-Proof. by case e => //= v /eqP ->. Qed.
-
-Lemma check_sopn_resP (loargs : seq pexpr) (lval : seq lval) (ads : seq arg_desc) :
-     all2 (check_sopn_res loargs) lval ads →
-     ∃ lval',
-       oseq.omap (mixed_sem_ad_out loargs) ads = Some lval'
-       ∧ all2 eq_lval lval lval'.
-Proof.
-  elim: lval ads => [ | lv lval Hrec] [ | a ads] //=.
-  + by move=> _; exists nil.
-  move=> /andP [Hc /Hrec [lval' [-> Hall]]] /=.
-  rewrite /mixed_sem_ad_out; case: a Hc => //=.
-  + by move=> y /is_lvarP Hy;eexists;split;[by eauto | ];rewrite /= Hy.
-  move => s n [] //; case: (_ >>= _)%O => // lv' h; eexists; split; first by eauto.
-  by rewrite /= h.
-Qed.
-
-Definition check_sopn_args ii
-  (id: instr_desc) (outx : seq lval) (inx : seq pexpr) (loargs : seq pexpr) : ciexec unit :=
-  if all2 (check_sopn_res loargs) outx id.(id_out)
-  then
-  if all2 (check_sopn_arg loargs) inx  id.(id_in )
-  then ok tt
-  else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_arg"))
-  else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_res")).
-
-Theorem check_sopnP ii gd o descr outx inx loargs m1 m2 :
-  id_name descr = o →
-  check_sopn_args ii descr outx inx loargs = ok tt
-  -> sem_sopn gd o m1 outx inx = ok m2
-  -> mixed_sem gd m1 descr loargs = ok m2.
-Proof.
-  rewrite /check_sopn_args => Hdesc.
-  case: ifP => // h1; case: ifP => // h2 _.
-  rewrite /mixed_sem /sem_sopn.
-  have [inx' [-> /eq_exprsP ->]] := check_sopn_argP h2.
-  have [outx' [-> /eq_lvalsP H]]:= check_sopn_resP h1.
-  rewrite Hdesc.
-  by t_xrbindP => vs ws -> /= ->;rewrite H.
-Qed.
 
 (* ----------------------------------------------------------------------------- *)
 Variant source_position :=
