@@ -340,7 +340,7 @@ Definition x86_IDIV sz (hi lo dv: word sz) : ex_tpl (b5w2_ty sz) :=
   if (dv == 0)%Z || ov then type_error else
   ok (flags_w2 (rflags_of_div) (:: (wrepr sz q) & (wrepr sz r))).
 
-Definition x86_CQO sz (w:word sz) : exec (word sz) := 
+Definition x86_CQO sz (w:word sz) : exec (word sz) :=
   Let _ := check_size_16_64 sz in
   let r : word sz := (if msb w then -1 else 0)%R in
   ok r.
@@ -540,10 +540,10 @@ Definition x86_VPXOR sz := x86_u128_binop (@wxor sz).
 
 (* ---------------------------------------------------------------- *)
 Definition x86_VPADD (ve: velem) sz := x86_u128_binop (lift2_vec ve +%R sz).
-Definition x86_VPSUB (ve: velem) sz := 
+Definition x86_VPSUB (ve: velem) sz :=
   x86_u128_binop (lift2_vec ve (fun x y => x - y)%R sz).
 
-Definition x86_VPMULL (ve: velem) sz v1 v2 := 
+Definition x86_VPMULL (ve: velem) sz v1 v2 :=
   Let _ := check_size_32_64 ve in
   x86_u128_binop (lift2_vec ve *%R sz) v1 v2.
 
@@ -656,184 +656,286 @@ Notation mk_instr str_jas tin tout ain aout msb semi check wsizei := {|
   id_wsize    := wsizei;
 |}.
 
-Notation mk_instr_w_w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) ain aout msb (semi sz) check sz) (only parsing).
+Notation mk_instr_w_w name semi msb ain aout check := (fun sz =>
+  mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) ain aout msb (semi sz) (check sz) sz) (only parsing).
 
-Notation mk_instr_w_w' name semi msb ain aout check := (fun szo szi =>
-  mk_instr (pp_sz_sz name szo szi) (w_ty szi) (w_ty szo) ain aout msb (semi szi szo) check szi) (only parsing).
+Notation mk_instr_w_w'_10 name semi check := (fun szi szo =>
+  mk_instr (pp_sz_sz name szo szi) (w_ty szi) (w_ty szo) [:: E 1] [:: E 0] MSB_CLEAR (semi szi szo) (check szi szo) szi) (only parsing).
 
-Notation mk_instr_bw2_w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (bw2_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_bw2_w_0211 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (bw2_ty sz) (w_ty sz) [:: E 0; E 2; E 1] [:: E 1] MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
-Notation mk_instr_w_b5w name semi msb ain aout check := (fun sz => 
+Notation mk_instr_w_b5w name semi msb ain aout check := (fun sz =>
   mk_instr (pp_sz name sz) (w_ty sz) (b5w_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w_b4w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w_ty sz) (b4w_ty sz) ain (implicit_flags_noCF ++ aout) msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_w_b4w_00 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (w_ty sz) (b4w_ty sz) [:: E 0] (implicit_flags_noCF ++ [:: E 0]) MSB_CLEAR (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w2_b name semi msb ain aout check := (fun sz => 
+Notation mk_instr_w2_b name semi msb ain aout check := (fun sz =>
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b_ty) ain aout msb (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w2_b5 name semi msb ain  check := (fun sz => 
+Notation mk_instr_w2_b5 name semi msb ain  check := (fun sz =>
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5_ty) ain implicit_flags msb (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w2_b5w name semi msb ain aout check := (fun sz => 
+Notation mk_instr_w2_b5w name semi msb ain aout check := (fun sz =>
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) ain (implicit_flags ++ aout) msb (semi sz) (check sz) sz)  (only parsing).
 
-Notation mk_instr_w2b_b5w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) (ain ++ [::iCF]) (implicit_flags ++ aout) msb (semi sz) (check sz) sz)  (only parsing).
+Notation mk_instr_w2_b5w_010 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) [:: E 0; E 1] (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
-Notation mk_instr_w2_b5w2 name semi msb ain aout check := (fun sz => 
+Notation mk_instr_w2b_b5w_010 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) ([:: E 0; E 1] ++ [::iCF]) (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
+
+Notation mk_instr_w2_b5w2 name semi msb ain aout check := (fun sz =>
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w3_b5w2 name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w3_ty sz) (b5w2_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_w3_b5w2_da0ad name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (w3_ty sz) (b5w2_ty sz) [:: R RDX; R RAX; E 0]  (implicit_flags ++ [:: R RAX; R RDX]) MSB_CLEAR (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w2_w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_w2_w_120 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w4_w name semi msb ain aout check := (fun sz => 
+Notation mk_instr_w4_w name semi msb ain aout check := (fun sz =>
   mk_instr (pp_sz name sz) (w4_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_ww8_w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (ww8_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_ww8_w_120 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (ww8_ty sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0]  MSB_CLEAR (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_ww8_b2w name semi msb ain aout check := (fun sz => 
+Notation mk_instr_ww8_b2w name semi msb ain aout check := (fun sz =>
   mk_instr (pp_sz name sz) (ww8_ty sz) (b2w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_ww8_b5w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (ww8_ty sz) (b5w_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_ww8_b5w_0c0 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (ww8_ty sz) (b5w_ty sz) [:: E 0; ADExplicit 1 (Some RCX)] (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w2w8_b5w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w2w8_ty sz) (b5w_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_w2w8_b5w_01c0 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (w2w8_ty sz) (b5w_ty sz) [:: E 0; E 1; ADExplicit 2 (Some RCX)] (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w2w8_w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w2w8_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_w2w8_w_1230 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (w2w8_ty sz) (w_ty sz) [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (semi sz) check sz)  (only parsing).
 
-Notation mk_instr_w_w128 name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w_ty sz) (w128_ty) ain aout msb (semi sz) check sz)  (only parsing).
+Notation mk_instr_w_w128_10 name semi check := (fun sz =>
+  mk_instr (pp_sz name sz) (w_ty sz) (w128_ty) [:: E 1] [:: E 0]  MSB_MERGE (semi sz) check sz)  (only parsing).
 
-(*
-Notation mk_instr_w128w8_w name semi msb ain aout check := (fun sz => 
-  mk_instr (pp_sz name sz) (w128w8_ty) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
-*)
-Notation mk_ve_instr_w_w name semi msb ain aout check := (fun (ve:velem) sz => 
-  mk_instr (pp_ve_sz name ve sz) (w_ty ve) (w_ty sz) ain aout msb (semi ve sz) check sz)  (only parsing).
+Notation mk_ve_instr_w_w_10 name semi check := (fun (ve:velem) sz =>
+  mk_instr (pp_ve_sz name ve sz) (w_ty ve) (w_ty sz) [:: E 1] [:: E 0] MSB_CLEAR (semi ve sz) check sz)  (only parsing).
 
+Notation mk_ve_instr_w2_w_120 name semi check := (fun (ve:velem) sz =>
+  mk_instr (pp_ve_sz name ve sz) (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi ve sz) check sz)  (only parsing).
 
-Notation mk_ve_instr_w2_w name semi msb ain aout check := (fun (ve:velem) sz => 
-  mk_instr (pp_ve_sz name ve sz) (w2_ty sz sz) (w_ty sz) ain aout msb (semi ve sz) check sz)  (only parsing).
-
-Notation mk_ve_instr_ww8_w name semi msb ain aout check := (fun ve sz => 
-  mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) ain aout msb (semi ve sz) check sz)  (only parsing).
-
-Definition fake_check (_:list asm_arg) : bool := true.
-Definition fake_check_sz (sz:wsize) (_:list asm_arg) : bool := true.
+Notation mk_ve_instr_ww8_w_120 name semi check := (fun ve sz =>
+  mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi ve sz) check sz)  (only parsing).
 
 Definition msb_dfl := MSB_CLEAR.
 
-Definition check_imm32 sz sz' := if sz == U64 then sz' == U32 else sz == sz'.
+(* ---------------------------------------------------------------- *)
+(* DEFINE CHECKS *)
 
-Definition check_opdr32 sz a1 :=
-  match a1 with
-  | Imm sz' _ => check_imm32 sz sz' 
-  | Glob _ | Reg _  | Adr _  => true
-  | _ => false
+Definition fake_check (_:list asm_arg) : bool := true.
+Definition fake_check_sz (sz:wsize) (_:list asm_arg) : bool := true.
+Definition fake_check_sz_sz' (sz sz':wsize) (_:list asm_arg) : bool := true.
+
+(* ---------------------------------------------------------------- *)
+Module Checks.
+
+(* Recursively apply checks : f sz a b \/ ... \/ ... *)
+Fixpoint rec_2 (sz: wsize) (lf : list (wsize -> asm_arg -> asm_arg -> bool)) (a b: asm_arg) :=
+  match lf with
+  | [::] => false
+  | f :: lf => if (f sz a b) == true then true else rec_2 sz lf a b
   end.
 
-Definition check_ri32 sz a1 :=
-  match a1 with
-  | Imm sz' _ => check_imm32 sz sz' 
-  | Reg _  => true
-  | _ => false
-  end.
-
-Definition check2_regmemi32 sz (args: list asm_arg) :=
+Definition apply_2 (sz: wsize) (f: list (wsize -> asm_arg -> asm_arg -> bool)) (args: list asm_arg) : bool :=
   match args with
-  | [::Reg _; a1] => check_opdr32 sz a1
-  | [::Adr _; a1] => check_ri32 sz a1
-  | _               => false
-  end. 
+  | [:: a ; b] => rec_2 sz f a b
+  | _          => false
+  end.
 
-Definition Ox86_MOV_instr               := mk_instr_w_w "MOV" x86_MOV msb_dfl [:: E 1] [:: E 0] fake_check.
-Definition Ox86_MOVSX_instr             := mk_instr_w_w' "MOVSX" x86_MOVSX msb_dfl [:: E 1] [:: E 0] fake_check. 
-Definition Ox86_MOVZX_instr             := mk_instr_w_w' "MOVZX" x86_MOVZX msb_dfl [:: E 1] [:: E 0] fake_check.
-Definition Ox86_CMOVcc_instr            := mk_instr_bw2_w "CMOVcc" x86_CMOVcc msb_dfl [:: E 0; E 2; E 1] [:: E 1] fake_check.
+Fixpoint rec_2' (sz sz': wsize) (lf : list (wsize -> wsize -> asm_arg -> asm_arg -> bool)) (a b: asm_arg) :=
+  match lf with
+  | [::] => false
+  | f :: lf => if (f sz sz' a b) == true then true else rec_2' sz sz' lf a b
+  end.
 
-Definition Ox86_ADD_instr               := mk_instr_w2_b5w "ADD" x86_ADD msb_dfl [:: E 0; E 1] [:: E 0] check2_regmemi32.
-Definition Ox86_SUB_instr               := mk_instr_w2_b5w "SUB" x86_SUB msb_dfl [:: E 0; E 1] [:: E 0] check2_regmemi32.
+Definition apply_2' (sz sz': wsize) (f: list (wsize -> wsize -> asm_arg -> asm_arg -> bool)) (args: list asm_arg) : bool :=
+  match args with
+  | [:: a ; b] => rec_2' sz sz' f a b
+  | _          => false
+  end.
 
-Definition Ox86_MUL_instr               := mk_instr_w2_b5w2 "MUL"  x86_MUL  msb_dfl [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
-Definition Ox86_IMUL_instr              := mk_instr_w2_b5w2 "IMUL" x86_IMUL msb_dfl [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
-Definition Ox86_IMULr_instr             := mk_instr_w2_b5w "IMULr" x86_IMULt msb_dfl [:: E 0; E 1] [:: E 0] fake_check_sz.
+
+(* ---------------------------------------------------------------- *)
+
+Definition imm32 sz sz' := if sz == U64 then sz' == U32 else sz == sz'.
+
+Definition opdr32 sz a b :=
+  match a with
+  | Reg _ =>
+    match b with
+    | Imm sz' _ => imm32 sz sz'
+    | Glob _ | Reg _  | Adr _  => true
+    | _ => false
+    end
+  |_ => false
+  end.
+
+Definition ri32 sz a b :=
+  match a with
+  | Adr _ =>
+    match b with
+    | Imm sz' _ => imm32 sz sz'
+    | Reg _  => true
+    | _ => false
+    end
+  | _ => false
+  end.
+
+Definition rm_r (sz:wsize) a b :=
+  match a , b with
+  | Adr _ , Reg _ => true
+  | _, _ => false
+  end.
+
+Definition r_rm (sz:wsize) a b :=
+  match a , b with
+  | Reg _ , Adr _ => true
+  | Reg _ , Reg _ => true
+  | Reg _ , Glob _ => true
+  | _, _ => false
+  end.
+
+Definition r_imm_same_size (sz: wsize) a b :=
+  match a , b with
+  | Reg _ , Imm sz' _ => sz == sz'
+  | _, _ => false
+  end.
+
+Definition rm_imm_near_size (sz: wsize) a b :=
+  match a , b with
+  | Adr _ , Imm sz' _ => imm32 sz sz'
+  | _, _ => false
+  end.
+
+Definition r_rm_8_8 (sz sz': wsize) a b :=
+  match a, b with
+  | Reg _, Adr _ => (sz > U8) && (sz' == U8)
+  | Reg _, Reg _ => (sz > U8) && (sz' == U8)
+  | Reg _, Glob _ => (sz > U8) && (sz' == U8)
+  | _ , _ => false
+  end.
+
+Definition r_rm_16_16 (sz sz': wsize) a b :=
+  match a, b with
+  | Reg _, Reg _ => (sz > U16) && (sz' == U16)
+  | Reg _, Adr _ => (sz > U16) && (sz' == U16)
+  | Reg _, Glob _ => (sz > U16) && (sz' == U16)
+  | _ , _ => false
+  end.
+
+Definition r_rm_16plus (sz : wsize) a b :=
+  match a, b with
+  | Reg _, Reg _ => (sz >= U16)
+  | Reg _, Adr _ => (sz >= U16)
+  | Reg _, Glob _ => (sz >= U16)
+  | _ , _ => false
+  end.
+
+Definition mov sz (args: list asm_arg) :=
+apply_2 sz [:: rm_r ; r_rm ; r_imm_same_size ; rm_imm_near_size ] args.
+
+Definition movsx sz sz' (args: list asm_arg) :=
+apply_2' sz sz' [:: r_rm_8_8; r_rm_16_16 ] args.
+
+Definition movzx sz sz' (args: list asm_arg) :=
+apply_2' sz sz' [:: r_rm_8_8; r_rm_16_16 ] args.
+
+Definition cmovcc sz (args:list asm_arg) :=
+apply_2 sz [:: r_rm_16plus ] args.
+
+Definition regmemi32 sz (args: list asm_arg) :=
+apply_2 sz [:: ri32 ; opdr32 ] args.
+
+End Checks.
+
+
+Definition Ox86_MOV_instr               := mk_instr_w_w "MOV" x86_MOV msb_dfl         [:: E 1] [:: E 0] Checks.mov.
+Definition Ox86_MOVSX_instr             := mk_instr_w_w'_10 "MOVSX" x86_MOVSX         Checks.movsx.
+Definition Ox86_MOVZX_instr             := mk_instr_w_w'_10 "MOVZX" x86_MOVZX         Checks.movzx.
+Definition Ox86_CMOVcc_instr            := mk_instr_bw2_w_0211 "CMOVcc" x86_CMOVcc    Checks.cmovcc.
+
+Definition Ox86_ADD_instr               := mk_instr_w2_b5w_010 "ADD" x86_ADD          Checks.regmemi32.
+Definition Ox86_SUB_instr               := mk_instr_w2_b5w_010 "SUB" x86_SUB          Checks.regmemi32.
+
+Definition Ox86_MUL_instr               := mk_instr_w2_b5w2 "MUL"  x86_MUL  msb_dfl   [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
+Definition Ox86_IMUL_instr              := mk_instr_w2_b5w2 "IMUL" x86_IMUL msb_dfl   [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
+Definition Ox86_IMULr_instr             := mk_instr_w2_b5w_010 "IMULr" x86_IMULt      fake_check_sz.
 Definition Ox86_IMULri_instr            := mk_instr_w2_b5w "IMULri" x86_IMULt msb_dfl [:: E 1; E 2] [:: E 0] fake_check_sz. (* /!\ same as above *)
-Definition Ox86_DIV_instr               := mk_instr_w3_b5w2 "DIV" x86_DIV msb_dfl [:: R RDX; R RAX; E 0] [:: R RAX; R RDX] fake_check.
-Definition Ox86_IDIV_instr              := mk_instr_w3_b5w2 "IDIV" x86_IDIV msb_dfl [:: R RDX; R RAX; E 0] [:: R RAX; R RDX] fake_check.
-Definition Ox86_CQO_instr               := mk_instr_w_w "CQO" x86_CQO msb_dfl [:: R RAX] [:: R RDX] fake_check.
-Definition Ox86_ADC_instr               := mk_instr_w2b_b5w "ADC" x86_ADC msb_dfl [:: E 0; E 1] [:: E 0] check2_regmemi32.
-Definition Ox86_SBB_instr               := mk_instr_w2b_b5w "SBB" x86_SBB msb_dfl [:: E 0; E 1] [:: E 0] check2_regmemi32.
-Definition Ox86_NEG_instr               := mk_instr_w_b5w "NEG" x86_NEG msb_dfl [:: E 0] [:: E 0] fake_check.
-Definition Ox86_INC_instr               := mk_instr_w_b4w "INC" x86_INC msb_dfl [:: E 0] [:: E 0] fake_check.
-Definition Ox86_DEC_instr               := mk_instr_w_b4w "DEC" x86_DEC msb_dfl [:: E 0] [:: E 0] fake_check.
-Definition Ox86_SETcc_instr             := mk_instr (pp_s "SETcc") b_ty w8_ty [:: E 0] [:: E 1] msb_dfl x86_SETcc fake_check U8.
-Definition Ox86_BT_instr                := mk_instr_w2_b "BT" x86_BT msb_dfl [:: E 0; E 1] [:: F CF] fake_check.
-Definition Ox86_LEA_instr               := mk_instr_w4_w "LEA" x86_LEA msb_dfl [:: E 1; E 2; E 3; E 4] [:: E 0] fake_check.
-Definition Ox86_TEST_instr              := mk_instr_w2_b5 "TEST" x86_TEST msb_dfl [:: E 0; E 1] fake_check.
-Definition Ox86_CMP_instr               := mk_instr_w2_b5 "CMP" x86_CMP msb_dfl [:: E 0; E 1] fake_check.
-Definition Ox86_AND_instr               := mk_instr_w2_b5w "AND" x86_AND msb_dfl [:: E 0; E 1] [:: E 0] fake_check_sz.
-Definition Ox86_ANDN_instr              := mk_instr_w2_b5w "ANDN" x86_ANDN msb_dfl [:: E 1; E 2] [:: E 0] fake_check_sz.
-Definition Ox86_OR_instr                := mk_instr_w2_b5w "OR" x86_OR msb_dfl [:: E 0; E 1] [:: E 0] fake_check_sz.
-Definition Ox86_XOR_instr               := mk_instr_w2_b5w "XOR" x86_XOR msb_dfl [:: E 0; E 1] [:: E 0] fake_check_sz.
-Definition Ox86_NOT_instr               := mk_instr_w_w "NOT" x86_NOT msb_dfl [:: E 0] [:: E 0] fake_check.
-Definition Ox86_ROR_instr               := mk_instr_ww8_b2w "ROR" x86_ROR msb_dfl [::E 0; ADExplicit 1 (Some RCX)] [::F OF; F CF; E 0] fake_check.
-Definition Ox86_ROL_instr               := mk_instr_ww8_b2w "ROL" x86_ROL msb_dfl [::E 0; ADExplicit 1 (Some RCX)] [::F OF; F CF; E 0] fake_check.
-Definition Ox86_SHL_instr               := mk_instr_ww8_b5w "SHL" x86_SHL msb_dfl [:: E 0; ADExplicit 1 (Some RCX)] [:: E 0] fake_check.
-Definition Ox86_SHR_instr               := mk_instr_ww8_b5w "SHR" x86_SHR msb_dfl [:: E 0; ADExplicit 1 (Some RCX)] [:: E 0] fake_check.
-Definition Ox86_SAL_instr               := mk_instr_ww8_b5w "SAL" x86_SHL msb_dfl [:: E 0; ADExplicit 1 (Some RCX)] [:: E 0] fake_check.
-Definition Ox86_SAR_instr               := mk_instr_ww8_b5w "SAR" x86_SAR msb_dfl [:: E 0; ADExplicit 1 (Some RCX)] [:: E 0] fake_check.
-Definition Ox86_SHLD_instr              := mk_instr_w2w8_b5w "SHLD" x86_SHLD msb_dfl [:: E 0; E 1; ADExplicit 2 (Some RCX)] [:: E 0] fake_check.
-Definition Ox86_SHRD_instr              := mk_instr_w2w8_b5w "SHRD" x86_SHRD msb_dfl [:: E 0; E 1; ADExplicit 2 (Some RCX)] [:: E 0] fake_check.
-Definition Ox86_BSWAP_instr             := mk_instr_w_w "BSWAP" x86_BSWAP msb_dfl [:: E 0] [:: E 0] fake_check.
+Definition Ox86_DIV_instr               := mk_instr_w3_b5w2_da0ad "DIV" x86_DIV       fake_check.
+Definition Ox86_IDIV_instr              := mk_instr_w3_b5w2_da0ad "IDIV" x86_IDIV     fake_check.
+Definition Ox86_CQO_instr               := mk_instr_w_w "CQO" x86_CQO msb_dfl         [:: R RAX] [:: R RDX] fake_check_sz.
+Definition Ox86_ADC_instr               := mk_instr_w2b_b5w_010 "ADC" x86_ADC         Checks.regmemi32.
+Definition Ox86_SBB_instr               := mk_instr_w2b_b5w_010 "SBB" x86_SBB         Checks.regmemi32.
+Definition Ox86_NEG_instr               := mk_instr_w_b5w "NEG" x86_NEG msb_dfl       [:: E 0] [:: E 0] fake_check.
+Definition Ox86_INC_instr               := mk_instr_w_b4w_00 "INC" x86_INC            fake_check.
+Definition Ox86_DEC_instr               := mk_instr_w_b4w_00 "DEC" x86_DEC            fake_check.
+Definition Ox86_SETcc_instr             := mk_instr (pp_s "SETcc") b_ty w8_ty         [:: E 0] [:: E 1] msb_dfl x86_SETcc fake_check U8.
+Definition Ox86_BT_instr                := mk_instr_w2_b "BT" x86_BT msb_dfl          [:: E 0; E 1] [:: F CF] fake_check.
+Definition Ox86_LEA_instr               := mk_instr_w4_w "LEA" x86_LEA msb_dfl        [:: E 1; E 2; E 3; E 4] [:: E 0] fake_check.
+Definition Ox86_TEST_instr              := mk_instr_w2_b5 "TEST" x86_TEST msb_dfl     [:: E 0; E 1] fake_check.
+Definition Ox86_CMP_instr               := mk_instr_w2_b5 "CMP" x86_CMP msb_dfl       [:: E 0; E 1] fake_check.
+Definition Ox86_AND_instr               := mk_instr_w2_b5w_010 "AND" x86_AND          fake_check_sz.
+Definition Ox86_OR_instr                := mk_instr_w2_b5w_010 "OR" x86_OR            fake_check_sz.
+Definition Ox86_XOR_instr               := mk_instr_w2_b5w_010 "XOR" x86_XOR          fake_check_sz.
+Definition Ox86_ANDN_instr              := mk_instr_w2_b5w "ANDN" x86_ANDN msb_dfl    [:: E 1; E 2] [:: E 0] fake_check_sz.
+Definition Ox86_NOT_instr               := mk_instr_w_w "NOT" x86_NOT msb_dfl         [:: E 0] [:: E 0] fake_check_sz.
+Definition Ox86_ROR_instr               := mk_instr_ww8_b2w "ROR" x86_ROR msb_dfl     [:: E 0; ADExplicit 1 (Some RCX)] [::F OF; F CF; E 0] fake_check.
+Definition Ox86_ROL_instr               := mk_instr_ww8_b2w "ROL" x86_ROL msb_dfl     [:: E 0; ADExplicit 1 (Some RCX)] [::F OF; F CF; E 0] fake_check.
+Definition Ox86_SHL_instr               := mk_instr_ww8_b5w_0c0 "SHL" x86_SHL         fake_check.
+Definition Ox86_SHR_instr               := mk_instr_ww8_b5w_0c0 "SHR" x86_SHR         fake_check.
+Definition Ox86_SAL_instr               := mk_instr_ww8_b5w_0c0 "SAL" x86_SHL         fake_check.
+Definition Ox86_SAR_instr               := mk_instr_ww8_b5w_0c0 "SAR" x86_SAR         fake_check.
+Definition Ox86_SHLD_instr              := mk_instr_w2w8_b5w_01c0 "SHLD" x86_SHLD     fake_check.
+Definition Ox86_SHRD_instr              := mk_instr_w2w8_b5w_01c0 "SHRD" x86_SHRD     fake_check.
+Definition Ox86_BSWAP_instr             := mk_instr_w_w "BSWAP" x86_BSWAP msb_dfl     [:: E 0] [:: E 0] fake_check_sz.
 
 (* Vectorized instruction *)
-Definition Ox86_MOVD_instr              := mk_instr_w_w128 "MOVD" x86_MOVD MSB_MERGE [:: E 1] [:: E 0] fake_check.
-Definition Ox86_VMOVDQU_instr           := mk_instr_w_w "VMOVDQU" x86_VMOVDQU MSB_CLEAR [:: E 1] [:: E 0] fake_check.
-Definition Ox86_VPAND_instr             := mk_instr_w2_w "VPAND" x86_VPAND MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPANDN_instr            := mk_instr_w2_w "VPANDN" x86_VPANDN MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPOR_instr              := mk_instr_w2_w "VPOR" x86_VPOR MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPXOR_instr             := mk_instr_w2_w "VPXOR" x86_VPXOR MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPADD_instr             := mk_ve_instr_w2_w "VPADD" x86_VPADD MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSUB_instr             := mk_ve_instr_w2_w "VPSUB" x86_VPSUB MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
+Definition Ox86_MOVD_instr              := mk_instr_w_w128_10   "MOVD"    x86_MOVD    fake_check.
+Definition Ox86_VMOVDQU_instr           := mk_instr_w_w         "VMOVDQU" x86_VMOVDQU MSB_CLEAR [:: E 1] [:: E 0] fake_check_sz.
+Definition Ox86_VPAND_instr             := mk_instr_w2_w_120    "VPAND"   x86_VPAND   fake_check.
+Definition Ox86_VPANDN_instr            := mk_instr_w2_w_120    "VPANDN"  x86_VPANDN  fake_check.
+Definition Ox86_VPOR_instr              := mk_instr_w2_w_120    "VPOR"    x86_VPOR    fake_check.
+Definition Ox86_VPXOR_instr             := mk_instr_w2_w_120    "VPXOR"   x86_VPXOR   fake_check.
+Definition Ox86_VPADD_instr             := mk_ve_instr_w2_w_120 "VPADD"   x86_VPADD   fake_check.
+Definition Ox86_VPSUB_instr             := mk_ve_instr_w2_w_120 "VPSUB"   x86_VPSUB   fake_check.
 
-Definition Ox86_VPMULL_instr            := mk_ve_instr_w2_w "VPMULL" x86_VPMULL MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPMULU_instr sz         := mk_instr (pp_s "VPMULU") (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (@x86_VPMULU sz) fake_check sz. 
+Definition Ox86_VPMULL_instr            := mk_ve_instr_w2_w_120 "VPMULL" x86_VPMULL fake_check.
+Definition Ox86_VPMULU_instr sz         := mk_instr (pp_s "VPMULU") (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (@x86_VPMULU sz) fake_check sz.
 
 (* 128 *)
 Definition Ox86_VPEXTR_instr ve         := mk_instr (pp_sz "VPEXTR" ve) w128w8_ty (w_ty ve) [:: E 1 ; E 2] [:: E 0] msb_dfl (@x86_VPEXTR ve) fake_check U128.
 Definition Ox86_VPINSR_instr (ve:velem) := mk_instr (pp_ve "VPINSR" ve) (w128ww8_ty ve) w128_ty [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (x86_VPINSR ve) fake_check U128.
 
-Definition Ox86_VPSLL_instr             := mk_ve_instr_ww8_w "VPSLL" x86_VPSLL MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSRL_instr             := mk_ve_instr_ww8_w "VPSRL" x86_VPSRL MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSRA_instr             := mk_ve_instr_ww8_w "VPSRA" x86_VPSRA MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSLLV_instr            := mk_ve_instr_w2_w "VPSLLV" x86_VPSLLV MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSRLV_instr            := mk_ve_instr_w2_w "VPSRLV" x86_VPSRLV MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSLLDQ_instr           := mk_instr_ww8_w "VPSLLDQ" x86_VPSLLDQ MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSRLDQ_instr           := mk_instr_ww8_w "VPSRLDQ" x86_VPSRLDQ MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSHUFB_instr           := mk_instr_w2_w "VPSHUFB" x86_VPSHUFB MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSHUFHW_instr          := mk_instr_ww8_w "VPSHUFHW" x86_VPSHUFHW MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSHUFLW_instr          := mk_instr_ww8_w "VPSHUFLW" x86_VPSHUFLW MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPSHUFD_instr           := mk_instr_ww8_w "VPSHUFD" x86_VPSHUFD MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPUNPCKH_instr          := mk_ve_instr_w2_w "VPUNPCKH" x86_VPUNPCKH MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPUNPCKL_instr          := mk_ve_instr_w2_w "VPUNPCKL" x86_VPUNPCKL MSB_CLEAR [:: E 1 ; E 2] [:: E 0] fake_check.
-Definition Ox86_VPBLENDD_instr          := mk_instr_w2w8_w "VPBLENDD" x86_VPBLENDD MSB_CLEAR [:: E 1 ; E 2 ; E 3] [:: E 0] fake_check.
-Definition Ox86_VPBROADCAST_instr       := mk_ve_instr_w_w "VPBROADCAST" x86_VPBROADCAST MSB_CLEAR [:: E 1] [:: E 0] fake_check.
+Definition Ox86_VPSLL_instr             := mk_ve_instr_ww8_w_120  "VPSLL"       x86_VPSLL       fake_check.
+Definition Ox86_VPSRL_instr             := mk_ve_instr_ww8_w_120  "VPSRL"       x86_VPSRL       fake_check.
+Definition Ox86_VPSRA_instr             := mk_ve_instr_ww8_w_120  "VPSRA"       x86_VPSRA       fake_check.
+Definition Ox86_VPSLLV_instr            := mk_ve_instr_w2_w_120   "VPSLLV"      x86_VPSLLV      fake_check.
+Definition Ox86_VPSRLV_instr            := mk_ve_instr_w2_w_120   "VPSRLV"      x86_VPSRLV      fake_check.
+Definition Ox86_VPSLLDQ_instr           := mk_instr_ww8_w_120     "VPSLLDQ"     x86_VPSLLDQ     fake_check.
+Definition Ox86_VPSRLDQ_instr           := mk_instr_ww8_w_120     "VPSRLDQ"     x86_VPSRLDQ     fake_check.
+Definition Ox86_VPSHUFB_instr           := mk_instr_w2_w_120      "VPSHUFB"     x86_VPSHUFB     fake_check.
+Definition Ox86_VPSHUFHW_instr          := mk_instr_ww8_w_120     "VPSHUFHW"    x86_VPSHUFHW    fake_check.
+Definition Ox86_VPSHUFLW_instr          := mk_instr_ww8_w_120     "VPSHUFLW"    x86_VPSHUFLW    fake_check.
+Definition Ox86_VPSHUFD_instr           := mk_instr_ww8_w_120     "VPSHUFD"     x86_VPSHUFD     fake_check.
+Definition Ox86_VPUNPCKH_instr          := mk_ve_instr_w2_w_120   "VPUNPCKH"    x86_VPUNPCKH    fake_check.
+Definition Ox86_VPUNPCKL_instr          := mk_ve_instr_w2_w_120   "VPUNPCKL"    x86_VPUNPCKL    fake_check.
+Definition Ox86_VPBLENDD_instr          := mk_instr_w2w8_w_1230   "VPBLENDD"    x86_VPBLENDD    fake_check.
+Definition Ox86_VPBROADCAST_instr       := mk_ve_instr_w_w_10     "VPBROADCAST" x86_VPBROADCAST fake_check.
 
 (* 256 *)
-Definition Ox86_VBROADCASTI128_instr    := mk_instr (pp_s "VBROADCASTI128")  w128_ty       w256_ty [:: E 1] [:: E 0] MSB_CLEAR (x86_VPBROADCAST U256) fake_check U256.
-Definition Ox86_VEXTRACTI128_instr      := mk_instr (pp_s "VEXTRACTI128")    w256w8_ty     w128_ty [:: E 1; E 2] [:: E 0] MSB_CLEAR x86_VEXTRACTI128 fake_check U256.
-Definition Ox86_VINSERTI128_instr       := mk_instr (pp_s "VINSERTI128")     w256w128w8_ty w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VINSERTI128 fake_check U256.
-Definition Ox86_VPERM2I128_instr        := mk_instr (pp_s "VPERM2I128")      w256x2w8_ty   w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VPERM2I128 fake_check U256.
-Definition Ox86_VPERMQ_instr            := mk_instr (pp_s "VPERMQ")          w256w8_ty     w256_ty [:: E 1; E 2] [:: E 0] MSB_CLEAR x86_VPERMQ fake_check U256.
+Definition Ox86_VBROADCASTI128_instr    := mk_instr (pp_s "VBROADCASTI128")  w128_ty       w256_ty [:: E 1]           [:: E 0] MSB_CLEAR (x86_VPBROADCAST U256) fake_check U256.
+Definition Ox86_VEXTRACTI128_instr      := mk_instr (pp_s "VEXTRACTI128")    w256w8_ty     w128_ty [:: E 1; E 2]      [:: E 0] MSB_CLEAR x86_VEXTRACTI128       fake_check U256.
+Definition Ox86_VINSERTI128_instr       := mk_instr (pp_s "VINSERTI128")     w256w128w8_ty w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VINSERTI128        fake_check U256.
+Definition Ox86_VPERM2I128_instr        := mk_instr (pp_s "VPERM2I128")      w256x2w8_ty   w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VPERM2I128         fake_check U256.
+Definition Ox86_VPERMQ_instr            := mk_instr (pp_s "VPERMQ")          w256w8_ty     w256_ty [:: E 1; E 2]      [:: E 0] MSB_CLEAR x86_VPERMQ             fake_check U256.
 
 Definition instr_desc o : instr_desc_t :=
   match o with
@@ -843,7 +945,6 @@ Definition instr_desc o : instr_desc_t :=
   | CMOVcc sz          => Ox86_CMOVcc_instr sz
   | BSWAP sz           => Ox86_BSWAP_instr sz
   | CQO sz             => Ox86_CQO_instr sz
-(*  | MOVZX32            => Ox86_MOVZX32_instr *)
   | ADD sz             => Ox86_ADD_instr sz
   | SUB sz             => Ox86_SUB_instr sz
   | MUL sz             => Ox86_MUL_instr sz
@@ -929,5 +1030,3 @@ Definition check2_regmemi (args: list asm_arg) :=
   | [::Adr _; a1] => check_ri a1
   | _               => false
   end. *)
-
-
