@@ -459,28 +459,56 @@ Definition addr_of_pexpr ii s (e: pexpr) :=
     cierror ii (Cerr_assembler (AsmErr_string "Invalid address expression"))
   end.
 
-Definition oprd_of_pexpr ii (e: pexpr) :=
+Definition assemble_word ii (sz:wsize) (e:pexpr) :=
   match e with
   | Papp1 (Oword_of_int sz') (Pconst z) =>
     Let _ := assert (sz' ≤ Uptr)%CMP
                     (ii, Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: invalid cast")) in
     let w := sign_extend Uptr (wrepr sz' z) in
-    ciok (Imm_op w)
+    let w := zero_extend sz w in
+    ciok (Imm w)
+  | Pvar x =>
+    if xmm_register_of_var x is Some r then ok (XMM r)
+    else Let s := reg_of_var ii x in
+    ok (Reg s)
+  | Pglobal g =>
+    ok (Glob g)
+  | Pload sz' v e => 
+    Let s := reg_of_var ii v in
+    Let w := addr_of_pexpr ii s e in
+    ok (Adr w)
+  | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for word"))
+  end.
+
+Definition arg_of_pexpr ii (ty:xtype) (e:pexpr) := 
+  match ty with
+  | xbool => Let c := assemble_cond ii e in ok (Condt c)
+  | xword sz => assemble_word ii sz e 
+  end.
+
+(*Definition oprd_of_pexpr ii (e: pexpr) :=
+  match e with
+  | Papp1 (Oword_of_int sz') (Pconst z) =>
+    Let _ := assert (sz' ≤ Uptr)%CMP
+                    (ii, Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: invalid cast")) in
+    let w := sign_extend Uptr (wrepr sz' z) in
+    ciok (Imm w)
   | Pvar v =>
     Let s := reg_of_var ii v in
-    ciok (Reg_op s)
+    ciok (Reg s)
   | Pglobal g =>
-    ciok (Glo_op g)
+    ciok (Glob g)
   | Pload sz' v e => (* FIXME: can we recognize more expression for e ? *)
 (*    Let _ := 
       if sz == sz' then ok tt 
       else cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: bad load cast")) in *)
      Let s := reg_of_var ii v in
      Let w := addr_of_pexpr ii s e in
-     ciok (Adr_op w)
+     ciok (Adr w)
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd"))
   end.
-
+*)
+(*
 Definition rm128_of_pexpr_error ii e : ciexec rm128 :=
   cierror ii (Cerr_assembler (AsmErr_string
   match e with
@@ -500,7 +528,7 @@ Definition rm128_of_pexpr ii (e: pexpr) : ciexec rm128 :=
   | Pglobal g => ciok (RM128_glo g)
   | _ => rm128_of_pexpr_error ii None
   end.
-
+*)
 Lemma assemble_cond_eq_expr ii pe pe' c :
   eq_expr pe pe' →
   assemble_cond ii pe = ok c →
@@ -613,35 +641,28 @@ by case: op => // - [] //;
 rewrite /addr_of_pexpr /= (addr_ofs_eq_expr h1) (addr_ofs_eq_expr h2).
 Qed.
 
-Lemma oprd_of_pexpr_eq_expr ii pe pe' o :
+Lemma assemble_word_eq_expr ii pe pe' sz1 o :
   eq_expr pe pe' →
-  oprd_of_pexpr ii pe = ok o →
-  oprd_of_pexpr ii pe = oprd_of_pexpr ii pe'.
+  assemble_word ii sz1 pe = ok o →
+  assemble_word ii sz1 pe = assemble_word ii sz1 pe'.
 Proof.
-elim: pe pe' o => [ z | b | n | x | g | ws x pe ih | sz x pe ih | op pe ih | op pe1 ih1 pe2 ih2 | op pes ih | t pe1 ih1 pe2 ih2 pe3 ih3 ]
-  [ z' | b' | n' | x' | g' | ws' x' pe' | sz' x' pe' | op' pe' | op' pe1' pe2' | op' pes' | t' pe1' pe2' pe3' ] // o;
-  try (move/eqP -> => //).
-- by case: x => x xi /eqP /= ->.
-- move=> /= /andP [] /andP [] /eqP ? /eqP hx h; rewrite -/eq_expr in h.
-  case: x hx => x xi /= -> {x}.
-  move: (h) => /ih {ih}.
-  case: (reg_of_var _ _) => //= r ih.
-  t_xrbindP => a ha _.
-  by rewrite (addr_of_pexpr_eq_expr h ha).
+case: pe pe' o => [ z | b | n | x | g | ws x pe | sz x pe | op pe | op pe1 pe2 | op pes | t pe1 pe2 pe3 ]
+  [ z' | b' | n' | x' | g' | ws' x' pe' | sz' x' pe' | op' pe' | op' pe1' pe2' | op' pes' | t' pe1' pe2' pe3' ] // o.
++ by move=> /= /eqP ->.
++ by move=> /eqP ->.
++ move => /= /andP [] /andP [] /eqP ? /eqP <- h.
+  by t_xrbindP => r -> a ha /=; rewrite (addr_of_pexpr_eq_expr h ha).
 move=> /= /andP [] /eqP <- {op'}.
-move => h; move: (h) => /ih {ih} ih.
-by case: pe h ih => // z; case: pe' => // z' /eqP ->.
+by case: op pe pe'=> // sz [] // z [] //= z' /eqP ->.
 Qed.
 
-Lemma rm128_of_pexpr_eq_expr ii pe pe' rm :
+Lemma arg_of_pexpr_eq_expr ii ty pe pe' o :
   eq_expr pe pe' →
-  rm128_of_pexpr ii pe = ok rm →
-  rm128_of_pexpr ii pe = rm128_of_pexpr ii pe'.
+  arg_of_pexpr ii ty pe = ok o →
+  arg_of_pexpr ii ty pe = arg_of_pexpr ii ty pe'.
 Proof.
-elim: pe pe' rm => [ z | b | n | x | g | ws x pe ih | sz x pe ih | op pe ih | op pe1 ih1 pe2 ih2 | op pes ih | t pe1 ih1 pe2 ih2 pe3 ih3 ]
-  [ z' | b' | n' | x' | g' | ws' x' pe' | sz' x' pe' | op' pe' | op' pe1' pe2' | op' pes' | t' pe1' pe2' pe3' ] // rm.
-- by case: x => x xi /eqP /= ->.
-- by move/eqP => <-.
-move => /= /andP [] /andP [] /eqP _ /eqP <- rec.
-by t_xrbindP => r -> a ok_a _ /=; rewrite (addr_of_pexpr_eq_expr rec ok_a).
+case: ty => [sz | ] /=.
++ by apply assemble_word_eq_expr.
+by t_xrbindP => he c hc; rewrite (assemble_cond_eq_expr he hc).
 Qed.
+

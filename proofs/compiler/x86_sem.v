@@ -156,6 +156,7 @@ Context (gd: glob_decls).
 Definition check_oreg or ai := 
   match or, ai with
   | Some r, Reg r' => r == r' 
+  | Some _, Imm _ _ => true
   | Some _, _      => false
   | None, _        => true
   end.
