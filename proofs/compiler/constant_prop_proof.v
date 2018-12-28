@@ -742,7 +742,7 @@ Section CONST_PROP_EP.
       rewrite /= hw1 hw2 /=.
       by apply: vuincl_sem_sop2 h.
     - move => op es ih v.
-      t_xrbindP => vs /ih{ih} [] vs' ih /vuincl_sem_opN h/h{h} [] v' [] ok_v' h.
+      t_xrbindP => vs /ih{ih} [] vs' ih /vuincl_sem_opN h/h{h} [] v' ok_v' h.
       by rewrite s_opNP /= -/(sem_pexprs _ _) ih /= ok_v'; eauto.
     move => t e He e1 He1 e2 He2 v.
     t_xrbindP => b ve /He/= [] ve' [] hse hue /(value_uincl_bool hue) [??];subst.
@@ -1336,7 +1336,7 @@ Section PROOF.
     move=> vm1 hvm1.
     have [vargs'' hargs'' U] := sem_pexprs_uincl hvm1 Hargs'.
     have [res' [hsem hres']]:= Hfun _ (Forall2_trans value_uincl_trans Hall U).
-    have /(_ _ hvm1) [vm2 /= [hw' hu]] := writes_uincl _ hres' hw.
+    have /(_ _ hvm1) [vm2 /= hw' hu] := writes_uincl _ hres' hw.
     exists vm2; split => //.
     by apply sem_seq1;constructor;econstructor;eauto.
   Qed.
@@ -1357,8 +1357,8 @@ Section PROOF.
     have := (@get_map_prog const_prop_fun p fn);rewrite Hget /=.
     have : valid_cpm (evm s1) empty_cpm by move=> x n;rewrite Mvar.get0.
     move=> /Hc [];case: const_prop => m c' /= hcpm hc' hget vargs1 hargs'.
-    have [vargs1' [htr hu1]]:= mapM2_truncate_val Hargs hargs'.
-    have [vm3 /= [] hw hu3]:= write_vars_uincl (vm_uincl_refl _) hu1 Hw.
+    have [vargs1' htr hu1]:= mapM2_truncate_val Hargs hargs'.
+    have [vm3 /= hw hu3]:= write_vars_uincl (vm_uincl_refl _) hu1 Hw.
     have [vm4 /= []hc hu4]:= hc' _ hu3.
     have [vres1 hvres1 hu5]:= get_vars_uincl hu4 Hres.
     have [vres1' ??]:= mapM2_truncate_val Hfull hu5. 
