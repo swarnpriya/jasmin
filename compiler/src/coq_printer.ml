@@ -71,7 +71,9 @@ let string_cmp_ty = function
   | E.Cmp_w (T.Signed, T.U64) -> "s"
   | _ -> assert false
 
-let infix_sop2 = function
+let infix_sop2 = fun _ -> assert false 
+(*
+function
   | E.Oand -> "&&"
   | Oor  -> "||"
   | Oadd _ -> "+"
@@ -94,7 +96,7 @@ let infix_sop2 = function
   | Ogt  k -> ">"  ^ string_cmp_ty k
   | Oge  k -> ">=" ^ string_cmp_ty k
 
-
+ *)
 let pp_sopn fmt sopn =
   pp_string0 fmt (Expr.string_of_sopn sopn)
 
@@ -139,6 +141,8 @@ let pp_funname fmt fn =
   F.fprintf fmt "%s" x
 
 let pp_op1 = function
+  | E.Oword_of_int _
+  | E.Oint_of_word _
   | E.Osignext _ -> assert false (* FIXME *)
   | E.Ozeroext _ -> assert false (* FIXME *)
   | E.Onot     -> "~~"
@@ -155,7 +159,6 @@ let rec pp_pexpr fmt = function
   | Pconst i       -> F.fprintf fmt "%s" (B.to_string i)
   | Pbool b        -> F.fprintf fmt "%a" pp_bool b
   | Parr_init _ -> assert false (* FIXME *)
-  | Pcast(ws, pe) -> F.fprintf fmt "(Pcast %a %a)" pp_ws ws pp_pexpr pe
   | Pvar vi        -> F.fprintf fmt "%a" pp_vari vi
   | Pglobal (ws, g) -> F.fprintf fmt "(Pglobal %a)" pp_global (ws, g)
   | Pget(vi, pe)   ->
@@ -166,6 +169,7 @@ let rec pp_pexpr fmt = function
   | Papp2(o, e1, e2)->
     Format.fprintf fmt "@[<hov 2>(%a %s@ %a)@]"
       pp_pexpr e1 (infix_sop2 o) pp_pexpr e2
+  | PappN _ -> assert false (* FIXME *)
   | Pif(e,e1,e2) ->
     Format.fprintf fmt "(@[<hov 2>Pif %a@ %a@ %a@])"
       pp_pexpr e pp_pexpr e1 pp_pexpr e2

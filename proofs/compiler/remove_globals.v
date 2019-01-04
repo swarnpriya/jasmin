@@ -77,7 +77,7 @@ Section REMOVE.
         let x := xi.(v_var) in
         if is_glob x then 
           match e with
-          | Pcast ws (Pconst z) => add_glob ii x gd ws z
+          | Papp1 (Oword_of_int ws) (Pconst z) => add_glob ii x gd ws z
           | _                   => cferror (Ferr_remove_glob ii xi)
           end
         else ok gd
@@ -103,9 +103,7 @@ Section REMOVE.
     Fixpoint remove_glob_e ii (env:venv) (e:pexpr) :=
       match e with
       | Pconst _ | Pbool _ => ok e 
-      | Parr_init _ _ => ok e
-      | Pcast w e =>
-        Let e := remove_glob_e ii env e in ok (Pcast w e)
+      | Parr_init _ => ok e
       | Pvar xi =>
         let x := xi.(v_var) in
         if is_glob x then
@@ -115,12 +113,12 @@ Section REMOVE.
           end 
         else ok e
       | Pglobal g => ok e
-      | Pget xi e =>
+      | Pget ws xi e =>
         let x := xi.(v_var) in
         if is_glob x then cferror (Ferr_remove_glob ii xi)
         else
           Let e := remove_glob_e ii env e in
-          ok (Pget xi e)
+          ok (Pget ws xi e)
       | Pload ws xi e =>  
         let x := xi.(v_var) in
         if is_glob x then cferror (Ferr_remove_glob ii xi)
@@ -134,6 +132,9 @@ Section REMOVE.
         Let e1 := remove_glob_e ii env e1 in
         Let e2 := remove_glob_e ii env e2 in
         ok (Papp2 o e1 e2)
+      | PappN op es =>
+        Let es := mapM (remove_glob_e ii env) es in
+        ok (PappN op es)
       | Pif e e1 e2 =>
         Let e := remove_glob_e ii env e in
         Let e1 := remove_glob_e ii env e1 in
@@ -154,12 +155,12 @@ Section REMOVE.
         else
           Let e := remove_glob_e ii env e in
           ok (Lmem ws xi e)
-      | Laset xi e =>
+      | Laset ws xi e =>
         let x := xi.(v_var) in
         if is_glob x then cferror (Ferr_remove_glob ii xi)
         else
           Let e := remove_glob_e ii env e in
-          ok (Laset xi e)
+          ok (Laset ws xi e)
       end.
     
     Section REMOVE_C.
@@ -235,7 +236,7 @@ Section REMOVE.
             let x := xi.(v_var) in
             if is_glob x then 
               match e with
-              | Pcast ws (Pconst z) =>
+              | Papp1 (Oword_of_int ws) (Pconst z) =>
                 if (ty == sword ws) && (vtype x == sword ws) then
                   Let g := find_glob ii xi gd ws z in
                   ok (Mvar.set env x g, [::])

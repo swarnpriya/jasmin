@@ -23,12 +23,14 @@ let loc_of_tuples base locs =
 (* -------------------------------------------------------------------- *)
 type typattern = TPBool | TPInt | TPWord | TPArray
 
+type sop = [ `Op2 of S.peop2 | `Op1 of S.peop1]
 type tyerror =
   | UnknownVar          of S.symbol
   | UnknownFun          of S.symbol
   | InvalidType         of P.pty * typattern
   | TypeMismatch        of P.pty pair
-  | NoOperator          of [ `Op2 of S.peop2 | `Op1 of S.peop1] * P.pty list
+  | NoOperator          of sop * P.pty list
+  | InvalidOperator     of sop
   | InvalidArgCount     of int * int
   | InvalidLvalCount    of int * int
   | DuplicateFun        of S.symbol * L.t
@@ -44,7 +46,11 @@ type tyerror =
   | PrimNotVector of S.symbol
   | PrimIsVector of S.symbol
   | ReturnLocalStack    of S.symbol
-  | BadVariableKind     of P.pvar_i * P.v_kind 
+  | BadVariableKind     of P.pvar_i * P.v_kind
+  | PackSigned
+  | PackWrongWS of int
+  | PackWrongPE of int
+  | PackWrongLength of int * int
 
 exception TyError of L.t * tyerror
 
@@ -69,7 +75,7 @@ let pp_tyerror fmt (code : tyerror) =
   | UnknownFun x ->
       F.fprintf fmt "unknown function: `%s'" x
 
-  | InvalidType (ty, p) -> 
+  | InvalidType (ty, p) ->
     F.fprintf fmt "the expression as type %a instead of %a"
        Printer.pp_ptype ty pp_typat p
 
@@ -88,6 +94,12 @@ let pp_tyerror fmt (code : tyerror) =
   | InvalidTypeForGlobal ty ->
       F.fprintf fmt "globals should have type word; found: ‘%a’"
         Printer.pp_ptype ty
+
+  | InvalidOperator o -> 
+    F.fprintf fmt "invalid operator %s" 
+      (match o with 
+       | `Op2 o -> (S.string_of_peop2 o) 
+       | `Op1 o -> (S.string_of_peop1 o))
 
   | NoOperator (`Op2 o, ts) ->
       F.fprintf fmt
@@ -140,13 +152,23 @@ let pp_tyerror fmt (code : tyerror) =
   | PrimIsVector s ->
       F.fprintf fmt "primitive needs a vector size annotation: `%s'" s
 
-
   | ReturnLocalStack v ->
       F.fprintf fmt "can not return the local stack variable %s" v
   | BadVariableKind(x,kind) ->
     F.fprintf fmt "the variable %a has kind %a instead of %a"
        Printer.pp_pvar (L.unloc x) Printer.pp_kind (P.kind_i x) Printer.pp_kind kind
 
+  | PackSigned ->
+    F.fprintf fmt "packs should be unsigned"
+
+  | PackWrongWS n ->
+    F.fprintf fmt "wrong word-size (%d) in pack" n
+
+  | PackWrongPE n ->
+    F.fprintf fmt "wrong element-size (%d) in pack" n
+
+  | PackWrongLength (e, f) ->
+    F.fprintf fmt "wrong length of pack; expected: %d; found: %d" e f
 
 (* -------------------------------------------------------------------- *)
 module Env : sig
@@ -344,79 +366,14 @@ let tt_as_word ((loc, ty) : L.t * P.pty) : T.wsize =
 
 (* -------------------------------------------------------------------- *)
 
-let op_of_ty exn ty =
-  match ty with
-  | P.Bty P.Int    -> E.Op_int
-  | P.Bty (P.U ws) -> E.Op_w ws
-  | _              -> raise exn
+type ty_op_kind = 
+  | OpKE of E.cmp_kind 
+  | OpKV of T.signedness * T.velem * T.wsize 
+   
+let wsize_le = Utils0.cmp_le T.wsize_cmp
+let wsize_min = Utils0.cmp_min T.wsize_cmp
+let wsize_max s1 s2 = if wsize_le s1 s2 then s2 else s1
 
-let ws_of_ty exn =
-  function
-  | P.Bty (P.U ws) -> ws
-  | _ -> raise exn
-
-let cmp_of_ty exn sign ty =
-  match ty with
-  | P.Bty P.Int    -> E.Cmp_int
-  | P.Bty (P.U ws) -> E.Cmp_w(sign, ws)
-  | _              -> raise exn
-
-let op2_info s ty = 
-  let s, ty = 
-    match s with
-    | None              -> T.Unsigned, ty
-    | Some (s, None)    -> tt_sign s, ty
-    | Some (s, Some ws) -> tt_sign s, P.Bty (P.U (tt_ws ws)) in
-  s, ty 
-
-let op2_of_ty exn s ty op = 
-  let _, ty = op2_info s ty in
-  ty, op (op_of_ty exn ty)
-
-let cmp2_of_ty exn s ty op = 
-  let s, ty = op2_info s ty in
-  ty, op (cmp_of_ty exn s ty)
-
-let ws2_of_ty exn s ty op = 
-  let _, ty = op2_info s ty in
-  ty, op (ws_of_ty exn ty)
-
-let op2_of_pop2 exn ty (op : S.peop2) =
-  match op with
-  | `Add s -> op2_of_ty exn s ty (fun x -> E.Oadd x)
-  | `Sub s -> op2_of_ty exn s ty (fun x -> E.Osub x)
-  | `Mul s -> op2_of_ty exn s ty (fun x -> E.Omul x)
-  | `Div s -> cmp2_of_ty exn s ty (fun x -> E.Odiv x)
-  | `Mod s -> cmp2_of_ty exn s ty (fun x -> E.Omod x)
-  | `And   -> P.tbool, E.Oand
-  | `Or    -> P.tbool, E.Oor
-  | `BAnd s -> ws2_of_ty exn s ty (fun x -> E.Oland x) 
-  | `BOr s  -> ws2_of_ty exn s ty (fun x -> E.Olor x) 
-  | `BXOr s -> ws2_of_ty exn s ty (fun x -> E.Olxor x) 
-  | `ShR (Some (`Signed, _) as s) -> ws2_of_ty exn s ty (fun x -> E.Oasr x)
-  | `ShR s -> ws2_of_ty exn s ty (fun x -> E.Olsr x)
-  | `ShL s  -> ws2_of_ty exn s ty (fun x -> E.Olsl x)
-  | `Eq s   -> op2_of_ty exn s ty (fun x -> E.Oeq x)
-  | `Neq s  -> op2_of_ty exn s ty (fun x -> E.Oneq x)
-  | `Lt s -> cmp2_of_ty exn s ty (fun x -> E.Olt x)
-  | `Le s -> cmp2_of_ty exn s ty (fun x -> E.Ole x)
-  | `Gt s -> cmp2_of_ty exn s ty (fun x -> E.Ogt x)
-  | `Ge s -> cmp2_of_ty exn s ty (fun x -> E.Oge x) 
-
-(* -------------------------------------------------------------------- *)
-let peop2_of_eqop (eqop : S.peqop) =
-  match eqop with
-  | `Raw  -> None
-  | `Add s -> Some (`Add s)
-  | `Sub s -> Some (`Sub s)
-  | `Mul s -> Some (`Mul s)
-  | `ShR s -> Some (`ShR s)
-  | `ShL s -> Some (`ShL s)
-  | `BAnd s -> Some (`BAnd s)
-  | `BXOr s -> Some (`BXOr s)
-  | `BOr s -> Some (`BOr s)
-
-(* -------------------------------------------------------------------- *)
 let max_ty ty1 ty2 =
   if P.pty_equal ty1 ty2 then Some ty1 else
   match ty1, ty2 with
@@ -425,54 +382,318 @@ let max_ty ty1 ty2 =
   | P.Bty (P.U w1), P.Bty (P.U w2) -> Some (P.Bty (P.U (Utils0.cmp_min T.wsize_cmp w1 w2)))
   | _    , _     -> None
 
+let tt_vsize_op loc op (vs:S.vsize) (ve:S.vesize)  = 
+  match vs, ve with
+  (* 128 *)
+  | `V16, `W8  -> T.VE8 , T.U128
+  | `V8 , `W16 -> T.VE16, T.U128  
+  | `V4 , `W32 -> T.VE32, T.U128
+  | `V2 , `W64 -> T.VE64, T.U128
+  (* 256 *) 
+  | `V32, `W8  -> T.VE8 , T.U256
+  | `V16, `W16 -> T.VE16, T.U256  
+  | `V8 , `W32 -> T.VE32, T.U256
+  | `V4 , `W64 -> T.VE64, T.U256
+  | _   ,  _   -> rs_tyerror ~loc (InvalidOperator op)
+
+let op_info_dfl exn ty s (intok, (minws, maxws)) = 
+  match ty with
+  | P.Bty (P.U ws) -> 
+    let ws = wsize_max minws ws in
+    let ws = wsize_min ws maxws in
+    OpKE (E.Cmp_w(s, ws))
+  | _          -> 
+    if not intok then raise exn;
+    OpKE (E.Cmp_int)
+
+let check_op loc op cmp sz = 
+  match cmp with
+  | None -> rs_tyerror ~loc (InvalidOperator op)
+  | Some (min, max) ->
+    if not (wsize_le min sz && wsize_le sz max) then
+      rs_tyerror ~loc (InvalidOperator op)
+
+let op_info exn op (castop:S.castop) ty ws_cmp vs_cmp =
+  match castop with
+  | None                -> 
+    let s = T.Unsigned in
+    op_info_dfl exn ty s ws_cmp
+
+  | Some c -> 
+    let loc = L.loc c in
+    match L.unloc c with 
+    | CSS(None, s) -> 
+      let s = tt_sign s in
+      op_info_dfl exn ty s ws_cmp
+
+    | CSS(Some sz, s) -> 
+      let s = tt_sign s in
+      let sz = tt_ws sz in
+      check_op loc op (Some (snd ws_cmp)) sz;
+      OpKE(E.Cmp_w(s, sz))
+
+    | CVS(vs,s,ve) ->
+      let s = tt_sign s in
+      let ve, ws = tt_vsize_op loc op vs ve in
+      check_op loc op vs_cmp (T.wsize_of_velem ve);
+      OpKV(s, ve, ws)
+
+  
+
+(* -------------------------------------------------------------------- *)
+let op_kind_of_cmp = function
+  | E.Cmp_int     -> E.Op_int
+  | E.Cmp_w(_,ws) -> E.Op_w ws  
+
+type 'o op_info = { 
+    opi_op   : ty_op_kind -> 'o;
+    opi_wcmp : bool * (T.wsize * T.wsize);  
+    opi_vcmp : (T.wsize * T.wsize) option;
+  }
+
+let cmp_8_64 = (T.U8, T.U64)
+let cmp_8_256 = (T.U8, T.U256)
+
+let mk_cmp_kind eop vop = function
+  | OpKE c        -> eop c
+  | OpKV(s,ve,ws) -> vop s ve ws
+
+let mk_cmp_info eop vop = {
+    opi_op   = mk_cmp_kind eop vop;
+    opi_wcmp = true, cmp_8_256;
+    opi_vcmp = Some cmp_8_64;
+  }
+
+let mk_op_of_c op c = op (op_kind_of_cmp c) 
+
+let mk_op_info eop vop = mk_cmp_info (mk_op_of_c eop) vop
+
+let mk_cmp_info_nvec eop = {
+    opi_op   = mk_cmp_kind eop (fun _ _ _ -> assert false);
+    opi_wcmp = true, cmp_8_256;
+    opi_vcmp = None;
+  }
+
+let mk_op64_info_nvec eop = mk_cmp_info_nvec (mk_op_of_c eop)
+
+let mk_logic_info eop = 
+  let mk = function
+    | OpKE (Cmp_int)     -> assert false 
+    | OpKE (Cmp_w(_,ws)) -> eop ws
+    | OpKV (_s,_ve,ws)   -> eop ws in
+  { opi_op = mk;
+    opi_wcmp = false, cmp_8_256;
+    opi_vcmp = Some (cmp_8_64); }
+
+(* -------------------------------------------------------------------- *)
+
+let op1_of_ty exn op castop ty (info:E.sop1 op_info) = 
+  let tok = op_info exn (`Op1 op) castop ty info.opi_wcmp info.opi_vcmp in
+  info.opi_op tok
+
+let lnot_info = mk_logic_info (fun s -> E.Olnot s)
+let  neg_info = mk_op64_info_nvec (fun s -> E.Oneg s)
+
+(* -------------------------------------------------------------------- *)
+
+let add_info = 
+  mk_op_info (fun k -> E.Oadd k) (fun _s ve ws -> E.Ovadd(ve,ws))
+
+let sub_info = 
+  mk_op_info (fun k -> E.Osub k) (fun _s ve ws -> E.Ovsub(ve,ws))
+
+let mul_info = 
+  mk_op_info (fun k -> E.Omul k) (fun _s ve ws -> E.Ovmul(ve,ws))
+
+let div_info = mk_cmp_info_nvec (fun k -> E.Odiv k) 
+let mod_info = mk_cmp_info_nvec (fun k -> E.Omod k) 
+
+let land_info = mk_logic_info (fun k -> E.Oland k)
+let lor_info  = mk_logic_info (fun k -> E.Olor  k)
+let lxor_info = mk_logic_info (fun k -> E.Olxor k)
+
+let shr_info = 
+  let mk = function
+    | OpKE (Cmp_int)     -> assert false 
+    | OpKE (Cmp_w(s,ws)) -> 
+      if s = T.Unsigned then E.Olsr ws else E.Oasr ws
+    | OpKV (s,ve,ws)   -> 
+      if s = T.Unsigned then E.Ovlsr(ve,ws) else E.Ovasr(ve,ws) in
+  { opi_op   = mk;
+    opi_wcmp = false, cmp_8_256;
+    opi_vcmp = Some cmp_8_64;
+  }
+   
+let shl_info = 
+  let mk = function
+    | OpKE (Cmp_int)      -> assert false 
+    | OpKE (Cmp_w(_s,ws)) -> E.Olsl ws
+    | OpKV (_s,ve,ws)     -> E.Ovlsl(ve,ws) in
+  { opi_op   = mk;
+    opi_wcmp = false, cmp_8_256;
+    opi_vcmp = Some cmp_8_64;
+  } 
+
+let mk_test_info eop2 = 
+  let mk = function
+    | OpKE k          -> eop2 k
+    | OpKV (s,_ve,ws) -> eop2 (E.Cmp_w(s,ws)) in
+  { opi_op = mk;
+    opi_wcmp = true, cmp_8_256;
+    opi_vcmp = Some (cmp_8_64); }
+
+let eq_info  = mk_test_info (fun c -> E.Oeq (op_kind_of_cmp c))
+let neq_info = mk_test_info (fun c -> E.Oneq (op_kind_of_cmp c))
+let lt_info  = mk_test_info (fun c -> E.Olt c)
+let le_info  = mk_test_info (fun c -> E.Ole c)
+let gt_info  = mk_test_info (fun c -> E.Ogt c)
+let ge_info  = mk_test_info (fun c -> E.Oge c)
+
+let op2_of_ty exn op castop ty (info:E.sop2 op_info) = 
+  let tok = op_info exn (`Op2 op) castop ty info.opi_wcmp info.opi_vcmp in
+  info.opi_op tok
+
+let op2_of_pop2 exn ty (op : S.peop2) =
+  match op with
+  | `And    -> E.Oand
+  | `Or     -> E.Oor
+
+  | `Add  c -> op2_of_ty exn op c ty add_info 
+  | `Sub  c -> op2_of_ty exn op c ty sub_info 
+  | `Mul  c -> op2_of_ty exn op c ty mul_info 
+  | `Div  c -> op2_of_ty exn op c ty div_info 
+  | `Mod  c -> op2_of_ty exn op c ty mod_info 
+
+  | `BAnd c -> op2_of_ty exn op c (max_ty ty P.u256 |> oget ~exn) land_info
+  | `BOr  c -> op2_of_ty exn op c (max_ty ty P.u256 |> oget ~exn) lor_info
+  | `BXOr c -> op2_of_ty exn op c (max_ty ty P.u256 |> oget ~exn) lxor_info
+  | `ShR  c -> op2_of_ty exn op c (max_ty ty P.u256 |> oget ~exn) shr_info
+  | `ShL  c -> op2_of_ty exn op c (max_ty ty P.u256 |> oget ~exn) shl_info
+
+  | `Eq   c -> op2_of_ty exn op c ty eq_info 
+  | `Neq  c -> op2_of_ty exn op c ty neq_info
+  | `Lt   c -> op2_of_ty exn op c ty lt_info
+  | `Le   c -> op2_of_ty exn op c ty le_info
+  | `Gt   c -> op2_of_ty exn op c ty gt_info
+  | `Ge   c -> op2_of_ty exn op c ty ge_info
+
+let op1_of_pop1 exn ty (op: S.peop1) = 
+  match op with
+  | `Cast _ -> assert false 
+  | `Not c ->
+    if ty = P.tbool then 
+      if c <> None then raise exn
+      else E.Onot
+    else
+      op1_of_ty exn op c  (max_ty ty P.u256 |> oget ~exn) lnot_info 
+
+  | `Neg c -> op1_of_ty exn op c ty neg_info
+
+(* -------------------------------------------------------------------- *)
+let peop2_of_eqop (eqop : S.peqop) =
+  match eqop with
+  | `Raw    -> None
+  | `Add  s -> Some (`Add s)
+  | `Sub  s -> Some (`Sub s)
+  | `Mul  s -> Some (`Mul s)
+  | `ShR  s -> Some (`ShR s)
+  | `ShL  s -> Some (`ShL s)
+  | `BAnd s -> Some (`BAnd s)
+  | `BXOr s -> Some (`BXOr s)
+  | `BOr  s -> Some (`BOr s)
+
+(* -------------------------------------------------------------------- *)
+
 let cast loc e ety ty =
   match ety, ty with
-  | P.Bty P.Int , P.Bty (P.U w) -> P.Pcast (w, e)
+  | P.Bty P.Int , P.Bty (P.U w) -> P.Papp1 (E.Oword_of_int w, e)
+  | P.Bty (P.U w), P.Bty P.Int -> P.Papp1 (E.Oint_of_word w, e)
   | P.Bty (P.U w1), P.Bty (P.U w2) when T.wsize_cmp w1 w2 <> Datatypes.Lt -> e
   | _, _ when P.pty_equal ety ty -> e
   | _  ->  rs_tyerror ~loc (InvalidCast(ety,ty))
 
-let cast_word loc e ety =
+let cast_word loc ws e ety =
   match ety with
-  | P.Bty P.Int   -> P.Pcast (T.U64, e), T.U64
-  | P.Bty (P.U ws) -> e, ws
-  | _             ->  rs_tyerror ~loc (InvalidCast(ety,P.u64))
+  | P.Bty P.Int   -> P.Papp1 (Oword_of_int ws, e), ws
+  | P.Bty (P.U ws1) -> e, ws1
+  | _             ->  rs_tyerror ~loc (InvalidCast(ety,P.Bty (P.U ws)))
+
+let cast_int loc e ety = 
+  match ety with
+  | P.Bty P.Int    -> e 
+  | P.Bty (P.U ws) -> P.Papp1 (Oint_of_word ws, e)
+  | _             ->  rs_tyerror ~loc (InvalidCast(ety,P.tint))
 
 (* -------------------------------------------------------------------- *)
-let tt_op2 (loc1, (e1, ty1)) (loc2, (e2, ty2))
+let conv_ty = function
+    | T.Coq_sbool    -> P.tbool
+    | T.Coq_sint     -> P.tint
+    | T.Coq_sword ws -> P.Bty (P.U ws)
+    | T.Coq_sarr _   -> assert false 
+
+let type_of_op2 op = 
+  let (ty1, ty2), tyo = E.type_of_op2 op in
+  conv_ty ty1, conv_ty ty2, conv_ty tyo
+
+let tt_op2 (loc1, (e1, ety1)) (loc2, (e2, ety2))
            { L.pl_desc = pop; L.pl_loc = loc } =
 
-  let exn = tyerror ~loc (NoOperator (`Op2 pop, [ty1; ty2])) in
-
-  let op, e1, e2, ty =
+  let exn = tyerror ~loc (NoOperator (`Op2 pop, [ety1; ety2])) in
+  let ty = 
     match pop with
-    | (`Add _ | `Sub _ | `Mul _ | `Div _ | `Mod _) ->
-      let ty = max_ty ty1 ty2 |> oget ~exn in
-      let ty, op = op2_of_pop2 exn ty pop in
-      (op, cast loc1 e1 ty1 ty, cast loc2 e2 ty2 ty, ty)
+    | `And   | `Or    -> P.tbool 
+    | `ShR _ | `ShL _ -> ety1 
+    | `Add _ | `Sub _ | `Mul _ | `Div _ | `Mod _
+    | `BAnd _ | `BOr _ | `BXOr _
+    | `Eq _ | `Neq _ | `Lt _ | `Le _ | `Gt _ | `Ge _ ->
+      max_ty ety1 ety2 |> oget ~exn in
+  let op = op2_of_pop2 exn ty pop in
+  let ty1, ty2, tyo = type_of_op2 op in
+  let e1 = cast loc1 e1 ety1 ty1 in
+  let e2 = cast loc2 e2 ety2 ty2 in
+  P.Papp2(op, e1, e2), tyo
 
-    | (`BAnd _ | `BOr _ | `BXOr _) ->
-      let ty = max_ty ty1 ty2 |> oget ~exn in
-      let ty = max_ty ty (P.Bty (P.U T.U256)) |> oget ~exn in
-      let ty, op = op2_of_pop2 exn ty pop in
-      (op, cast loc1 e1 ty1 ty, cast loc2 e2 ty2 ty, ty)
+let type_of_op1 op = 
+  let ty, tyo = E.type_of_op1 op in
+  conv_ty ty, conv_ty tyo
 
-    | `ShR _ | `ShL _ ->
-      let tyarg1 = max_ty ty1 (P.Bty (P.U T.U64)) |> oget ~exn in
-      let tyarg1, op = op2_of_pop2 exn tyarg1 pop in
-      (op, cast loc1 e1 ty1 tyarg1, cast loc2 e2 ty2 (P.Bty (P.U T.U8)), tyarg1)
+let tt_op1 (loc1, (e1, ety1)) { L.pl_desc = pop; L.pl_loc = loc } = 
+  let exn = tyerror ~loc (NoOperator (`Op1 pop, [ety1])) in
+  let ty = ety1 in
+  let op = op1_of_pop1 exn ty pop in
+  let ty1, tyo = type_of_op1 op in
+  let e1 = cast loc1 e1 ety1 ty1 in
+  P.Papp1(op, e1), tyo
 
-    | (`And | `Or) ->
-      if not (ty1 = P.tbool && ty2 = P.tbool) then raise exn;
-      (snd (op2_of_pop2 Not_found P.tbool pop), e1, e2, P.tbool)
+(* -------------------------------------------------------------------- *)
+let wsize_of_bits ~loc =
+  function
+  | 8 -> T.U8
+  | 16 -> T.U16
+  | 32 -> T.U32
+  | 64 -> T.U64
+  | 128 -> T.U128
+  | 256 -> T.U256
+  | n -> rs_tyerror ~loc (PackWrongWS n)
 
-    | (`Eq _ | `Neq _ | `Lt _ | `Le _ | `Gt _ | `Ge _) ->
-      let ty = max_ty ty1 ty2 |> oget ~exn in
-      let ty, op = op2_of_pop2 exn ty pop in
-      (op, cast loc1 e1 ty1 ty, cast loc2 e2 ty2 ty, P.tbool)
+let pelem_of_bits ~loc =
+  function
+  | 1 -> T.PE1
+  | 2 -> T.PE2
+  | 4 -> T.PE4
+  | 8 -> T.PE8
+  | 16 -> T.PE16
+  | 32 -> T.PE32
+  | 64 -> T.PE64
+  | 128 -> T.PE128
+  | n -> rs_tyerror ~loc (PackWrongPE n)
 
-  in
-  (P.Papp2 (op, e1, e2), ty)
+(* Returns the size of the output word, the size of the elements,
+   and the length of the input list *)
+let tt_pack ~loc nb es =
+  let n1 = S.int_of_vsize nb in
+  let n2 = S.bits_of_vesize es in
+  wsize_of_bits ~loc (n1 * n2), pelem_of_bits ~loc n2, n1
 
 (* -------------------------------------------------------------------- *)
 let rec tt_expr ?(mode=`AllVar) (env : Env.env) pe =
@@ -496,46 +717,42 @@ let rec tt_expr ?(mode=`AllVar) (env : Env.env) pe =
     let x = tt_var mode env x in
     check_ty_u64 ~loc:xlc x.P.v_ty;
     let e = tt_expr_cast64 ~mode env po in
-    let ct = ct |>
-      omap_dfl (fun st -> tt_as_word (L.loc st, tt_type env st)) T.U64 in
+    let ct = ct |> omap_dfl tt_ws T.U64 in
     P.Pload (ct, L.mk_loc xlc x, e), P.Bty (P.U ct)
 
-  | S.PEGet ({ L.pl_loc = xlc } as x, pi) ->
+  | S.PEGet (ws, ({ L.pl_loc = xlc } as x), pi) ->
     let x  = tt_var mode env x in
     let ty = tt_as_array (xlc, x.P.v_ty) in
+    let ws = omap_dfl tt_ws (P.ws_of_ty ty) ws in
+    let ty = P.tu ws in
     let i,ity  = tt_expr ~mode env pi in
     check_ty_eq ~loc:(L.loc pi) ~from:ity ~to_:P.tint;
-    P.Pget (L.mk_loc xlc x, i), ty
+    P.Pget (ws, L.mk_loc xlc x, i), ty
 
   | S.PEOp1 (op, pe) ->
     let e, ety = tt_expr ~mode env pe in
 
     begin match op with
-    | `Cast (sg, sz) ->
+    | `Cast (`ToInt) ->
+      let e = cast_int (L.loc pe) e ety in
+      e, P.tint 
+      
+    | `Cast (`ToWord (sz, sg)) ->
       let sz = tt_ws sz in
-      let e, ws = cast_word (L.loc pe) e ety in
-      let op =
-        match sg with
-        | `Unsigned -> E.Ozeroext (sz, ws)
-        | `Signed -> E.Osignext (sz, ws)
-      in
-      Papp1 (op, e), P.Bty (P.U sz)
-    | `Not s ->
-      let loc = L.loc pe in
-      let exn = tyerror ~loc (NoOperator (`Op1 op, [ety])) in
-      if ety = P.tbool then 
-        if s <> None then raise exn
-        else Papp1(E.Onot, e), P.tbool
-      else
-        let ty = max_ty ety (P.Bty (P.U T.U256)) |> oget ~exn in
-        let ty, op = ws2_of_ty exn s ty (fun x -> E.Olnot x) in
-        Papp1(op, cast loc e ety ty), ty
-
-    | `Neg s ->
-      let loc = L.loc pe in
-      let exn = tyerror ~loc (NoOperator (`Op1 op, [ety])) in
-      let ty, op = op2_of_ty exn s ety (fun x -> E.Oneg x) in
-      Papp1(op, cast loc e ety ty), ty
+      let e, ws = cast_word (L.loc pe) sz e ety in
+      let e = 
+        if T.wsize_cmp ws sz = Datatypes.Lt then 
+          let op =
+            match sg with
+            | `Unsigned -> E.Ozeroext (sz, ws)
+            | `Signed   -> E.Osignext (sz, ws)
+          in
+          P.Papp1(op,e)
+        else e in
+      e, P.Bty (P.U sz)
+    | _  ->
+      let et1 = tt_expr ~mode env pe in
+      tt_op1 (L.loc pe, et1) (L.mk_loc (L.loc pe) op)
     end
 
   | S.PEOp2 (pop, (pe1, pe2)) ->
@@ -548,6 +765,16 @@ let rec tt_expr ?(mode=`AllVar) (env : Env.env) pe =
 
   | S.PEPrim _ ->
     rs_tyerror ~loc:(L.loc pe) PrimNotAllowed
+
+  | S.PEpack ((nb, sg, es), args) ->
+    let loc = L.loc pe in
+    if sg <> `Unsigned then rs_tyerror ~loc PackSigned;
+    let sz, pz, len = tt_pack ~loc nb es in
+    let args = List.map (tt_expr ~mode env) args in
+    let args = List.map (fun (a, ty) -> cast loc a ty (P.Bty P.Int)) args in
+    let alen = List.length args in
+    if alen <> len then rs_tyerror ~loc (PackWrongLength (len, alen));
+    P.PappN (E.Opack (sz, pz), args), P.Bty (P.U sz)
 
   | S.PEIf (pe1, pe2, pe3) ->
     let e1, ty1 = tt_expr ~mode env pe1 in
@@ -623,19 +850,20 @@ let tt_lvalue (env : Env.env) { L.pl_desc = pl; L.pl_loc = loc; } =
     let x = tt_var `AllVar env x in
     loc, (fun _ -> P.Lvar (L.mk_loc loc x)), Some x.P.v_ty
 
-  | S.PLArray ({ pl_loc = xlc } as x, pi) ->
+  | S.PLArray (ws, ({ pl_loc = xlc } as x), pi) ->
     let x  = tt_var `AllVar env x in
     let ty = tt_as_array (xlc, x.P.v_ty) in
+    let ws = omap_dfl tt_ws (P.ws_of_ty ty) ws in 
+    let ty = P.tu ws in
     let i,ity  = tt_expr env ~mode:`AllVar pi in
     check_ty_eq ~loc:(L.loc pi) ~from:ity ~to_:P.tint;
-    loc, (fun _ -> P.Laset (L.mk_loc xlc x, i)), Some ty
+    loc, (fun _ -> P.Laset (ws, L.mk_loc xlc x, i)), Some ty 
 
   | S.PLMem (ct, ({ pl_loc = xlc } as x), po) ->
     let x = tt_var `AllVar env x in
     check_ty_u64 ~loc:xlc x.P.v_ty;
     let e = tt_expr_cast64 ~mode:`AllVar env po in
-    let ct = ct |>
-               omap_dfl (fun st -> tt_as_word (L.loc st, tt_type env st)) T.U64 in
+    let ct = ct |> omap_dfl tt_ws T.U64 in
     loc, (fun _ -> P.Lmem (ct, L.mk_loc xlc x, e)), Some (P.Bty (P.U ct))
 
 (* -------------------------------------------------------------------- *)
@@ -653,12 +881,7 @@ let u64_3    = [P.u64; P.u64; P.u64]
 let u64_4    = [P.u64; P.u64; P.u64; P.u64]
 
 let prim_sig (type a) p : a P.gty list * a P.gty list =
-  let f =
-    function
-    | T.Coq_sword sz -> P.Bty (P.U sz)
-    | T.Coq_sbool -> P.Bty P.Bool
-    | _ -> assert false
-  in
+  let f = conv_ty in
   List.map f (E.sopn_tout p),
   List.map f (E.sopn_tin p)
 
@@ -693,6 +916,7 @@ let prim_string =
     "x86_TEST", PrimP (T.U64, fun sz -> Ox86_TEST sz);
     "x86_CMP", PrimP (T.U64, fun sz -> Ox86_CMP sz);
     "x86_AND", PrimP (T.U64, fun sz -> Ox86_AND sz);
+    "x86_ANDN", PrimP (T.U64, fun sz -> Ox86_ANDN sz);
     "x86_OR", PrimP (T.U64, fun sz -> Ox86_OR sz);
     "x86_XOR", PrimP (T.U64, fun sz -> Ox86_XOR sz);
     "x86_NOT", PrimP (T.U64, fun sz -> Ox86_NOT sz);
@@ -711,11 +935,14 @@ let prim_string =
     "x86_VPOR", PrimP (T.U128, fun sz -> Ox86_VPOR sz);
     "x86_VPXOR", PrimP (T.U128, fun sz -> Ox86_VPXOR sz);
     "x86_VPADD", PrimV (fun ve sz -> Ox86_VPADD (ve, sz));
+    "x86_VPSUB", PrimV (fun ve sz -> Ox86_VPSUB (ve, sz));
+    "x86_VPMULL", PrimV (fun ve sz -> Ox86_VPMULL (ve, sz));
     "x86_VPMULU", PrimP (T.U128, fun sz -> Ox86_VPMULU sz);
     "x86_VPEXTR", PrimP (T.U64, fun sz -> Ox86_VPEXTR sz);
     "x86_VPINSR", PrimV (fun ve _ -> Ox86_VPINSR ve);
     "x86_VPSLL", PrimV (fun ve sz -> Ox86_VPSLL (ve, sz));
     "x86_VPSRL", PrimV (fun ve sz -> Ox86_VPSRL (ve, sz));
+    "x86_VPSRA", PrimV (fun ve sz -> Ox86_VPSRA (ve, sz));
     "x86_VPSLLV", PrimV (fun ve sz -> Ox86_VPSLLV (ve, sz));
     "x86_VPSRLV", PrimV (fun ve sz -> Ox86_VPSRLV (ve, sz));
     "x86_VPSLLDQ", PrimP (T.U128, fun sz -> Ox86_VPSLLDQ sz);
@@ -777,10 +1004,12 @@ let tt_prim id =
 
 let prim_of_op exn loc o =
   (* TODO: use context typing information when the operator is not annotated *)
-  let bits_of_swsize : S.swsize -> int option =
+  let bits_of_swsize : S.castop -> int option =
     function
-    | None | Some (_, None) -> None
-    | Some (_, Some sz) ->
+    | None -> None
+    | Some({L.pl_desc = S.CVS _} ) -> raise exn
+    | Some({L.pl_desc = S.CSS(None, _)}) -> None
+    | Some({L.pl_desc = S.CSS(Some sz, _)}) ->  
       Some (match sz with
       | `W8 -> 8
       | `W16 -> 16
@@ -788,7 +1017,7 @@ let prim_of_op exn loc o =
       | `W64 -> 64
       | `W128 -> 128
       | `W256 -> 256
-      )
+        )
   in
   let p =
     let f s n =
@@ -858,7 +1087,7 @@ let pexpr_of_plvalue exn l =
   match L.unloc l with
   | S.PLIgnore      -> raise exn
   | S.PLVar  x      -> L.mk_loc (L.loc l) (S.PEVar x)
-  | S.PLArray(x,e)  -> L.mk_loc (L.loc l) (S.PEGet(x,e))
+  | S.PLArray(ws,x,e)  -> L.mk_loc (L.loc l) (S.PEGet(ws,x,e))
   | S.PLMem(ty,x,e) -> L.mk_loc (L.loc l) (S.PEFetch(ty,x,e))
 
 
@@ -889,7 +1118,8 @@ let arr_init xi =
   let x = L.unloc xi in 
   match x.P.v_ty with
   | P.Arr(ws, P.Pconst n) as ty ->
-    P.Cassgn (Lvar xi, P.AT_inline, ty, P.Parr_init (ws, n))
+    P.Cassgn (Lvar xi, P.AT_inline, ty, 
+              P.Parr_init (P.B.of_int (P.arr_size ws (P.B.to_int n))))
     (* FIXME: should not fail when the array size is a parameter *)
   | _           -> 
     rs_tyerror ~loc:(L.loc xi) (InvalidType( x.P.v_ty, TPArray))
@@ -901,11 +1131,11 @@ let cassgn_for (x: P.pty P.glval) (tg: P.assgn_tag) (ty: P.pty) (e: P.pty P.gexp
 let rec is_constant e = 
   match e with 
   | P.Pconst _ | P.Pbool _ | P.Parr_init _ -> true
-  | P.Pcast(_, e) -> is_constant e
   | P.Pvar x  -> P.kind_i x = P.Const || P.kind_i x = P.Inline
   | P.Pglobal _  | P.Pget _ | P.Pload _ -> false
   | P.Papp1 (_, e) -> is_constant e
   | P.Papp2 (_, e1, e2) -> is_constant e1 && is_constant e2
+  | P.PappN (_, es) -> List.for_all is_constant es
   | P.Pif(e1, e2, e3)   -> is_constant e1 && is_constant e2 && is_constant e3
 
 let check_call loc doInline lvs f es =
@@ -1081,7 +1311,8 @@ let check_return_stack fd =
   let args = P.Spv.of_list fd.P.f_args in
   let check vi = 
     let v = P.L.unloc vi in
-    if v.P.v_kind = Stack && not (P.Spv.mem v args) then 
+    if v.P.v_kind = Stack && not (P.Spv.mem v args) && 
+       fd.P.f_cc = P.Export then 
       rs_tyerror ~loc:(P.L.loc vi) (ReturnLocalStack v.P.v_name)
   in
   List.iter check fd.P.f_ret
@@ -1119,7 +1350,7 @@ let tt_global (env : Env.env) _loc (gd: S.pglobal) : Env.env * ((P.Name.t * P.pt
     let open P in
     match ety with
     | Bty (U ews) when Utils0.cmp_le T.wsize_cmp ws ews -> pe
-    | Bty Int -> Pcast (ws, pe)
+    | Bty Int -> Papp1 (Oword_of_int ws, pe)
     | _ -> rs_tyerror ~loc:(L.loc gd.S.pgd_val) (TypeMismatch (ety, ty))
     in
 

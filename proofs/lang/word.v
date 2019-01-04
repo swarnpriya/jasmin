@@ -99,11 +99,33 @@ Definition wsize_bits (s:wsize) : Z :=
   Zpos (Pos.of_succ_nat (wsize_size_minus_1 s)).
 
 Definition wsize_size (sz: wsize) : Z :=
-  wsize_bits sz / 8.
+  Zpos match sz return positive with
+  | U8   => 1
+  | U16  => 2
+  | U32  => 4
+  | U64  => 8
+  | U128 => 16
+  | U256 => 32
+  end.
+
+Lemma wsize8 : wsize_size U8 = 1%Z. done. Qed.
+
+Definition wbase (s: wsize) : Z :=
+  modulus (wsize_size_minus_1 s).+1.
+
+Lemma le0_wsize_size ws : 0 <= wsize_size ws.
+Proof. rewrite /wsize_size; lia. Qed.
+Hint Resolve le0_wsize_size.
+
+Lemma wsize_sizeE sz : wsize_size sz =  wsize_bits sz / 8.
+Proof. by case: sz. Qed.
 
 Lemma wsize_size_pos sz :
   0 < wsize_size sz.
-Proof. by case sz. Qed.
+Proof. done. Qed.
+
+Lemma wsize_size_wbase s : wsize_size s < wbase U64.
+Proof. by apply /ZltP; case: s; vm_compute. Qed.
 
 Lemma wsize_cmpP sz sz' :
   wsize_cmp sz sz' = Nat.compare (wsize_size_minus_1 sz) (wsize_size_minus_1 sz').
@@ -115,6 +137,18 @@ Lemma wsize_size_m s s' :
 Proof.
 by move=> /eqP; rewrite /cmp_le /gcmp wsize_cmpP Nat.compare_ge_iff.
 Qed.
+
+Coercion nat_of_pelem (pe: pelem) : nat :=
+  match pe with
+  | PE1 => 1
+  | PE2 => 2
+  | PE4 => 4
+  | PE8 => nat_of_wsize U8
+  | PE16 => nat_of_wsize U16
+  | PE32 => nat_of_wsize U32
+  | PE64 => nat_of_wsize U64
+  | PE128 => nat_of_wsize U128
+  end.
 
 Definition word := fun sz =>
   [comRingType of (wsize_size_minus_1 sz).+1.-word].
@@ -143,9 +177,6 @@ Definition wnot sz (w: word sz) : word sz :=
 Arguments wnot {sz} w.
 
 Definition wandn sz (x y: word sz) : word sz := wand (wnot x) y.
-
-Definition wbase (s: wsize) : Z :=
-  modulus (wsize_size_minus_1 s).+1.
 
 Definition wunsigned {s} (w: word s) : Z :=
   urepr w.
@@ -656,6 +687,32 @@ rewrite !(wbit_zero_extend, wxorE).
 by case: (_ <= _)%nat.
 Qed.
 
+Lemma wnot_zero_extend sz sz' (x : word sz') :
+  (sz ≤ sz')%CMP →
+  wnot (zero_extend sz x) = zero_extend sz (wnot x).
+Proof.
+move => hle.
+apply/eqP/eq_from_wbit_n => i.
+rewrite !(wbit_zero_extend, wnotE).
+have := wsize_size_m hle.
+move: i.
+set m := wsize_size_minus_1 _.
+set m' := wsize_size_minus_1 _.
+case => i /= /leP hi hm.
+have him : (i <= m)%nat. by apply/leP; lia.
+rewrite him /=.
+have hi' : (i < m'.+1)%nat. apply /ltP. lia.
+by have /= -> := @wnotE sz' x (Ordinal hi') .
+Qed.
+
+Lemma wunsigned_sub (sz : wsize) (p : word sz) (n : Z):
+  0 <= wunsigned p - n < wbase sz → wunsigned (p - wrepr sz n) = wunsigned p - n.
+Proof.
+  move=> h.
+  rewrite -{1}(wrepr_unsigned p).
+  by rewrite -wrepr_sub wunsigned_repr Z.mod_small.
+Qed.
+
 (* -------------------------------------------------------------------*)
 Ltac wring := 
   rewrite ?zero_extend_u; ssrring.ssring.
@@ -924,7 +981,7 @@ Definition wperm2i128 (w1 w2: u256) (i: u8) : u256 :=
       end in
   let lo := if wbit_n i 3 then 0%R else choose 0%nat in
   let hi := if wbit_n i 7 then 0%R else choose 4%nat in
-  make_vec U256 [:: hi ; lo ].
+  make_vec U256 [:: lo ; hi ]. 
 
 (* -------------------------------------------------------------------*)
 Definition wpermq (w: u256) (i: u8) : u256 :=
@@ -939,3 +996,8 @@ Definition wpsxldq op sz (w: word sz) (i: u8) : word sz :=
 
 Definition wpslldq := wpsxldq (@wshl _).
 Definition wpsrldq := wpsxldq (@wshr _).
+
+(* -------------------------------------------------------------------*)
+Definition wpack sz pe (arg: seq Z) : word sz :=
+  let w := map (CoqWord.word.mkword pe) arg in
+  wrepr sz (word.wcat_r w).

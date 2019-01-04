@@ -46,6 +46,9 @@ let rec pp_comp_err tbl fmt =
   | Compiler_util.Cerr_neqop2(_, _, s) ->
     Format.fprintf fmt "op2 not equal in %a"
       pp_string0 s
+  | Compiler_util.Cerr_neqopN(_, _, s) ->
+    Format.fprintf fmt "opN not equal in %a"
+      pp_string0 s
   | Compiler_util.Cerr_neqop(_,_, s) ->
     Format.fprintf fmt "opn not equal in %a"
       pp_string0 s
@@ -188,11 +191,12 @@ let main () =
 
     (* Generate the coq program if needed *)
     if !coqfile <> "" then begin
-      let out = open_out !coqfile in
+      assert false
+(*      let out = open_out !coqfile in
       let fmt = Format.formatter_of_out_channel out in
       Format.fprintf fmt "%a@." Coq_printer.pp_prog prog;
       close_out out;
-      if !debug then Format.eprintf "coq program extracted@."
+      if !debug then Format.eprintf "coq program extracted@." *)
     end;
     if !coqonly then exit 0;
 
@@ -242,31 +246,17 @@ let main () =
       let fd = trans fd in
       cfdef_of_fdef fd in
 
-    let stk_alloc_fd fn cfd =
-      let fd = fdef_of_cfdef fn cfd in
+    let stk_alloc_fd cfd =
+      let fd = Conv.fdef_of_cfdef tbl cfd in
       if !debug then Format.eprintf "START stack alloc@." ;
-
-      let alloc, sz, fd = Array_expand.stk_alloc_func fd in
+      let stk_i = 
+        Var0.Var.vname (Conv.cvar_of_var tbl Array_expand.vstack) in
+      let alloc, sz = Array_expand.stk_alloc_func fd in
       let alloc =
         let trans (v,i) = Conv.cvar_of_var tbl v, Conv.z_of_int i in
         List.map trans alloc in
       let sz = Conv.z_of_int sz in
-      let cfd = cfdef_of_fdef fd in
-
-     (* Format.eprintf "Stack alloc done:@.%a@."
-        (Printer.pp_func ~debug:true) fd; *)
-
-      let sfd = {
-        Stack_alloc.sf_iinfo  = cfd.Expr.f_iinfo;
-        Stack_alloc.sf_stk_sz = sz;
-        Stack_alloc.sf_stk_id =
-          Var0.Var.vname (Conv.cvar_of_var tbl Array_expand.vstack);
-        Stack_alloc.sf_tyin = cfd.Expr.f_tyin;
-        Stack_alloc.sf_params = cfd.Expr.f_params;
-        Stack_alloc.sf_body   = cfd.Expr.f_body;
-        Stack_alloc.sf_tyout = cfd.Expr.f_tyout;
-        Stack_alloc.sf_res    = cfd.Expr.f_res; } in
-      alloc, sfd
+      (sz, stk_i), alloc
     in
 
     let is_var_in_memory cv : bool =

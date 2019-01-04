@@ -40,25 +40,25 @@ let rec arrexp_e tbl e =
   | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ -> e
   | Pvar x -> check_not_reg_arr "Pvar" x; e
 
-  | Pget (x,e) ->
+  | Pget (ws, x,e) ->
     if is_reg_arr (L.unloc x) then
       let v = get_reg_arr tbl x e in
       Pvar (L.mk_loc (L.loc x) v)
-    else Pget(x, arrexp_e tbl e)
+    else Pget(ws, x, arrexp_e tbl e)
 
-  | Pcast(ws,e)    -> Pcast(ws, arrexp_e tbl e)
   | Pload(ws,x,e)  -> Pload(ws,x,arrexp_e tbl e)
   | Papp1 (o, e)   -> Papp1(o, arrexp_e tbl e)
   | Papp2(o,e1,e2) -> Papp2(o,arrexp_e tbl e1, arrexp_e tbl e2)
+  | PappN (o, es) -> PappN (o, List.map (arrexp_e tbl) es)
   | Pif(e,e1,e2)   -> Pif(arrexp_e tbl e, arrexp_e tbl e1, arrexp_e tbl e2)
 
 let arrexp_lv tbl lv =
   match lv with
-  | Laset(x,e) ->
+  | Laset(ws, x,e) ->
     if is_reg_arr (L.unloc x) then
       let v = get_reg_arr tbl x e in
       Lvar (L.mk_loc (L.loc x) v)
-    else Laset(x, arrexp_e tbl e)
+    else Laset(ws, x, arrexp_e tbl e)
   | Lvar x       -> check_not_reg_arr "Lvar" x; lv
   | Lnone _      -> lv
   | Lmem(ws,x,e) -> Lmem(ws,x,arrexp_e tbl e)
@@ -93,105 +93,76 @@ let arrexp_func fc =
 
 (* The variables are allocated in decreasing order of (base) size;
    this ensures that the alignment constraints are satisfied. *)
+
+let add_var tbl ws x = 
+  if is_stack_var x then
+    let ws' = Mv.find_default Type.U8 x tbl in
+    if size_of_ws ws' <= size_of_ws ws then Mv.add x ws tbl
+    else tbl 
+  else tbl
+
+let rec array_access_e tbl e = 
+  match e with
+  | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ | Pvar _ -> tbl
+  | Pget(ws, x, e) -> array_access_e (add_var tbl ws (L.unloc x)) e
+  | Pload (_,_,e) | Papp1 (_,e) -> array_access_e tbl e 
+  | Papp2(_,e1,e2) -> array_access_e (array_access_e tbl e1) e2
+  | PappN (_,es) -> array_access_es tbl es
+  | Pif(e1,e2,e3) -> array_access_es tbl [e1;e2;e3]
+
+and array_access_es tbl es = List.fold_left array_access_e tbl es 
+
+let array_access_lv tbl = function
+ | Lnone _ | Lvar _ -> tbl
+ | Lmem  (_,_,e) -> array_access_e tbl e
+ | Laset (ws, x, e) -> array_access_e (add_var tbl ws (L.unloc x)) e
+
+let array_access_lvs =  List.fold_left array_access_lv
+
+let rec array_acces_i tbl i = 
+  match i.i_desc with
+  | Cassgn (x, _, _, e) -> array_access_lv (array_access_e tbl e) x
+  | Copn(xs,_,_,es) | Ccall(_,xs,_,es) -> 
+    array_access_lvs (array_access_es tbl es) xs
+  | Cif(e, c1, c2) | Cwhile(c1,e,c2)  -> 
+    array_access_c (array_access_c (array_access_e tbl e) c1) c2
+  | Cfor(_,(_,e1,e2), c) ->
+    array_access_c (array_access_e (array_access_e tbl e1) e2) c
+
+and array_access_c tbl c = 
+  List.fold_left array_acces_i tbl c
+
 let init_stk fc =
   let vars = Sv.elements (Sv.filter is_stack_var (vars_fc fc)) in
+  let tbl = array_access_c Mv.empty fc.f_body in
   let size v =
      match v.v_ty with
      | Bty (U ws)  -> let s = size_of_ws ws in v, s, s
-     | Arr (ws, n) -> let s = size_of_ws ws in v, s, n * s
+     | Arr (ws', n) -> 
+       let ws = try Mv.find v tbl with Not_found -> assert false in
+       v, size_of_ws ws, arr_size ws' n
      | _            -> assert false in
   let vars = List.rev_map size vars in
   let cmp (_, s1, _) (_, s2, _) = s2 - s1 in
-  let vars = List.sort cmp vars in
+  let vars = List.sort cmp vars in 
   let size = ref 0 in
-  let tbl = Hv.create 107 in
-  let init_var (v, _, n) =
+
+  (* FIXME: optimize this 
+     if pos mod s <> 0 then a hole appear in the stack,
+     in this case we can try to fill the hole with a variable 
+     of a smaller size allowing to align the next pos
+   *)
+  let init_var (v, s, n) =
     let pos = !size in
-    let bpos = B.of_int pos in
-    Hv.add tbl v bpos;
+    let pos = 
+      if pos mod s = 0 then pos
+      else (pos/s + 1) * s in
     size := pos + n;
     (v,pos) in
   let alloc = List.map init_var vars in
-  alloc, !size, tbl
+  alloc, !size
 
 let vstack = Regalloc.X64.rsp
-
-let load_stack ws loc e =
-   Pload (ws, L.mk_loc loc vstack, cast64 e)
-
-let store_stack ws loc e =
-   Lmem (ws, L.mk_loc loc vstack, cast64 e)
-
-let rec astk_e tbl e =
-  match e with
-  | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ -> e
-
-  | Pvar x ->
-    let x_ = L.unloc x in
-    let loc = L.loc x in
-    if is_stack_var x_ then
-      let _ = assert (not (is_ty_arr x_.v_ty)) in (* FIXME: ERROR MSG *)
-      let ws = ws_of_ty x_.v_ty in
-      load_stack ws loc (cnst (Hv.find tbl x_))
-    else e
-
-  | Pget (x, e) when is_stack_var (L.unloc x) ->
-    let x_ = L.unloc x in
-    let loc = L.loc x in
-    let ws, _n = array_kind x_.v_ty in
-    let ipos = cnst (Hv.find tbl x_) in
-    load_stack ws loc (ipos ++ (icnst (size_of_ws ws) ** e))
-
-  | Pget _ -> assert false (* FIXME: ERROR MSG *)
-
-  | Pcast(ws,e)    -> Pcast(ws, astk_e tbl e)
-  | Pload(ws,x,e)  -> Pload(ws,x, astk_e tbl e)
-  | Papp1(o,e)     -> Papp1(o, astk_e tbl e)
-  | Papp2(o,e1,e2) -> Papp2(o, astk_e tbl e1, astk_e tbl e2)
-  | Pif(e,e1,e2)   -> Pif(astk_e tbl e, astk_e tbl e1, astk_e tbl e2)
-
-let astk_lv tbl lv =
-  match lv with
-  | Laset(x,e) when is_stack_var (L.unloc x) ->
-    let x_ = L.unloc x in
-    let loc = L.loc x in
-    let ws, _n = array_kind x_.v_ty in
-    let ipos = cnst (Hv.find tbl x_) in
-    store_stack ws loc (ipos ++ (icnst (size_of_ws ws) ** e))
-
-  | Laset _ ->  assert false (* FIXME: ERROR MSG *)
-
-  | Lvar x       ->
-    let x_ = L.unloc x in
-    let loc = L.loc x in
-    if is_stack_var x_ then
-      let _ = assert (not (is_ty_arr x_.v_ty)) in (* FIXME: ERROR MSG *)
-      let ws = ws_of_ty x_.v_ty in
-      store_stack ws loc (cnst (Hv.find tbl x_))
-    else lv
-
-  | Lnone _      -> lv
-
-  | Lmem(ws,x,e) -> Lmem(ws,x,astk_e tbl e)
-
-
-let astk_es  tbl = List.map (astk_e tbl)
-let astk_lvs tbl = List.map (astk_lv tbl)
-
-let rec astk_i tbl i =
-  let i_desc =
-    match i.i_desc with
-    | Cassgn(x, tg, ty, e) -> Cassgn(astk_lv tbl x, tg, ty, astk_e tbl e)
-    | Copn(x,t,o,e)     -> Copn(astk_lvs tbl x, t, o, astk_es tbl e)
-    | Cif(e,c1,c2)    -> Cif(astk_e tbl e, astk_c tbl c1, astk_c tbl c2)
-    | Cfor(i,(d,e1,e2),c) ->
-      Cfor(i, (d, astk_e tbl e1, astk_e tbl e2), astk_c tbl c)
-    | Cwhile(c, e, c') -> Cwhile(astk_c tbl c, astk_e tbl e, astk_c tbl c')
-    | Ccall(ii,x,f,e) -> Ccall(ii, astk_lvs tbl x, f, astk_es tbl e)
-  in
-  { i with i_desc }
-
-and astk_c tbl c = List.map (astk_i tbl) c
 
 let check_stack_var =
   check_not_pred "in stack" is_stack_var
@@ -199,6 +170,6 @@ let check_stack_var =
 let stk_alloc_func fc =
   List.iter (fun v -> check_stack_var "function argument" (L.mk_loc L._dummy v)) fc.f_args;
   List.iter (check_stack_var "function return") fc.f_ret;
-  let alloc, sz, tbl = init_stk fc in
-  alloc, sz, { fc with f_body = astk_c tbl fc.f_body }
+  let alloc, sz = init_stk fc in
+  alloc, sz 
 

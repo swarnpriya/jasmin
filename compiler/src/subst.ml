@@ -5,14 +5,14 @@ let rec gsubst_e (f: 'ty1 gvar_i -> 'ty2 gexpr) e =
   match e with
   | Pconst c -> Pconst c
   | Pbool b  -> Pbool b
-  | Parr_init (ws, n) -> Parr_init (ws, n)
-  | Pcast(ws,e) -> Pcast(ws, gsubst_e f e)
+  | Parr_init n -> Parr_init n
   | Pvar v -> f v
-  | Pglobal (ws, g) -> Pglobal (ws, g)
-  | Pget (v,e) -> Pget(gsubst_vdest f v, gsubst_e f e)
+  | Pglobal (ws, g)  -> Pglobal (ws, g)
+  | Pget  (ws, v, e) -> Pget(ws, gsubst_vdest f v, gsubst_e f e)
   | Pload (ws, v, e) -> Pload (ws, gsubst_vdest f v, gsubst_e f e)
   | Papp1 (o, e)     -> Papp1 (o, gsubst_e f e)
   | Papp2 (o, e1, e2)-> Papp2 (o, gsubst_e f e1, gsubst_e f e2)
+  | PappN (o, es) -> PappN (o, List.map (gsubst_e f) es)
   | Pif   (e, e1, e2)-> Pif(gsubst_e f e, gsubst_e f e1, gsubst_e f e2)
 
 and gsubst_vdest f v =
@@ -22,10 +22,10 @@ and gsubst_vdest f v =
 
 let gsubst_lval fty f lv =
   match lv with
-  | Lnone(i,ty) -> Lnone(i, fty ty)
-  | Lvar v      -> Lvar (gsubst_vdest f v)
-  | Lmem(w,v,e) -> Lmem(w, gsubst_vdest f v, gsubst_e f e)
-  | Laset(v,e)  -> Laset(gsubst_vdest f v, gsubst_e f e)
+  | Lnone(i,ty)  -> Lnone(i, fty ty)
+  | Lvar v       -> Lvar (gsubst_vdest f v)
+  | Lmem (w,v,e) -> Lmem(w, gsubst_vdest f v, gsubst_e f e)
+  | Laset(w,v,e) -> Laset(w, gsubst_vdest f v, gsubst_e f e)
 
 let gsubst_lvals fty f  = List.map (gsubst_lval fty f)
 let gsubst_es f = List.map (gsubst_e f)
@@ -126,8 +126,8 @@ let rec int_of_expr e =
   | Pconst i -> i
   | Papp2 (o, e1, e2) ->
       int_of_op2 o (int_of_expr e1) (int_of_expr e2)
-  | Pbool _ | Parr_init _ | Pcast _ | Pvar _ | Pglobal _
-  | Pget _ | Pload _ | Papp1 _ | Pif _ -> assert false
+  | Pbool _ | Parr_init _ | Pvar _ | Pglobal _
+  | Pget _ | Pload _ | Papp1 _ | PappN _ | Pif _ -> assert false
 
 
 let isubst_ty = function
@@ -185,33 +185,49 @@ let isubst_prog (glob: ((Name.t * pty) * _) list) (prog:'info pprog) =
 
 exception NotAConstantExpr
 
+let clamp_k k e = 
+  match k with 
+  | E.Op_w ws -> clamp ws e
+  | E.Op_int  -> e
+
 let rec constant_of_expr (e: Prog.expr) : Bigint.zint =
   let open Prog in
 
   match e with
-  | Pcast (sz, e) ->
+  | Papp1 (Oword_of_int sz, e) ->
+      clamp sz (constant_of_expr e)
+
+  | Papp1(Oint_of_word sz, e) ->
       clamp sz (constant_of_expr e)
 
   | Pconst z ->
       z
 
-  | Papp1 (Oneg (Op_w ws), e) ->
-      Bigint.neg (clamp ws (constant_of_expr e))
+  | Papp1 (Oneg k, e) ->
+      clamp_k k (Bigint.neg (clamp_k k (constant_of_expr e)))
 
-  | Papp2 (Oadd (Op_w ws), e1, e2) ->
-      let e1 = clamp ws (constant_of_expr e1) in
-      let e2 = clamp ws (constant_of_expr e2) in
-      clamp ws (Bigint.add e1 e2)
+  | Papp2 (Oadd k, e1, e2) ->
+      let e1 = clamp_k k (constant_of_expr e1) in
+      let e2 = clamp_k k (constant_of_expr e2) in
+      clamp_k k (Bigint.add e1 e2)
 
-  | Papp2 (Osub (Op_w ws), e1, e2) ->
-      let e1 = clamp ws (constant_of_expr e1) in
-      let e2 = clamp ws (constant_of_expr e2) in
-      clamp ws (Bigint.sub e1 e2)
+  | Papp2 (Osub k, e1, e2) ->
+      let e1 = clamp_k k (constant_of_expr e1) in
+      let e2 = clamp_k k (constant_of_expr e2) in
+      clamp_k k (Bigint.sub e1 e2)
 
-  | Papp2 (Omul (Op_w ws), e1, e2) ->
-      let e1 = clamp ws (constant_of_expr e1) in
-      let e2 = clamp ws (constant_of_expr e2) in
-      clamp ws (Bigint.mul e1 e2)
+  | Papp2 (Omul k, e1, e2) ->
+      let e1 = clamp_k k (constant_of_expr e1) in
+      let e2 = clamp_k k (constant_of_expr e2) in
+      clamp_k k (Bigint.mul e1 e2)
+
+  | PappN(Opack(ws,pe), es) ->
+      let es = List.map constant_of_expr es in
+      let k = int_of_pe pe in
+      let e = 
+        List.fold_left (fun n e -> 
+            Bigint.add (Bigint.lshift n k) (clamp_pe pe e)) Bigint.zero es in
+      clamp ws e
 
   | _ -> raise NotAConstantExpr
 

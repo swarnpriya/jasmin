@@ -4,6 +4,7 @@ open Prog
 module E = Expr
 module B = Bigint
 
+(*
 let pp_size fmt sz =
   Format.fprintf fmt "%i" (int_of_ws sz)
 
@@ -33,9 +34,9 @@ type env = {
     alls : Ss.t;
     vars : (string * bool) Mv.t;  (* true means option type *)
     glob : (string * Type.stype) Ms.t;
+    funs : (string * (Type.stype list * Type.stype list)) Mf.t;
     arrsz : Sint.t;
     auxv  : string list Mty.t;
-    funty : (Type.stype list * Type.stype list) Mf.t;
   }
 
 let for_constTime env = env.model = Utils.ConstantTime
@@ -46,16 +47,17 @@ let for_safety    env = env.model = Utils.Safety
 let rec read_mem_e = function
   | Pconst _ | Pbool _ | Parr_init _ |Pvar _ | Pglobal _ -> false
   | Pload _ -> true
-  | Pcast (_, e) | Papp1 (_, e) | Pget (_, e) -> read_mem_e e
+  | Papp1 (_, e) | Pget (_, _, e) -> read_mem_e e
   | Papp2 (_, e1, e2) -> read_mem_e e1 || read_mem_e e2
+  | PappN (_, es) -> read_mem_es es
   | Pif  (e1, e2, e3) -> read_mem_e e1 || read_mem_e e2 || read_mem_e e3
 
-let read_mem_es = List.exists read_mem_e
+and read_mem_es es = List.exists read_mem_e es
 
 let read_mem_lval = function
   | Lnone _ | Lvar _ -> false
   | Lmem (_,_,_) -> true
-  | Laset (_, e) -> read_mem_e e
+  | Laset (_,_,e) -> read_mem_e e
 
 let write_mem_lval = function
   | Lnone _ | Lvar _ | Laset _ -> false
@@ -110,16 +112,18 @@ let rec leaks_e_rec leaks e =
   match e with
   | Pconst _ | Pbool _ | Parr_init _ |Pvar _ | Pglobal _ -> leaks
   | Pload (_,x,e) -> snd (add64 x e) :: leaks_e_rec leaks e
-  | Pcast (_, e) | Papp1 (_, e) | Pget (_, e) -> leaks_e_rec leaks e
+  | Papp1 (_, e) | Pget (_,_, e) -> leaks_e_rec leaks e
   | Papp2 (_, e1, e2) -> leaks_e_rec (leaks_e_rec leaks e1) e2
+  | PappN (_, es) -> leaks_es_rec leaks es
   | Pif  (e1, e2, e3) -> leaks_e_rec (leaks_e_rec (leaks_e_rec leaks e1) e2) e3
+and leaks_es_rec leaks es = List.fold_left leaks_e_rec leaks es
 
 let leaks_e e = leaks_e_rec [] e
-let leaks_es es = List.fold_left leaks_e_rec [] es
+let leaks_es es = leaks_es_rec [] es
 
 let leaks_lval = function
   | Lnone _ | Lvar _ -> []
-  | Laset (_, e) -> leaks_e_rec [] e
+  | Laset (_,_, e) -> leaks_e_rec [] e
   | Lmem (_, x,e) -> leaks_e_rec [snd (add64 x e)] e
 
 (* FIXME: generate this list automatically *)
@@ -266,25 +270,10 @@ let ec_keyword =
  ; "expect" ]
 
 let internal_keyword =
-  [ "global_safe" ]
+  [ "safe"; "leakages"]
 
 let keywords =
   Ss.union (Ss.of_list ec_keyword) (Ss.of_list internal_keyword)
-
-let empty_env model fds =
-  let mk_tys tys = List.map Conv.cty_of_ty tys in
-  let add_fun m fd =
-    Mf.add fd.f_name (mk_tys fd.f_tyout, mk_tys fd.f_tyin) m in
-  { model;
-    alls = keywords;
-    vars = Mv.empty;
-    glob = Ms.empty;
-    arrsz = Sint.empty;
-    auxv  = Mty.empty ;
-    funty = List.fold_left add_fun Mf.empty fds
-  }
-
-let get_funtype env f = Mf.find f env.funty
 
 let create_name env s =
   if not (Ss.mem s env.alls) then s
@@ -295,15 +284,49 @@ let create_name env s =
       else s in
     aux 0
 
+let mkfunname env fn =
+  let s = fn.fn_name in
+  let s =
+    let c0 = s.[0] in
+    let l0 = Char.lowercase_ascii c0 in
+    if c0 = l0 then s
+    else
+      String.init (String.length s) (fun i -> if i = 0 then l0 else s.[i])
+  in
+  create_name env s
+
+let empty_env model fds =
+
+  let env = {
+    model;
+    alls = keywords;
+    vars = Mv.empty;
+    glob = Ms.empty;
+    funs = Mf.empty;
+    arrsz = Sint.empty;
+    auxv  = Mty.empty ;
+  } in
+
+  let mk_tys tys = List.map Conv.cty_of_ty tys in
+  let add_fun env fd =
+    let s = mkfunname env fd.f_name in
+    let funs =
+      Mf.add fd.f_name (s, (mk_tys fd.f_tyout, mk_tys fd.f_tyin)) env.funs in
+    { env with funs; alls = Ss.add s env.alls } in
+
+  List.fold_left add_fun env fds
+
+let get_funtype env f = snd (Mf.find f env.funs)
+let get_funname env f = fst (Mf.find f env.funs)
+let pp_fname env fmt f = Format.fprintf fmt "%s" (get_funname env f) *)
+
 let ty_lval = function
   | Lnone (_, ty) -> ty
   | Lvar x -> (L.unloc x).v_ty
   | Lmem (ws,_,_) -> Bty (U ws)
-  | Laset(x, _) ->
-    match (L.unloc x).v_ty with
-    | Arr (ws,_) -> Bty (U ws)
-    | _ -> assert false
+  | Laset(ws, _, _) -> Bty (U ws)
 
+(*
 let add_aux env tys =
   let tbl = Hashtbl.create 10 in
   let do1 env ty =
@@ -374,6 +397,10 @@ let pp_zeroext fmt (szi, szo) =
   else (* io < ii *) Format.fprintf fmt "truncateu%a" pp_size szo
 
 let pp_op1 fmt = function
+  | E.Oword_of_int sz ->
+    Format.fprintf fmt "%a.of_int" pp_Tsz sz
+  | E.Oint_of_word sz ->
+    Format.fprintf fmt "%a.to_uint" pp_Tsz sz
   | E.Osignext(szo,_szi) ->
     Format.fprintf fmt "sigextu%a" pp_size szo
   | E.Ozeroext(szo,szi) ->
@@ -393,9 +420,12 @@ let pp_signed fmt ws is = function
   | E.Cmp_w (Unsigned, _) -> Format.fprintf fmt "\\u%s" ws
   | _                     -> Format.fprintf fmt "%s" is
 
+let pp_vop2 fmt (s,ve,ws) =
+  Format.fprintf fmt "\\v%s%iu%i" s (int_of_velem ve) (int_of_ws ws)
+
 let pp_op2 fmt = function
-  | E.Oand -> Format.fprintf fmt "/\\"
-  | E.Oor ->  Format.fprintf fmt "\\/"
+  | E.Oand   -> Format.fprintf fmt "/\\"
+  | E.Oor    -> Format.fprintf fmt "\\/"
   | E.Oadd _ -> Format.fprintf fmt "+"
   | E.Omul _ -> Format.fprintf fmt "*"
   | E.Odiv s -> pp_signed fmt "div" "%/" s
@@ -415,11 +445,19 @@ let pp_op2 fmt = function
   | E.Olt s| E.Ogt s -> pp_signed fmt "lt" "<" s
   | E.Ole s | E.Oge s -> pp_signed fmt "le" "<=" s
 
+  | Ovadd(ve,ws) -> pp_vop2 fmt ("add", ve, ws)
+  | Ovsub(ve,ws) -> pp_vop2 fmt ("sub", ve, ws)
+  | Ovmul(ve,ws) -> pp_vop2 fmt ("mul", ve, ws)
+  | Ovlsr(ve,ws) -> pp_vop2 fmt ("shr", ve, ws)
+  | Ovlsl(ve,ws) -> pp_vop2 fmt ("shl", ve, ws)
+  | Ovasr(ve,ws) -> pp_vop2 fmt ("sar", ve, ws)
+
+
 let in_ty_op1 op =
   fst (E.type_of_op1 op)
 
 let in_ty_op2 op =
-  fst (E.type_of_op2 op)
+  fst (E.type_of_op2 op) *)
 
 let out_ty_op1 op =
   snd (E.type_of_op1 op)
@@ -427,34 +465,33 @@ let out_ty_op1 op =
 let out_ty_op2 op =
   snd (E.type_of_op2 op)
 
+let out_ty_opN op =
+  snd (E.type_of_opN op)
+
 let min_ty ty1 ty2 =
   match ty1, ty2 with
   | Coq_sword sz1, Coq_sword sz2 ->
     Coq_sword (Utils0.cmp_min Type.wsize_cmp sz1 sz2)
   | Coq_sint, Coq_sint -> Coq_sint
   | Coq_sbool, Coq_sbool -> Coq_sbool
-  | Coq_sarr(sz1,p1), Coq_sarr(sz2,p2) ->
-    assert (sz1 = sz2 && p1 = p2); ty1
+  | Coq_sarr p1, Coq_sarr p2 ->
+    assert (p1 = p2); ty1
   | _, _ -> assert false
-
-let ty_get x =
-  match Conv.cty_of_ty x.L.pl_desc.v_ty with
-  | Coq_sarr(sz,_) -> Coq_sword sz
-  | _              -> assert false
 
 let rec ty_expr = function
   | Pconst _ -> Coq_sint
   | Pbool _ -> Coq_sbool
-  | Parr_init (sz, n) -> Coq_sarr (sz, Conv.pos_of_bi n)
-  | Pcast (sz,_) -> Coq_sword sz
+  | Parr_init n -> Coq_sarr (Conv.pos_of_bi n)
   | Pvar x -> Conv.cty_of_ty x.L.pl_desc.v_ty
   | Pglobal (sz,_) -> Coq_sword sz
   | Pload (sz,_,_) -> Coq_sword sz
-  | Pget(x,_) -> ty_get x
-  | Papp1 (op,_) -> out_ty_op1 op
+  | Pget  (sz,_,_) -> Coq_sword sz
+  | Papp1 (op,_)   -> out_ty_op1 op
   | Papp2 (op,_,_) -> out_ty_op2 op
-  | Pif (_,e1,e2) -> min_ty (ty_expr e1) (ty_expr e2)
+  | PappN (op, _)  -> out_ty_opN op
+  | Pif (_,e1,e2)  -> min_ty (ty_expr e1) (ty_expr e2)
 
+(*
 let wsize = function
   | Coq_sword sz -> sz
   | _ -> assert false
@@ -476,14 +513,11 @@ let rec pp_expr env fmt (e:expr) =
 
   | Pbool b -> Format.fprintf fmt "%a" Printer.pp_bool b
 
-  | Parr_init (sz, n) ->
+  | Parr_init n ->
     let pp_init fmt sz =
       if for_safety env then Format.fprintf fmt "None"
       else Format.fprintf fmt "%a.zero" pp_Tsz sz in
-    Format.fprintf fmt "Array%a.create %a" B.pp_print n pp_init sz
-
-  | Pcast(sz,e) ->
-    Format.fprintf fmt "(%a.of_int %a)" pp_Tsz sz (pp_expr env) e
+    Format.fprintf fmt "Array%a.create %a" B.pp_print n pp_init U8
 
   | Pvar x ->
     pp_ovar env fmt (L.unloc x)
@@ -511,6 +545,9 @@ let rec pp_expr env fmt (e:expr) =
     let te1, te2 = swap_op2 op2 (ty1, e1) (ty2, e2) in
     Format.fprintf fmt "(%a %a %a)"
       (pp_wcast env) te1 pp_op2 op2 (pp_wcast env) te2
+
+  | PappN (_op, _es) ->
+    assert false (* TODO: nary *)
 
   | Pif(e1,et,ef) ->
     let ty = ty_expr e in
@@ -659,9 +696,9 @@ module Normal = struct
 
   and pp_instr env fmt i =
     match i.i_desc with
-    | Cassgn (lv, _, ty, e) ->
+    | Cassgn (lv, _, _ty, e) ->
       let pp_e = pp_cast (pp_expr env) in
-      pp_lval1 env pp_e fmt (lv , (Conv.cty_of_ty ty, e))
+      pp_lval1 env pp_e fmt (lv , (ty_expr e, e))
 
     | Copn(lvs, _, op, es) ->
       let otys,itys = E.sopn_tout op, E.sopn_tin op in
@@ -681,10 +718,10 @@ module Normal = struct
       let pp_args fmt es =
         pp_list ",@ " (pp_wcast env) fmt (List.combine itys es) in
       if lvs = [] then
-        Format.fprintf fmt "@[%s (%a);@]" f.fn_name pp_args es
+        Format.fprintf fmt "@[%a (%a);@]" (pp_fname env) f pp_args es
       else
         let pp fmt es =
-          Format.fprintf fmt "<%@ %s (%a)" f.fn_name pp_args es in
+          Format.fprintf fmt "<%@ %a (%a)" (pp_fname env) f pp_args es in
         pp_call env fmt lvs otys pp es
 
     | Cif(e,c1,c2) ->
@@ -736,14 +773,23 @@ module Leak = struct
     | _ -> assert false
 
   let safe_op2 safe _e1 e2 = function
-    | E.Oand | E.Oor | E.Oadd _ | E.Omul _ | E.Osub _
-    | E.Oland _ | E.Olor _ | E.Olxor _
-    | E.Olsr _ | E.Olsl _ | E.Oasr _
-    | E.Oeq _ | E.Oneq _ | E.Olt _ | E.Ole _ | E.Ogt _ | E.Oge _ -> safe
+    | E.Oand    | E.Oor
+    | E.Oadd _  | E.Omul _  | E.Osub _
+    | E.Oland _ | E.Olor _  | E.Olxor _
+    | E.Olsr _  | E.Olsl _  | E.Oasr _
+    | E.Oeq _   | E.Oneq _  | E.Olt _  | E.Ole _ | E.Ogt _ | E.Oge _
+    | E.Ovadd _ | E.Ovsub _ | E.Ovmul _
+    | E.Ovlsr _ | E.Ovlsl _ | E.Ovasr _ -> safe
+
     | E.Odiv E.Cmp_int -> safe
     | E.Omod Cmp_int  -> safe
     | E.Odiv (E.Cmp_w(_, s)) -> NotZero (s, e2) :: safe
     | E.Omod (E.Cmp_w(_, s)) -> NotZero (s, e2) :: safe
+
+  let is_init env x safe =
+    let (_s,option) = Mv.find (L.unloc x) env.vars in
+    if option then Initv (L.unloc x) :: safe
+    else safe
 
   let rec safe_e_rec env safe = function
     | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ -> safe
@@ -754,8 +800,9 @@ module Leak = struct
         | Arr(_,n) -> Inita (L.unloc x, n) :: safe
         | _ -> Initv(L.unloc x) :: safe
       else safe
-    | Pload (ws,x,e) -> Valid (ws, snd (add64 x e)) :: safe_e_rec env safe e
-    | Pcast (_, e) | Papp1 (_, e) -> safe_e_rec env safe e
+    | Pload (ws,x,e) ->
+      is_init env x (Valid (ws, snd (add64 x e)) :: safe_e_rec env safe e)
+    | Papp1 (_, e) -> safe_e_rec env safe e
     | Pget (x, e) ->
       let safe =
         let (_s,option) = Mv.find (L.unloc x) env.vars in
@@ -764,6 +811,7 @@ module Leak = struct
       in_bound x e :: safe
     | Papp2 (op, e1, e2) ->
       safe_op2 (safe_e_rec env (safe_e_rec env safe e1) e2) e1 e2 op
+    | PappN (_op, _es) -> assert false (* TODO: nary *)
     | Pif  (e1, e2, e3) ->
       (* We do not check "is_defined e1 && is_defined e2" since
         (safe_e_rec (safe_e_rec safe e1) e2) implies it *)
@@ -785,13 +833,15 @@ module Leak = struct
     | E.Ox86_CQO _ | E.Ox86_ADC _ | E.Ox86_SBB _ | E.Ox86_NEG _
     | E.Ox86_INC _ | E.Ox86_DEC _ | E.Ox86_SETcc | E.Ox86_BT _
     | E.Ox86_LEA _ | E.Ox86_TEST _ | E.Ox86_CMP _
-    | E.Ox86_AND _ | E.Ox86_OR _ | E.Ox86_XOR _ | E.Ox86_NOT _
+    | E.Ox86_AND _ | E.Ox86_ANDN _ | E.Ox86_OR _ | E.Ox86_XOR _ | E.Ox86_NOT _
     | E.Ox86_ROL _ | E.Ox86_ROR _ | E.Ox86_SHL _ | E.Ox86_SHR _ | E.Ox86_SAR _
     | E.Ox86_SHLD _ | E.Ox86_SHRD _ | E.Ox86_BSWAP _ | E.Ox86_MOVD _
     | E.Ox86_VMOVDQU _ | E.Ox86_VPAND _ | E.Ox86_VPANDN _
-    | E.Ox86_VPOR _ | E.Ox86_VPXOR _ | E.Ox86_VPADD _
+    | E.Ox86_VPOR _ | E.Ox86_VPXOR _
+    | E.Ox86_VPADD _ | E.Ox86_VPSUB _ |Expr.Ox86_VPMULL _
     | E.Ox86_VPMULU _ | E.Ox86_VPEXTR _ | E.Ox86_VPINSR _
-    | E.Ox86_VPSLL _ | E.Ox86_VPSRL _ | E.Ox86_VPSLLV _ | E.Ox86_VPSRLV _
+    | E.Ox86_VPSLL _ | E.Ox86_VPSRL _ | E.Ox86_VPSRA _
+    | E.Ox86_VPSLLV _ | E.Ox86_VPSRLV _
     | E.Ox86_VPSLLDQ _ | E.Ox86_VPSRLDQ _
     | E.Ox86_VPSHUFB _ | E.Ox86_VPSHUFHW _
     | E.Ox86_VPSHUFLW _ | E.Ox86_VPSHUFD _ | E.Ox86_VPUNPCKH _ | E.Ox86_VPUNPCKL _
@@ -801,7 +851,8 @@ module Leak = struct
 
   let safe_lval env = function
     | Lnone _ | Lvar _ -> []
-    | Lmem(ws, x, e) -> Valid (ws, snd (add64 x e)) :: safe_e_rec env [] e
+    | Lmem(ws, x, e) ->
+      is_init env x (Valid (ws, snd (add64 x e)) :: safe_e_rec env [] e)
     | Laset(x,e) -> in_bound x e :: safe_e_rec env [] e
 
   let pp_safe_e env fmt = function
@@ -944,10 +995,10 @@ module Leak = struct
         pp_list ",@ " (pp_wcast env) fmt (List.combine itys es) in
       pp_leaks_es env fmt es;
       if lvs = [] then
-        Format.fprintf fmt "@[%s (%a);@]" f.fn_name pp_args es
+        Format.fprintf fmt "@[%a (%a);@]" (pp_fname env) f pp_args es
       else
         let pp fmt es =
-          Format.fprintf fmt "<%@ %s (%a)" f.fn_name pp_args es in
+          Format.fprintf fmt "<%@ %a (%a)" (pp_fname env) f pp_args es in
         pp_call env fmt lvs otys pp es
 
     | Cif(e,c1,c2) ->
@@ -1024,8 +1075,8 @@ let pp_fun env fmt f =
     if env.model = Normal then Normal.pp_cmd
     else Leak.pp_cmd in
   Format.fprintf fmt
-    "@[<v>proc %s (%a) : %a = {@   @[<v>%a@ %a@ %a@ %a%a@]@ }@]"
-    f.f_name.fn_name
+    "@[<v>proc %a (%a) : %a = {@   @[<v>%a@ %a@ %a@ %a%a@]@ }@]"
+    (pp_fname env) f.f_name
     (pp_params env) f.f_args
     (pp_rty false) f.f_tyout
     pp_aux env
@@ -1092,8 +1143,10 @@ and used_func_i used i =
   | Cfor(_,_,c)       -> used_func_c used c
   | Cwhile(c1,_,c2)   -> used_func_c (used_func_c used c1) c2
   | Ccall (_,_,f,_)   -> Ss.add f.fn_name used
-
+*)
 let extract fmt model ((globs,funcs):'a prog) tokeep =
+  assert false
+(*
   let funcs = List.map Regalloc.fill_in_missing_names funcs in
   let tokeep = ref (Ss.of_list tokeep) in
   let dofun f =
@@ -1102,3 +1155,8 @@ let extract fmt model ((globs,funcs):'a prog) tokeep =
     else false in
   let funcs = List.filter dofun funcs in
   pp_prog fmt model globs (List.rev funcs)
+
+
+
+
+ *)

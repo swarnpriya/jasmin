@@ -428,13 +428,13 @@ Definition is_var (x:var) e :=
 
 Definition is_var_or_immediate (x:var) e :=
   match e with
-  | Pcast _ (Pconst _) => true
+  | Papp1 (Oword_of_int _) (Pconst _) => true
   | Pvar x' => x == x'
   | _ => false end.
 
 Definition check_esize (s: option wsize) e :=
   match e with
-  | Pcast ws (Pconst _) => (ws ≤ U64)%CMP
+  | Papp1 (Oword_of_int ws) (Pconst _) => (ws ≤ U64)%CMP
   | Pload s' _ _
   | Pglobal (Global s' _)
     => s == Some s'
@@ -507,11 +507,10 @@ Proof. by case e => //= v /eqP ->. Qed.
 
 Lemma is_var_or_immediateP x e :
   is_var_or_immediate x e →
-  eq_expr e {| v_var := x ; v_info := xH |} ∨ ∃ s n, e = Pcast s (Pconst n).
+  eq_expr e {| v_var := x ; v_info := xH |} ∨ ∃ s n, e = Papp1 (Oword_of_int s) (Pconst n).
 Proof.
-case: e => //.
-- move=> w [] //=; eauto.
-move => e /=; eauto.
+case: e => //=; eauto.
+case => // sz [] //; eauto.
 Qed.
 
 Lemma check_sopn_argP (loargs hiargs : seq pexpr) (ads : seq arg_desc) :
@@ -583,7 +582,7 @@ Definition pexpr_of_lval ii (lv:lval) : ciexec pexpr :=
   | Lvar x    => ok (Pvar x)
   | Lmem s x e  => ok (Pload s x e)
   | Lnone _ _
-  | Laset _ _ => cierror ii (Cerr_assembler (AsmErr_string "pexpr_of_lval"))
+  | Laset _ _ _ => cierror ii (Cerr_assembler (AsmErr_string "pexpr_of_lval"))
   end.
 
 Definition get_loarg ii (outx: seq lval) (inx:seq pexpr) (d:source_position) : ciexec pexpr :=
@@ -732,22 +731,22 @@ Lemma eval_oprd_of_pexpr ii gd sz s m e c a v:
   exists2 v' : value, eval_low gd m a = ok v' & value_uincl v v'.
 Proof.
 move=> eqv; case: e => //.
-+ move=> [] // [] //= z [<-] /= [<-] _ [<-] /=;
-  (eexists; [ eauto |
-  by apply/andP; split => //; rewrite zero_extend_sign_extend // sign_extend_u ]).
 + move=> x /=;t_xrbindP.
   move=> r ok_r -[<-] /= [<-] Hsize /=ok_v /=; eexists; first by reflexivity.
   exact: xgetreg_ex eqv ok_r ok_v.
 + move=> g h; apply ok_inj in h; subst c => -[<-];rewrite /= /get_global => _.
   by case: get_global_value => // z -[<-];eexists;first reflexivity.
-move=> ws x e /=; t_xrbindP => r1 ok_r1 w ok_w [<-] /=.
-move=> H /eqP ?;subst;case: H => ?;subst.
-move=> z o ok_o ok_z z' o' ok_o' ok_z' res ok_res <- {v} /=.
-exists (Vword res) => //=.
-suff : (z + z')%R = decode_addr m w.
-+ by move=> <-;case:eqv => <- _ _;rewrite ok_res.
-move => { ok_res }.
-apply: addr_of_pexprP; eauto.
++ move=> ws x e /=; t_xrbindP => r1 ok_r1 w ok_w [<-] /=.
+  move=> H /eqP ?;subst;case: H => ?;subst.
+  move=> z o ok_o ok_z z' o' ok_o' ok_z' res ok_res <- {v} /=.
+  exists (Vword res) => //=.
+  suff : (z + z')%R = decode_addr m w.
+  + by move=> <-;case:eqv => <- _ _;rewrite ok_res.
+  move => { ok_res }.
+  by apply: addr_of_pexprP; eauto.
++ case => // sz' [] // z /=; t_xrbindP => _ _ [<-] [<-] hle [<-] /=.
+  (eexists; [ eauto |
+  by apply/andP; split => //; rewrite zero_extend_sign_extend // sign_extend_u ]).
 Qed.
 
 Lemma rm128_of_pexpr ii gd sz s m e rm a v :
@@ -839,7 +838,7 @@ Proof.
   move => /= sz n o ho htys.
   have : onth pes n = Some arg ∧ 
          match o with 
-         | Some x => eq_expr arg {| v_var := var_of_register x ; v_info := xH |} ∨ ∃ sz n, arg = Pcast sz (Pconst n) 
+         | Some x => eq_expr arg {| v_var := var_of_register x ; v_info := xH |} ∨ ∃ sz n, arg = Papp1 (Oword_of_int sz) (Pconst n)
          | None => check_esize sz arg 
          end.
   + case: (o) ho => /= [ x | ] /obindI [] e [] ->;case: ifP => //.
@@ -871,10 +870,10 @@ Proof.
           by case: (pe) Heq.
         by move=> [ws [n' heq]] _;move: hop;rewrite heq;case:(ws) => //= -[<-] /=;eauto.
       case: pe hop => //=.
-      + by move=> [] // [] //= z' [<-] _ _ /=;eauto.
       + by move=> v;t_xrbindP => ? _ [<-] _ _ /=;eauto.
       + by move=> ? [<-] /=;eauto.
-      by (move=> w v p;t_xrbindP => ???? [<-] /eqP -> _ /=;eexists;split;[by reflexivity | ]) => //=.
+      + by (move=> w v p;t_xrbindP => ???? [<-] /eqP -> _ /=;eexists;split;[by reflexivity | ]) => //=.
+      by case => // sz' [] // z'; t_xrbindP => _ _ [<-] hle _ /=; eauto.
     move => /= _ _; t_xrbindP => op hop <- /=.
     rewrite hop /=.
     case: o.
@@ -961,19 +960,18 @@ case: register_of_var (@var_of_register_of_var (Var ty x)) => [ r | ].
   eexists; first by reflexivity.
   case: eqm => eqm eqr eqx eqf.
   split => //=.
-  + move => r' v; apply: on_vuP.
-    * move => /= w' hw' <- {v}; move: hw'.
-      rewrite ffunE; case: eqP.
-      - move => ?; subst r'; rewrite Fv.setP_eq => -[<-] /=.
-        case: Sumbool.sumbool_of_bool => /= hle'.
-        + exact: word_uincl_ze_mw.
-        have {hle'} hle' := cmp_nle_le (negbT hle').
-        rewrite zero_extend_idem //. apply: word_uincl_ze_mw => //.
-        exact: (cmp_le_trans hle' hle).
-      move => ne ; rewrite Fv.setP_neq.
-      - by move => hw'; apply: eqr; rewrite /get_var hw'.
-      by apply/eqP => -[] k; have ?:= inj_string_of_register k; apply: ne.
-    by move => _ [<-].
+  + move => r' v; apply: on_vuP => //.
+    move => /= w' hw' <- {v}; move: hw'.
+    rewrite ffunE; case: eqP.
+    - move => ?; subst r'; rewrite Fv.setP_eq => -[<-] /=.
+      case: Sumbool.sumbool_of_bool => /= hle'.
+      + exact: word_uincl_ze_mw.
+      have {hle'} hle' := cmp_nle_le (negbT hle').
+      rewrite zero_extend_idem //. apply: word_uincl_ze_mw => //.
+      exact: (cmp_le_trans hle' hle).
+    move => ne ; rewrite Fv.setP_neq.
+    - by move => hw'; apply: eqr; rewrite /get_var hw'.
+    by apply/eqP => -[] k; have ?:= inj_string_of_register k; apply: ne.
   + move => r' v h; apply: eqx.
     by rewrite -h /get_var Fv.setP_neq.
   move => f v /= h; apply: eqf; move: h.
@@ -991,7 +989,7 @@ case: xmm_register_of_var (@xmm_register_of_varI (Var ty x)) => [ r | ].
   case: eqm => eqm eqr eqx eqf.
   split => //=.
   + by move => r' v h; apply: eqr; rewrite -h /get_var Fv.setP_neq.
-  + move => r' v; apply: on_vuP; last by move => _ [<-].
+  + move => r' v; apply: on_vuP => //. 
     move => w h <- {v}.
     rewrite ffunE; case: eqP; last first.
     * move => ne; apply: eqx; move: h.
@@ -1015,55 +1013,49 @@ move: hwv. apply: set_varP => /=.
   eexists; first by reflexivity.
   case: eqm => eqm eqr eqx eqf.
   split => //=.
-  + move => r' v; apply: on_vuP.
-    * move => /= w' hw' <- {v}; move: hw'.
-      rewrite Fv.setP_neq => // h.
-      by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
-    by move => _ [<-].
+  + move => r' v; apply: on_vuP => //.
+    move => /= w' hw' <- {v}; move: hw'.
+    rewrite Fv.setP_neq => // h.
+    by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
   + move => r' v h; apply: eqx.
     by move: h; rewrite /get_var Fv.setP_neq.
-  move => f' v /=; rewrite /get_var /=; apply: on_vuP.
-  + move => b' hb' <- {v}; move: hb'.
-    rewrite ffunE; case: eqP.
-    - by move => ?; subst f'; rewrite Fv.setP_eq => -[<-].
-    move => ne ; rewrite Fv.setP_neq.
-    - by move => hw'; apply: eqf; rewrite /get_var hw'.
-    by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
-  by move => _ [<-] /=; case: ((RflagMap.set _ _ _) f').
+  move => f' v /=; rewrite /get_var /=; apply: on_vuP => //.
+  move => b' hb' <- {v}; move: hb'.
+  rewrite ffunE; case: eqP.
+  - by move => ?; subst f'; rewrite Fv.setP_eq => -[<-].
+  move => ne ; rewrite Fv.setP_neq.
+  - by move => hw'; apply: eqf; rewrite /get_var hw'.
+  by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
 (* Unset *)
 move => _; case: y hvu => // -[] // hvu _ <- {vm}.
 case: eqm => eqm eqr eqx eqf.
 case: y0 hvu => // [ b | [] //] _; (eexists; first by reflexivity); split => //=.
-  + move => r' v; apply: on_vuP.
-    * move => /= w' hw' <- {v}; move: hw'.
-      rewrite Fv.setP_neq => // h.
-      by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
-    by move => _ [<-].
+  + move => r' v; apply: on_vuP => //.
+    move => /= w' hw' <- {v}; move: hw'.
+    rewrite Fv.setP_neq => // h.
+    by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
   + move => r v h; apply: eqx.
     by move: h; rewrite /get_var Fv.setP_neq.
-  move => f' v /=; rewrite /get_var /=; apply: on_vuP.
-  + move => b' hb' <- {v}; move: hb'.
-    rewrite ffunE; case: eqP.
-    - by move => ?; subst f'; rewrite Fv.setP_eq.
-    move => ne ; rewrite Fv.setP_neq.
-    - by move => hw'; apply: eqf; rewrite /get_var hw'.
-    by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
-  by move => _ [<-] /=; case: ((RflagMap.set _ _ _) f').
-  + move => r' v; apply: on_vuP.
-    * move => /= w' hw' <- {v}; move: hw'.
-      rewrite Fv.setP_neq => // h.
-      by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
-    by move => _ [<-].
+  move => f' v /=; rewrite /get_var /=; apply: on_vuP => //.
+  move => b' hb' <- {v}; move: hb'.
+  rewrite ffunE; case: eqP.
+  - by move => ?; subst f'; rewrite Fv.setP_eq.
+  move => ne ; rewrite Fv.setP_neq.
+  - by move => hw'; apply: eqf; rewrite /get_var hw'.
+  by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
+  + move => r' v; apply: on_vuP => //.
+    move => /= w' hw' <- {v}; move: hw'.
+    rewrite Fv.setP_neq => // h.
+    by have := eqr r' (Vword (pw_word w')); rewrite /get_var /= h => /(_ erefl).
   + move => r v h; apply: eqx.
     by move: h; rewrite /get_var Fv.setP_neq.
-  move => f' v /=; rewrite /get_var /=; apply: on_vuP.
-  + move => b' hb' <- {v}; move: hb'.
-    rewrite ffunE; case: eqP.
-    - by move => ?; subst f'; rewrite Fv.setP_eq.
-    move => ne ; rewrite Fv.setP_neq.
-    - by move => hw'; apply: eqf; rewrite /get_var hw'.
-    by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
-  by move => _ [<-] /=; case: ((RflagMap.oset _ _ _) f').
+  move => f' v /=; rewrite /get_var /=; apply: on_vuP => //.
+  move => b' hb' <- {v}; move: hb'.
+  rewrite ffunE; case: eqP.
+  - by move => ?; subst f'; rewrite Fv.setP_eq.
+  move => ne ; rewrite Fv.setP_neq.
+  - by move => hw'; apply: eqf; rewrite /get_var hw'.
+  by apply/eqP => -[] k; have ?:= inj_string_of_rflag k; apply: ne.
 Qed.
 
 Lemma compile_lval_of_pexpr ii ty pe g sz lv :

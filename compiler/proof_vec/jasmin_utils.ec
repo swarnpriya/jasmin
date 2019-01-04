@@ -12,6 +12,24 @@ proof.
   by move=> hd [hi1 hi2]; rewrite divz_ge0 // hi1 /= ltz_divLR.
 qed.
 
+lemma mulz_cmp_r i m r : 0 < m => 0 <= i < r => 0 <= i * m < r * m.
+proof.
+  move=> h0m [h0i hir]; rewrite IntOrder.divr_ge0 //=; 1: by apply ltzW.
+  by rewrite IntOrder.ltr_pmul2r.
+qed.
+
+lemma cmpW i d : 0 <= i < d => 0 <= i <= d.
+proof. by move=> [h1 h2];split => // ?;apply ltzW. qed.
+ 
+lemma le_modz m d : 0 <= m => m %% d <= m.
+proof.
+  move=> hm. 
+  have [ ->| [] hd]: d = 0 \/ d < 0 \/ 0 < d by smt(). 
+  + by rewrite modz0.
+  + by rewrite -modzN {2}(divz_eq m (-d)); smt (divz_ge0).
+  by rewrite {2}(divz_eq m d); smt (divz_ge0).
+qed.
+
 lemma bound_abs (i j:int) : 0 <= i < j => 0 <= i < `|j| by smt().
 hint solve 0 : bound_abs.
 
@@ -20,6 +38,72 @@ proof.
   case (p <= 0)=> [? | /ltzNge hp]; 1:by rewrite pow_le0.
   apply (IntOrder.ltr_le_trans 1) => //.
   by rewrite -(pow_le0 0 2) // pow_Mle /= ltzW.
+qed.
+
+lemma dvdmodz d m p : d %| m => d %| p => d %| (p%%m).
+proof. move=> h1 h2; rewrite /(%|);rewrite modz_dvd //. qed.
+
+lemma modz_add_carry k i d : 0 <= k < d => 0 <= i < d => d <= k + i =>
+   (k + i)%% d = (k + i) - d.
+proof.
+  move=> hk hi hd; have [_ <- //]:= euclideUl d 1 ((k + i) - d) (k+i) _ _;last by smt().
+  by rewrite -divz_eq; ring.
+qed.
+
+lemma modz_sub_carry k i d : 0 <= k < d => 0 <= i < d => k - i < 0 =>
+   (k - i)%% d = d + (k - i).
+  move=> hk hi hd; have [_ <- //]:= euclideUl d (-1) (d + (k - i)) (k-i) _ _;last by smt().
+  by rewrite -divz_eq; ring.
+qed.
+
+lemma nosmt divz_mod_mul n p i: 0 <= p => 0 <= n =>
+  (i %% (n*p)) %/ p = (i %/ p) %% n.
+proof.
+  move=> [hp | <- /=]; last by rewrite divz0.
+  move=> [hn | <- /=]; last by rewrite !modz0.
+  rewrite {2}(divz_eq i (n*p)) {2} (divz_eq (i %% (n * p)) p).
+  pose i1 := i %% (n * p).
+  have -> : (i %/ (n * p) * (n * p) + (i1 %/ p * p + i1 %% p)) = 
+         ((i %/ (n * p) * n + i1 %/ p) * p + i1 %% p) by ring.
+  have hp0 : p <> 0 by smt().
+  rewrite divzMDl 1:// (divz_small (i1%%p) p) 2:/=; 1: smt (edivzP).
+  rewrite modzMDl modz_small 2://.
+  apply bound_abs;apply divz_cmp => //. 
+  by apply modz_cmp => /#.
+qed.
+
+lemma nosmt divz_mod_div n p i: p %| n => 0 <= p => 0 <= n =>
+  (i %% n) %/ p = (i %/ p) %% (n%/p).
+proof.
+  rewrite dvdz_eq => {2}<- hp hn;apply divz_mod_mul => //.
+  by case: hp => [hp | <-];[apply divz_ge0 | rewrite divz0].
+qed.
+
+lemma modz_mod_pow2 i n k : i %% 2^n %% 2^k = i %% 2^(min n k).
+proof.
+  case: (0 <= n) => hn.
+  + rewrite /min;case (n < k) => hnk.
+    + rewrite (modz_small (i %% 2^n)) 2://;smt (modz_cmp gt0_pow2 pow_Mle).
+    case (0 <= k) => hk.
+    + rewrite modz_dvd 2://;1: by apply dvdz_exp2l => /#.
+    have hk0 : k <= 0 by smt().      
+    by rewrite !(powNeg _ _ hk0) modz1.
+  rewrite /min;case (n < k) => hnk. 
+  + by rewrite powNeg 1:/# (modz1 i).
+  have hk0 : (k <= 0) by smt().
+  by rewrite (powNeg _ _ hk0) modz1.
+qed.
+
+(* FIXME: this is defined in IntDiv but with 0 <= i *)
+lemma nosmt modz_pow2_div n p i: 0 <= p <= n =>
+  (i %% 2^n) %/ 2^p = (i %/ 2^p) %% 2^(n-p).
+proof.
+  move=> [h1 h2];rewrite divz_mod_div.   
+  + by apply dvdz_exp2l.
+  + by apply ltzW; apply gt0_pow2.
+  + by apply ltzW; apply gt0_pow2.
+  congr; have {1}->: n = (n - p) + p by ring.
+  by rewrite -pow_add 1:/# 1:// mulzK //; smt (gt0_pow2).
 qed.
 
 (* -------------------------------------------------------------------- *)
@@ -135,8 +219,24 @@ proof.
   by case (i=0) => // ?;apply hrec => /#.  
 qed.
 
+(* FIXME: we can not do l1 = "[]", l2= _ => l2 *)
+op interleave (l1 l2: 'a list) = 
+ with l1 = "[]", l2= "[]" => []
+ with l1 = "[]", l2= _::_ => l2
+ with l1 = _::_, l2 = "[]" => l1
+ with l1 = a1::l1', l2 = a2::l2' => a1::a2::interleave l1' l2'.
+
 (* ------------------------------------------------------------------- *)
 (* Safety                                                              *)
 
 op in_bound (x n:int) = 0 <= x /\ x < n.
 op is_init (x : 'a option) = x <> None.
+
+lemma is_init_Some (a:'a) : is_init (Some a).
+proof. done. qed.
+
+lemma in_bound_simplify x n : 
+    0 <= x < n => in_bound x n.
+proof. done. qed.
+
+hint simplify (is_init_Some, in_bound_simplify).

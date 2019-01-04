@@ -47,14 +47,14 @@ type 'expr gty =
 type 'ty gexpr =
   | Pconst of B.zint
   | Pbool  of bool
-  | Parr_init of wsize * B.zint
-  | Pcast  of wsize * 'ty gexpr
+  | Parr_init of B.zint
   | Pvar   of 'ty gvar_i
   | Pglobal of wsize * Name.t
-  | Pget   of 'ty gvar_i * 'ty gexpr
+  | Pget   of wsize * 'ty gvar_i * 'ty gexpr
   | Pload  of wsize * 'ty gvar_i * 'ty gexpr
   | Papp1  of E.sop1 * 'ty gexpr
   | Papp2  of E.sop2 * 'ty gexpr * 'ty gexpr
+  | PappN of E.opN * 'ty gexpr list
   | Pif    of 'ty gexpr * 'ty gexpr * 'ty gexpr
 
 type 'ty gexprs = 'ty gexpr list
@@ -65,6 +65,7 @@ val u32   : 'e gty
 val u64   : 'e gty
 val u128  : 'e gty
 val u256  : 'e gty
+val tu    : wsize -> 'e gty
 val tint  : 'e gty
 val tbool : 'e gty
 (* ------------------------------------------------------------------------ *)
@@ -80,7 +81,7 @@ type 'ty glval =
  | Lnone of L.t * 'ty
  | Lvar  of 'ty gvar_i
  | Lmem  of wsize * 'ty gvar_i * 'ty gexpr
- | Laset of 'ty gvar_i * 'ty gexpr
+ | Laset of wsize * 'ty gvar_i * 'ty gexpr
 
 type 'ty glvals = 'ty glval list
 
@@ -251,10 +252,14 @@ val locals  : 'info func -> Sv.t
 
 val int_of_ws : wsize -> int
 val size_of_ws : wsize -> int
+val int_of_pe : pelem -> int
+
+val int_of_velem : velem -> int 
 
 val is_ty_arr : 'e gty -> bool
 val array_kind : ty -> wsize * int
-val ws_of_ty   : ty -> wsize
+val ws_of_ty   : 'e gty -> wsize
+val arr_size : wsize -> int -> int
 
 (* -------------------------------------------------------------------- *)
 (* Functions on variables                                               *)
@@ -284,3 +289,4 @@ val destruct_move : ('ty, 'info) ginstr -> 'ty glval * assgn_tag * 'ty * 'ty gex
 
 (* -------------------------------------------------------------------- *)
 val clamp : Type.wsize -> Bigint.zint -> Bigint.zint
+val clamp_pe : Type.pelem -> Bigint.zint -> Bigint.zint

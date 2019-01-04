@@ -1,6 +1,7 @@
 (* -------------------------------------------------------------------- *)
 open Prog
 
+module T = Type
 module E = Expr
 module F = Format
 module B = Bigint
@@ -46,6 +47,14 @@ let string_of_cmp_ty = function
   | E.Cmp_w (Type.Unsigned, _) -> "u"
   | _        -> ""
 
+(* -------------------------------------------------------------------- *)
+
+let string_of_velem s ws ve = 
+  let nws = int_of_ws ws in
+  let nve = int_of_velem ve in
+  let s   = if s = T.Unsigned then "u" else "s" in
+  Format.sprintf "%d%s%d" (nws/nve) s nve
+
 let string_of_op2 = function
   | E.Oand   -> "&&"
   | E.Oor    -> "||"
@@ -69,12 +78,29 @@ let string_of_op2 = function
   | E.Ogt  k -> ">"  ^ string_of_cmp_ty k
   | E.Oge  k -> ">=" ^ string_of_cmp_ty k
 
+  | Ovadd (ve,ws) -> Format.sprintf "+%s"  (string_of_velem T.Unsigned ws ve)
+  | Ovsub (ve,ws) -> Format.sprintf "-%s"  (string_of_velem T.Unsigned ws ve)
+  | Ovmul (ve,ws) -> Format.sprintf "*%s"  (string_of_velem T.Unsigned ws ve)
+  | Ovlsr (ve,ws) -> Format.sprintf ">>%s" (string_of_velem T.Unsigned ws ve)
+  | Ovasr (ve,ws) -> Format.sprintf ">>%s" (string_of_velem T.Unsigned ws ve)
+  | Ovlsl (ve,ws) -> Format.sprintf "<<%s" (string_of_velem T.Signed   ws ve)
+
+
 let string_of_op1 = function
+  | E.Oint_of_word _ -> F.sprintf "(int)"
   | E.Osignext (szo, _) -> F.sprintf "(%ds)" (int_of_ws szo)
+  | E.Oword_of_int szo
   | E.Ozeroext (szo, _) -> F.sprintf "(%du)" (int_of_ws szo)
   | E.Olnot _ -> "!"
   | E.Onot    -> "~"
   | E.Oneg _ -> "-"
+
+let string_of_opN =
+  function
+  | E.Opack (sz, pe) ->
+    F.sprintf "Opack<%d, %d>"
+      (int_of_ws sz)
+      (int_of_pe pe)
 
 (* -------------------------------------------------------------------- *)
 let pp_ge pp_var =
@@ -82,11 +108,10 @@ let pp_ge pp_var =
   let rec pp_expr fmt = function
   | Pconst i    -> B.pp_print fmt i
   | Pbool  b    -> F.fprintf fmt "%b" b
-  | Parr_init (ws, n) -> F.fprintf fmt "array_init(%a, %a)" pp_btype (U ws) B.pp_print n
-  | Pcast(ws,e) -> F.fprintf fmt "(%a)%a" pp_btype (U ws) pp_expr e
+  | Parr_init n -> F.fprintf fmt "array_init(%a)" B.pp_print n
   | Pvar v      -> pp_var_i fmt v
   | Pglobal (_, g) -> F.fprintf fmt "%s" g
-  | Pget(x,e)   -> F.fprintf fmt "%a[%a]" pp_var_i x pp_expr e
+  | Pget(ws,x,e)   -> F.fprintf fmt "%a[%a %a]"  pp_btype (U ws) pp_var_i x pp_expr e
   | Pload(ws,x,e) ->
     F.fprintf fmt "@[(load %a@ %a@ %a)@]"
       pp_btype (U ws) pp_var_i x pp_expr e
@@ -95,6 +120,8 @@ let pp_ge pp_var =
   | Papp2(op,e1,e2) ->
     F.fprintf fmt "@[(%a %s@ %a)@]"
       pp_expr e1 (string_of_op2 op) pp_expr e2
+  | PappN (op, es) ->
+    F.fprintf fmt "@[(%s [%a])@]" (string_of_opN op) (pp_list ",@ " pp_expr) es
   | Pif(e,e1,e2) ->
     F.fprintf fmt "@[(%a ?@ %a :@ %a)@]"
       pp_expr e pp_expr e1  pp_expr e2
@@ -108,8 +135,8 @@ let pp_glv pp_var fmt = function
   | Lmem (ws, x, e) ->
     F.fprintf fmt "@[store %a@ %a@ %a@]"
      pp_btype (U ws) (pp_gvar_i pp_var) x (pp_ge pp_var) e
-  | Laset(x,e) ->
-    F.fprintf fmt "%a[%a]" (pp_gvar_i pp_var) x (pp_ge pp_var) e
+  | Laset(ws, x,e) ->
+    F.fprintf fmt "%a[%a %a]" pp_btype (U ws) (pp_gvar_i pp_var) x (pp_ge pp_var) e
 
 (* -------------------------------------------------------------------- *)
 let pp_ges pp_var fmt es =
@@ -123,28 +150,11 @@ let pp_glvs pp_var fmt lvs =
   | _   -> F.fprintf fmt "(@[%a@])" (pp_list ",@ " (pp_glv pp_var)) lvs
 
 (* -------------------------------------------------------------------- *)
-let string_of_velem =
-  function
-  | Type.U128 ->
-    (function
-    | Type.VE8 -> "16u8"
-    | Type.VE16 -> "8u16"
-    | Type.VE32 -> "4u32"
-    | Type.VE64 -> "2u64")
-  | Type.U256 ->
-    (function
-    | Type.VE8 -> "32u8"
-    | Type.VE16 -> "16u16"
-    | Type.VE32 -> "8u32"
-    | Type.VE64 -> "4u64")
-  | _ -> assert false
-
-(* -------------------------------------------------------------------- *)
 let pp_opn =
   let open Expr in
   let f w s = F.sprintf "%s_%d" s (int_of_ws w) in
-  let f2 w w' s = F.sprintf "%s_%d" s (int_of_ws w) in (* TODO: concrete syntax for these intrinsics *)
-  let v ve sz s = F.sprintf "%s_%s" s (string_of_velem sz ve) in
+  let f2 w _w' s = F.sprintf "%s_%d" s (int_of_ws w) in (* TODO: concrete syntax for these intrinsics *)
+  let v ve sz s = F.sprintf "%s_%s" s (string_of_velem T.Unsigned sz ve) in
   function
   | Omulu w -> f w "#mulu"
   | Oaddcarry w -> f w "#addc"
@@ -175,6 +185,7 @@ let pp_opn =
   | Ox86_TEST w -> f w "#x86_TEST"
   | Ox86_CMP w -> f w "#x86_CMP"
   | Ox86_AND w -> f w "#x86_AND"
+  | Ox86_ANDN w -> f w "#x86_ANDN"
   | Ox86_OR w -> f w "#x86_OR"
   | Ox86_XOR w -> f w "#x86_XOR"
   | Ox86_NOT w -> f w "#x86_NOT"
@@ -193,11 +204,14 @@ let pp_opn =
   | Ox86_VPOR w -> f w "#x86_VPOR"
   | Ox86_VPXOR w -> f w "#x86_VPXOR"
   | Ox86_VPADD (ve, sz) -> v ve sz "#x86_VPADD"
+  | Ox86_VPSUB (ve, sz) -> v ve sz "#x86_VPSUB"
+  | Ox86_VPMULL (ve, sz) -> v ve sz "#x86_VPMULL"
   | Ox86_VPMULU w -> f w "#x86_VPMULU"
   | Ox86_VPEXTR w -> f w "#x86_VPEXTR"
   | Ox86_VPINSR ve -> v ve U128 "#x86_VPINSR"
   | Ox86_VPSLL (ve, sz) -> v ve sz "#x86_VPSLL"
   | Ox86_VPSRL (ve, sz) -> v ve sz "#x86_VPSRL"
+  | Ox86_VPSRA (ve, sz) -> v ve sz "#x86_VPSRA"
   | Ox86_VPSLLV (ve, sz) -> v ve sz "#x86_VPSLLV"
   | Ox86_VPSRLV (ve, sz) -> v ve sz "#x86_VPSRLV"
   | Ox86_VPSLLDQ w -> f w "#x86_VPSLLDQ"

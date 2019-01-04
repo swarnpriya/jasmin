@@ -28,6 +28,7 @@ From CoqWord Require Import ssrZ.
 Require Import expr ZArith psem.
 Import all_ssreflect all_algebra.
 Import Utf8.
+Import oseq.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -40,13 +41,23 @@ Local Open Scope Z_scope.
 (* ** Smart constructors                                                      *)
 (* -------------------------------------------------------------------------- *)
 
+Definition sword_of_int sz (e: pexpr) :=
+  Papp1 (Oword_of_int sz) e.
+
+Definition sint_of_word sz (e: pexpr) :=
+  if is_wconst sz e is Some w
+  then Pconst (wunsigned w)
+  else Papp1 (Oint_of_word sz) e.
+
 Definition ssign_extend sz sz' (e: pexpr) :=
-  (* TODO *)
-  Papp1 (Osignext sz sz') e.
+  if is_wconst sz' e is Some w
+  then Papp1 (Oword_of_int sz) (Pconst (wunsigned (sign_extend sz w)))
+  else Papp1 (Osignext sz sz') e.
 
 Definition szero_extend sz sz' (e: pexpr) :=
-  (* TODO *)
-  Papp1 (Ozeroext sz sz') e.
+  if is_wconst sz' e is Some w
+  then Papp1 (Oword_of_int sz) (Pconst (wunsigned (zero_extend sz w)))
+  else Papp1 (Ozeroext sz sz') e.
 
 Definition snot_bool (e:pexpr) := 
   match e with
@@ -76,6 +87,8 @@ Definition sneg_w (sz: wsize) (e:pexpr) :=
 
 Definition s_op1 o e :=
   match o with
+  | Oword_of_int sz => sword_of_int sz e
+  | Oint_of_word sz => sint_of_word sz e
   | Osignext sz sz' => ssign_extend sz sz' e
   | Ozeroext sz sz' => szero_extend sz sz' e
   | Onot  => snot_bool e
@@ -202,30 +215,41 @@ Definition sneq ty e1 e2 :=
   | None      => Papp2 (Oneq ty) e1 e2
   end.
 
+Definition is_cmp_const (ty: cmp_kind) (e: pexpr) : option Z :=
+  match ty with
+  | Cmp_int => is_const e
+  | Cmp_w sg sz =>
+    is_wconst sz e >>= λ w,
+    Some match sg with
+    | Signed => wsigned w
+    | Unsigned => wunsigned w
+    end
+  end%O.
+
 Definition slt ty e1 e2 := 
   if eq_expr e1 e2 then Pbool false 
-  else match is_const e1, is_const e2 with
+  else match is_cmp_const ty e1, is_cmp_const ty e2 with
   | Some n1, Some n2 => Pbool (n1 <? n2)%Z
   | _      , _       => Papp2 (Olt ty) e1 e2 
   end.
 
 Definition sle ty e1 e2 := 
   if eq_expr e1 e2 then Pbool true 
-  else match is_const e1, is_const e2 with
+  else match is_cmp_const ty e1, is_cmp_const ty e2 with
   | Some n1, Some n2 => Pbool (n1 <=? n2)%Z
   | _      , _       => Papp2 (Ole ty) e1 e2 
   end.
 
 Definition sgt ty e1 e2 := 
   if eq_expr e1 e2 then Pbool false 
-  else match is_const e1, is_const e2 with
+  else match is_cmp_const ty e1, is_cmp_const ty e2 with
   | Some n1, Some n2 => Pbool (n1 >? n2)%Z
   | _      , _       => Papp2 (Ogt ty) e1 e2 
   end.
 
-Definition sge ty e1 e2 := 
+Definition sge ty e1 e2 :=
   if eq_expr e1 e2 then Pbool true 
-  else match is_const e1, is_const e2 with
+  else match is_cmp_const ty e1, is_cmp_const ty e2 with
   | Some n1, Some n2 => Pbool (n1 >=? n2)%Z
   | _      , _       => Papp2 (Oge ty) e1 e2 
   end.
@@ -282,6 +306,25 @@ Definition sshl sz e1 e2 :=
 Definition ssar sz e1 e2 :=
   sbitw8 Oasr (@sem_sar) sz e1 e2.
 
+Definition svadd ve sz e1 e2 := 
+   sbitw (Ovadd ve) (@sem_vadd ve) sz e1 e2.
+
+Definition svsub ve sz e1 e2 := 
+   sbitw (Ovsub ve) (@sem_vsub ve) sz e1 e2.
+
+Definition svmul ve sz e1 e2 := 
+  sbitw (Ovmul ve) (@sem_vmul ve) sz e1 e2.
+
+
+Definition svshr ve sz e1 e2 :=
+  sbitw8 (Ovlsr ve) (@sem_vshr ve) sz e1 e2.
+
+Definition svshl ve sz e1 e2 :=
+   sbitw8 (Ovlsl ve) (@sem_vshl ve) sz e1 e2.
+
+Definition svsar ve sz e1 e2 :=
+  sbitw8 (Ovasr ve) (@sem_vsar ve) sz e1 e2.
+
 Definition s_op2 o e1 e2 := 
   match o with 
   | Oand    => sand e1 e2 
@@ -303,6 +346,21 @@ Definition s_op2 o e1 e2 :=
   | Olsr sz => sshr sz e1 e2
   | Olsl sz => sshl sz e1 e2
   | Oasr sz => ssar sz e1 e2
+  | Ovadd ve sz => svadd ve sz e1 e2
+  | Ovsub ve sz => svsub ve sz e1 e2
+  | Ovmul ve sz => svmul ve sz e1 e2
+  | Ovlsr ve sz => svshr ve sz e1 e2
+  | Ovlsl ve sz => svshl ve sz e1 e2
+  | Ovasr ve sz => svsar ve sz e1 e2
+  end.
+
+Definition force_int e :=
+  if e is Pconst z then ok (Vint z) else type_error.
+
+Definition s_opN op es :=
+  match mapM force_int es >>= sem_opN op with
+  | Ok (Vword sz w) => Papp1 (Oword_of_int sz) (Pconst (wunsigned w))
+  | _ => PappN op es
   end.
 
 Definition s_if e e1 e2 := 
@@ -353,15 +411,15 @@ Fixpoint const_prop_e (m:cpm) e :=
   match e with
   | Pconst _
   | Pbool  _
-  | Parr_init _ _
+  | Parr_init _
     => e
-  | Pcast sz e    => Pcast sz (const_prop_e m e)
   | Pvar  x       => if Mvar.get m x is Some n then const n else e
   | Pglobal _     => e
-  | Pget  x e     => Pget x (const_prop_e m e)
+  | Pget  sz x e  => Pget  sz x (const_prop_e m e)
   | Pload sz x e  => Pload sz x (const_prop_e m e)
   | Papp1 o e     => s_op1 o (const_prop_e m e)
   | Papp2 o e1 e2 => s_op2 o (const_prop_e m e1)  (const_prop_e m e2)
+  | PappN op es => s_opN op (map (const_prop_e m) es)
   | Pif e e1 e2   => s_if (const_prop_e m e) (const_prop_e m e1) (const_prop_e m e2)
   end.
 
@@ -381,10 +439,10 @@ Definition remove_cpm (m:cpm) (s:Sv.t): cpm :=
 
 Definition const_prop_rv (m:cpm) (rv:lval) : cpm * lval := 
   match rv with 
-  | Lnone _ _   => (m, rv)
-  | Lvar  x     => (Mvar.remove m x, rv)
-  | Lmem sz x e => (m, Lmem sz x (const_prop_e m e))
-  | Laset x e   => (Mvar.remove m x, Laset x (const_prop_e m e))
+  | Lnone _ _    => (m, rv)
+  | Lvar  x      => (Mvar.remove m x, rv)
+  | Lmem  sz x e => (m, Lmem sz x (const_prop_e m e))
+  | Laset sz x e => (Mvar.remove m x, Laset sz x (const_prop_e m e))
   end.
 
 Fixpoint const_prop_rvs (m:cpm) (rvs:lvals) : cpm * lvals := 
@@ -404,7 +462,7 @@ Definition add_cpm (m:cpm) (rv:lval) tag ty e :=
     if tag is AT_inline then 
       match e with
       | Pconst z =>  Mvar.set m x (Cint z)
-      | Pcast sz' (Pconst z) =>
+      | Papp1 (Oword_of_int sz') (Pconst z) =>
         let szty := wsize_of_stype ty in
         let w := zero_extend szty (wrepr sz' z) in
         let w :=

@@ -48,14 +48,14 @@ type 'expr gty =
 type 'ty gexpr =
   | Pconst of B.zint
   | Pbool  of bool
-  | Parr_init of wsize * B.zint
-  | Pcast  of wsize * 'ty gexpr
+  | Parr_init of B.zint
   | Pvar   of 'ty gvar_i
   | Pglobal of wsize * Name.t
-  | Pget   of 'ty gvar_i * 'ty gexpr
+  | Pget   of wsize * 'ty gvar_i * 'ty gexpr
   | Pload  of wsize * 'ty gvar_i * 'ty gexpr
   | Papp1  of E.sop1 * 'ty gexpr
   | Papp2  of E.sop2 * 'ty gexpr * 'ty gexpr
+  | PappN of E.opN * 'ty gexpr list
   | Pif    of 'ty gexpr * 'ty gexpr * 'ty gexpr
 
 type 'ty gexprs = 'ty gexpr list
@@ -66,6 +66,7 @@ let u32  = Bty (U U32)
 let u64  = Bty (U U64)
 let u128 = Bty (U U128)
 let u256 = Bty (U U256)
+let tu ws = Bty (U ws)
 let tbool = Bty Bool
 let tint  = Bty Int
 
@@ -85,7 +86,7 @@ type 'ty glval =
  | Lnone of L.t * 'ty
  | Lvar  of 'ty gvar_i
  | Lmem  of wsize * 'ty gvar_i * 'ty gexpr
- | Laset of 'ty gvar_i * 'ty gexpr
+ | Laset of wsize * 'ty gvar_i * 'ty gexpr
 
 type 'ty glvals = 'ty glval list
 
@@ -199,10 +200,9 @@ and pexpr_equal e1 e2 =
  match e1, e2 with
  | Pconst n1, Pconst n2 -> B.equal n1 n2
  | Pbool b1, Pbool b2 -> b1 = b2
- | Pcast (b1, e1), Pcast(b2, e2) -> b1 = b2 && pexpr_equal e1 e2
  | Pvar v1, Pvar v2 -> PV.equal (L.unloc v1) (L.unloc v2)
  | Pglobal (s1, n1), Pglobal (s2, n2) -> s1 = s2 && Name.equal n1 n2
- | Pget(v1,e1), Pget(v2,e2) -> PV.equal (L.unloc v1) (L.unloc v2) && pexpr_equal e1 e2
+ | Pget(b1,v1,e1), Pget(b2,v2,e2) -> b1 = b2 && PV.equal (L.unloc v1) (L.unloc v2) && pexpr_equal e1 e2
  | Pload(b1,v1,e1), Pload(b2,v2,e2) -> b1 = b2 && PV.equal (L.unloc v1) (L.unloc v2) && pexpr_equal e1 e2
  | Papp1(o1,e1), Papp1(o2,e2) -> o1 = o2 && pexpr_equal e1 e2
  | Papp2(o1,e11,e12), Papp2(o2,e21,e22) -> o1 = o2 &&  pexpr_equal e11 e21 && pexpr_equal e12 e22
@@ -262,21 +262,21 @@ module Hf = Hash.Make(F)
 
 let rec rvars_e s = function
   | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ -> s
-  | Pcast(_,e)     -> rvars_e s e
   | Pvar x         -> Sv.add (L.unloc x) s
-  | Pget(x,e)      -> rvars_e (Sv.add (L.unloc x) s) e
+  | Pget(_,x,e)    -> rvars_e (Sv.add (L.unloc x) s) e
   | Pload(_,x,e)   -> rvars_e (Sv.add (L.unloc x) s) e
   | Papp1(_, e)    -> rvars_e s e
   | Papp2(_,e1,e2) -> rvars_e (rvars_e s e1) e2
+  | PappN (_, es) -> rvars_es s es
   | Pif(e,e1,e2)   -> rvars_e (rvars_e (rvars_e s e) e1) e2
 
-let rvars_es s es = List.fold_left rvars_e s es
+and rvars_es s es = List.fold_left rvars_e s es
 
 let rec rvars_lv s = function
- | Lnone _      -> s
- | Lvar x       -> Sv.add (L.unloc x) s
+ | Lnone _       -> s
+ | Lvar x        -> Sv.add (L.unloc x) s
  | Lmem (_,x,e)
- | Laset (x,e)  -> rvars_e (Sv.add (L.unloc x) s) e
+ | Laset (_,x,e) -> rvars_e (Sv.add (L.unloc x) s) e
 
 let rvars_lvs s lvs = List.fold_left rvars_lv s lvs
 
@@ -330,6 +330,19 @@ let size_of_ws = function
   | U128 -> 16
   | U256 -> 32
 
+let int_of_pe =
+  function
+  | PE1   -> 1
+  | PE2   -> 2
+  | PE4   -> 4
+  | PE8   -> 8
+  | PE16  -> 16
+  | PE32  -> 32
+  | PE64  -> 64
+  | PE128 -> 128
+
+let int_of_velem ve = int_of_ws (wsize_of_velem ve)
+
 let is_ty_arr = function
   | Arr _ -> true
   | _     -> false
@@ -342,6 +355,7 @@ let ws_of_ty = function
   | Bty (U ws) -> ws
   | _ -> assert false
 
+let arr_size ws i = size_of_ws ws * i
 (* -------------------------------------------------------------------- *)
 (* Functions over variables                                             *)
 
@@ -366,7 +380,7 @@ let ( ** ) e1 e2 =
 let cnst i = Pconst i
 let icnst i = cnst (B.of_int i)
 
-let cast64 e = Pcast (U64, e)
+let cast64 e = Papp1 (Oword_of_int U64, e)
 
 (* -------------------------------------------------------------------- *)
 (* Functions over lvalue                                                *)
@@ -375,7 +389,7 @@ let expr_of_lval = function
   | Lnone _         -> None
   | Lvar x          -> Some (Pvar x)
   | Lmem (ws, x, e) -> Some (Pload(ws,x,e))
-  | Laset (x, e)    -> Some (Pget(x,e))
+  | Laset(ws, x, e) -> Some (Pget(ws,x,e))
 
 (* -------------------------------------------------------------------- *)
 (* Functions over instruction                                           *)
@@ -388,3 +402,6 @@ let destruct_move i =
 (* -------------------------------------------------------------------- *)
 let clamp (sz : Type.wsize) (z : Bigint.zint) =
   Bigint.erem z (Bigint.lshift Bigint.one (int_of_ws sz))
+
+let clamp_pe (sz : Type.pelem) (z : Bigint.zint) =
+  Bigint.erem z (Bigint.lshift Bigint.one (int_of_pe sz))

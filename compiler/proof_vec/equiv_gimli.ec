@@ -1,11 +1,17 @@
 require import AllCore Jasmin_model Gimli_ref Gimli_ref1 Gimliv1 Gimliv CoreMap IntDiv List.
 
+(* --------------------------------------------------------------------------- *)
+
+hint simplify (x86_ROL_32_E, W32.rol_xor_simplify).
+
+(* --------------------------------------------------------------------------- *)
+(* FIXME: improve the proof *)
 equiv rotate_ref_ref1 : Gimli_ref.M.rotate ~ Gimli_ref1.M.rotate : ={x,bits} /\ 1 <= bits{1} < 32 ==> ={res}.
 proof.
   proc;auto => &m1 &m2 /> ??.
-  rewrite x86_ROL_32_E /= rol_xor.
-  + by rewrite modz_small /#.
-  rewrite /(`<<`) /(`>>`) !of_uintK /= !modz_small /#.
+  rewrite rol_xor.
+  + rewrite modz_small /#.
+  rewrite /(`<<`) /(`>>`) /= !modz_small /#.
 qed. 
 
 equiv Gimli_ref_ref1_body : Gimli_ref.M.gimli_body ~ Gimli_ref1.M.gimli_body : ={state} ==> ={res}.
@@ -37,7 +43,9 @@ proof.
   proc; inline * => /=.
   while (#pre /\ ={round}); last by auto.
   seq 2 47 : (#pre).
-  + by unroll for {1} 2; auto. 
+  + unroll for {1} 2; wp;skip => &1 &2 [#] hx hy hz hr hlt ?.
+    rewrite -$hx -$hy -$hz -$hr.
+    by cbv x86_VPSLL_4u32 x86_VPSRL_4u32;rewrite hlt.
   seq 1 1 : (#[/:-2]pre); 1: by auto.
   seq 1 1 : (#pre); 1: by auto.
   auto.
@@ -61,33 +69,13 @@ proof.
   by rewrite !store4u32.
 qed.
 
-lemma bits8_div_of_int x i : 0 <= i =>
-  (W128.of_int x \bits8 i) = W8.of_int (to_uint (W128.of_int x) %/ (2^(8*i))).
-proof. by move=> hi;rewrite bits8_div. qed.
-
-hint simplify bits8_div_of_int.
-
-lemma false_eq_not_b b: (false = ! b) = b.
-proof. by case b. qed.
-
-lemma b_eq_true b : (b = true) = b.
-proof. by case b. qed.
-
-hint simplify (false_eq_not_b, b_eq_true). 
-
-lemma rotate24E w :
-    (x86_VPSHUFB_128  w (W128.of_int 16028905388486802350658220295983399425))
-  = (x86_VPSLL_4u32 w (W8.of_int 24) `^` x86_VPSRL_4u32 w (W8.of_int 8)).
-proof.
-  by rewrite -W128.ext_eq_all; cbv delta.
-qed.  
-hint simplify rotate24E.
-
 equiv vec1_vec : Gimliv1.M.gimli1 ~ Gimliv.M.gimli : 
    ={state, Glob.mem} ==> ={Glob.mem}.
 proof.
   proc. sim (_:true).
-  proc => /=; inline *;wp;skip => />.
+  proc => /=; inline *;wp;skip => /> &2.
+  rewrite -(W4u32.unpack32K r{2}).
+  by cbv W4u32.unpack32 x86_VPSLL_4u32 x86_VPSRL_4u32 W32.(`>>`) W32.(`<<`) (%%).
 qed.
 
 equiv ref_vec : Gimli_ref.M.gimli ~ Gimliv.M.gimli : 

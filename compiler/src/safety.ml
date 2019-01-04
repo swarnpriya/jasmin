@@ -1,4 +1,3 @@
-
 open Utils
 open Prog
 open Apron
@@ -11,7 +10,10 @@ exception Aint_error of string
 
 let debug a = if !Glob_options.debug then a () else ()
 
-let () = debug (fun () -> Printexc.record_backtrace true)
+let () = debug (fun () -> Printexc.record_backtrace true);;
+
+(* REM *)
+Printexc.record_backtrace true
 
 (***********************)
 (* Analysis Parameters *)
@@ -33,6 +35,8 @@ type abs_call_strategy =
 
 let abs_call_strategy = CallDirect
 
+(* Widening with thresholds *)
+let use_threshold = false
 
 (*************************)
 (* Unique Variable Names *)
@@ -81,7 +85,7 @@ end = struct
     | Lnone _ -> lv
     | Lvar v -> Lvar (mk_v_loc fn v)
     | Lmem (ws,ty,e) -> Lmem (ws, mk_v_loc fn ty, mk_expr fn e)
-    | Laset (v,e) -> Laset (mk_v_loc fn v, mk_expr fn e)
+    | Laset (ws,v,e) -> Laset (ws, mk_v_loc fn v, mk_expr fn e)
 
   and mk_range fn (dir, e1, e2) = (dir, mk_expr fn e1, mk_expr fn e2)
 
@@ -108,12 +112,12 @@ end = struct
   and mk_expr fn expr = match expr with
     | Pconst _ | Pbool _ | Parr_init _ -> expr
     | Pglobal (ws,t) -> Pglobal (ws, mk_gv t)
-    | Pcast (ws, e) -> Pcast (ws, mk_expr fn e)
     | Pvar v -> Pvar (mk_v_loc fn v)
-    | Pget (v, e) -> Pget (mk_v_loc fn v, mk_expr fn e)
+    | Pget (ws, v, e) -> Pget (ws, mk_v_loc fn v, mk_expr fn e)
     | Pload (ws, v, e) -> Pload (ws, mk_v_loc fn v, mk_expr fn e)
     | Papp1 (op, e) -> Papp1 (op, mk_expr fn e)
     | Papp2 (op, e1, e2) -> Papp2 (op, mk_expr fn e1, mk_expr fn e2)
+    | PappN (op,es) -> PappN (op, List.map (mk_expr fn) es)
     | Pif (e, el, er)  -> Pif (mk_expr fn e, mk_expr fn el, mk_expr fn er)
 
   and mk_exprs fn exprs = List.map (mk_expr fn) exprs
@@ -183,7 +187,7 @@ type mem_loc = MemLoc of ty gvar
 type atype =
   | Avar of ty gvar             (* Variable *)
   | Aarray of ty gvar           (* Array *)
-  | AarrayEl of ty gvar * int   (* Array element *)
+  | AarrayEl of ty gvar * wsize * int   (* Array element *)
 
 
 (* - Temp : temporary variable
@@ -211,7 +215,8 @@ let string_of_mloc = function MemLoc s -> s.v_name
 let string_of_atype = function
   | Avar s -> "v_" ^ s.v_name
   | Aarray t -> "a_" ^ t.v_name
-  | AarrayEl (t,int) -> Format.asprintf "ael_%s_%d" t.v_name int
+  | AarrayEl (t,ws,int) ->
+    Format.asprintf "ael_%s_%d_%d" t.v_name (int_of_ws ws) int
 
 let string_of_mvar = function
   | Temp (s, i, _) -> "tmp_" ^ s ^ "_" ^ string_of_int i
@@ -221,7 +226,6 @@ let string_of_mvar = function
   | Mvalue at -> string_of_atype at
   | MvarOffset s -> "o_" ^ s.v_name
   | MmemRange loc -> "rmem_" ^ string_of_mloc loc
-
 
 let variables_ignore v =
   let vs = Var.to_string v in
@@ -240,7 +244,8 @@ let arr_size v = match v.v_ty with
 let ty_atype = function
   | Avar s -> s.v_ty
   | Aarray t -> t.v_ty
-  | AarrayEl (t,_) -> let ws = arr_size t in Bty (U ws)
+  (* | AarrayEl (t,_,_) -> let ws = arr_size t in Bty (U ws) *)
+  | AarrayEl (_,ws,_) -> Bty (U ws)
 
 let ty_mvar = function
   | Temp (_,_,ty) -> ty
@@ -259,11 +264,34 @@ let temp_cpy s i v = match v with
   | Temp _ | WTemp _
   | MinValue _ -> assert false
 
+
+let u8_blast_at at = match at with
+  | Aarray v ->
+    let iws = (int_of_ws (arr_size v)) / 8 in
+    let r = arr_range v in
+    let vi i = Mvalue (AarrayEl (v,U8,i)) in
+    List.init (r * iws) vi
+  | AarrayEl (v,ws,j) ->
+    let iws = (int_of_ws ws) / 8 in
+    let vi i = Mvalue (AarrayEl (v,U8,i + iws * j )) in
+    List.init iws vi
+  | _ -> [Mvalue at]
+
+let u8_blast_var v = match v with
+  | Mvalue at -> u8_blast_at at
+  | _ -> [v]
+
+let u8_blast_ats ats =
+  List.flatten (List.map u8_blast_at ats)
+
+let u8_blast_vars vs =
+  List.flatten (List.map u8_blast_var vs)
+
 let rec expand_arr_vars = function
   | [] -> []
   | Mvalue (Aarray v) :: t -> begin match v.v_ty with
       | Bty _ -> assert false
-      | Arr (_, n) -> List.init n (fun i -> Mvalue (AarrayEl (v,i)))
+      | Arr (ws, n) -> List.init n (fun i -> Mvalue (AarrayEl (v,ws,i)))
                       @ expand_arr_vars t end
   | v :: t -> v :: expand_arr_vars t
 
@@ -276,14 +304,30 @@ let rec expand_arr_tys = function
 let rec expand_arr_exprs = function
   | [] -> []
   | Pvar v :: t -> begin match (L.unloc v).v_ty with
-      | Arr (_, n) ->
-        List.init n (fun i -> Pget (v, Pconst (B.of_int i)))
+      | Arr (ws, n) ->
+        List.init n (fun i -> Pget (ws, v, Pconst (B.of_int i)))
         @ expand_arr_exprs t
       | _ -> Pvar v :: expand_arr_exprs t end
   | h :: t -> h :: expand_arr_exprs t
 
 
 type apr_env = Apron.Environment.t
+
+
+(*************)
+(* Mpq Utils *)
+(*************)
+
+(* Return 2^n *)
+let mpq_pow n =
+  let c_div = Mpq.of_int 1 in
+  let mpq2 = Mpq.of_int 1 in
+  Mpq.mul_2exp c_div mpq2 n;
+  c_div
+
+(* Return 2^n - y *)
+let mpq_pow_minus n y =
+  Mpqf.sub (mpq_pow n |> Mpqf.of_mpq) (Mpqf.of_int y)
 
 
 (******************)
@@ -300,8 +344,8 @@ end
 module Mm = Map.Make(Mmv)
 
 module Mtexpr : sig
-  type unop = Texpr0.unop
-  type binop = Texpr0.binop
+  type unop = Apron.Texpr0.unop
+  type binop = Apron.Texpr0.binop
   type typ = Apron.Texpr0.typ
   type round = Apron.Texpr0.round
 
@@ -311,8 +355,10 @@ module Mtexpr : sig
     | Munop of unop * mexpr * typ * round
     | Mbinop of binop * mexpr * mexpr * typ * round
 
-  type t = { mexpr : mexpr;
-             env : apr_env }
+  (* Careful, the environment should have already blasted array elements in
+     U8 array elements. *)
+  type t =  { mexpr : mexpr;
+              env : apr_env }
 
   val to_aexpr : t -> Texpr1.t
 
@@ -323,7 +369,7 @@ module Mtexpr : sig
 
   val get_var_mexpr : mexpr -> mvar list
 
-  val get_env : t -> Environment.t
+  (* val get_env : t -> Environment.t *)
 
   val extend_environment : t -> apr_env -> t
 
@@ -346,9 +392,23 @@ end = struct
   type t = { mexpr : mexpr;
              env : apr_env }
 
+  (* Return sum_{j = 0}^{len - 1} 2^(len - 1 - j) * (U8)v[offset + j] *)
+  let rec build_term_array v offset len =
+    let tv = Texpr1.Var (avar_of_mvar (Mvalue (AarrayEl (v,U8,offset)))) in
+    let ptwo = Texpr1.Cst (Coeff.s_of_mpq (mpq_pow (len - 1))) in
+    let t = Texpr1.Binop (Texpr1.Mul, ptwo, tv, Texpr1.Int, round_typ) in
+    if len = 1 then tv
+    else Texpr1.Binop (Texpr1.Add,
+                       t,
+                       build_term_array v (offset + 1) (len - 1),
+                       Texpr1.Int, round_typ)
+
   let rec e_aux = function
     | Mcst c -> Texpr1.Cst c
-    | Mvar mvar -> Texpr1.Var (avar_of_mvar mvar)
+    | Mvar mvar -> begin match mvar with
+        | Mvalue (AarrayEl (v,ws,i)) ->
+          build_term_array v (((int_of_ws ws) / 8) * i) ((int_of_ws ws) / 8)
+        | _ -> Texpr1.Var (avar_of_mvar mvar) end
     | Munop (op1, a, t, r) -> Texpr1.Unop (op1, e_aux a, t, r)
     | Mbinop (op2, a, b, t, r) -> Texpr1.Binop (op2, e_aux a, e_aux b, t, r)
 
@@ -395,9 +455,9 @@ end = struct
     | Mvar mvar -> mvar :: acc
     | Munop (_, a, _, _) -> aux acc a
     | Mbinop (_, a, b, _, _) -> aux (aux acc a) b in
-    aux [] e |> List.sort_uniq Pervasives.compare
-
-  let get_env a = a.env
+    aux [] e
+    |> u8_blast_vars
+    |> List.sort_uniq Pervasives.compare
 
   let extend_environment t apr_env =
     let cmp = Environment.compare t.env apr_env in
@@ -409,6 +469,14 @@ end = struct
 
   let print ppf t = to_aexpr t |> Texpr1.print ppf
 end
+
+let cst_of_mpqf apr_env n =
+  Mtexpr.cst apr_env (Coeff.s_of_mpqf n)
+
+(* Return the texpr 2^n - y *)
+let cst_pow_minus apr_env n y =
+  mpq_pow_minus n y
+  |> cst_of_mpqf apr_env
 
 
 (******************)
@@ -425,7 +493,7 @@ module Mtcons : sig
 
   val get_expr : t -> Mtexpr.t
   val get_typ : t -> typ
-  val get_env : t -> apr_env
+  (* val get_env : t -> apr_env *)
 
   val print : Format.formatter -> t -> unit
 end = struct
@@ -440,34 +508,10 @@ end = struct
 
   let get_expr t = t.expr
   let get_typ t = t.typ
-  let get_env t = Mtexpr.get_env t.expr
+  (* let get_env t = Mtexpr.get_env t.expr *)
 
   let print ppf t = to_atcons t |> Tcons1.print ppf
 end
-
-
-(*************)
-(* Mpq Utils *)
-(*************)
-
-(* Return 2^n *)
-let mpq_pow n =
-  let cast_div = Mpq.of_int 1 in
-  let mpq2 = Mpq.of_int 1 in
-  Mpq.mul_2exp cast_div mpq2 n;
-  cast_div
-
-(* Return 2^n - y *)
-let mpq_pow_minus n y =
-  Mpqf.sub (mpq_pow n |> Mpqf.of_mpq) (Mpqf.of_int y)
-
-let cst_of_mpqf apr_env n =
-  Mtexpr.cst apr_env (Coeff.s_of_mpqf n)
-
-(* Return the texpr 2^n - y *)
-let cst_pow_minus apr_env n y =
-  let cast_div = mpq_pow_minus n y in
-  cst_of_mpqf apr_env cast_div
 
 
 (*******************)
@@ -518,7 +562,11 @@ module type AbsNumType = sig
   val is_bottom : t -> bool
   val bottom : t -> t
 
+  (* expand t v v_list : v and v_list cannot contain Mvalue (AarrayEl)
+     elements *)
   val expand : t -> mvar -> mvar list -> t
+  (* fold t v_list : v_list cannot contain Mvalue (AarrayEl)
+     elements *)
   val fold : t -> mvar list -> t
 
   val bound_variable : t -> mvar -> Interval.t
@@ -547,7 +595,7 @@ module AbsNumImpl (Manager : AprManager) : AbsNumType = struct
   let man = Manager.man
 
   let make l =
-    let vars = List.map avar_of_mvar l |> Array.of_list
+    let vars = u8_blast_vars l |> List.map avar_of_mvar |> Array.of_list
     and empty_var_array = Array.make 0 (Var.of_string "") in
     let env = Environment.make vars empty_var_array in
     Abstract1.top man env
@@ -615,22 +663,18 @@ module AbsNumImpl (Manager : AprManager) : AbsNumType = struct
     let () = List.iteri (fun i c -> Lincons1.array_set arr i c) cons in
     arr
 
-  (* let widening a a' =
-   *   let a,a' = lce a a' in
-   *   let thrs = thresholds (Abstract1.env a) in
-   *   (\* Be careful to join a and a' before calling widening. Some abstract domain,
-   *      e.g. Polka, seem to assume that a is included in a'
-   *      (and may segfault otherwise!). *\)
-   *   Abstract1.widening_threshold man a a' thrs *)
-
   let widening a a' =
     let a,a' = lce a a' in
     (* Be careful to join a and a' before calling widening. Some abstract domain,
        e.g. Polka, seem to assume that a is included in a'
        (and may segfault otherwise!). *)
-    Abstract1.widening man a a'
+    if use_threshold then
+      let thrs = thresholds (Abstract1.env a) in
+      Abstract1.widening_threshold man a a' thrs
+    else Abstract1.widening man a a'
 
   let forget_list a l =
+    let l = u8_blast_vars l in
     let env = Abstract1.env a in
     let al = List.filter
         (Environment.mem_var env) (List.map avar_of_mvar l) in
@@ -644,15 +688,15 @@ module AbsNumImpl (Manager : AprManager) : AbsNumType = struct
 
   let bottom a = Abstract1.bottom man (Abstract1.env a)
 
+  (* v and v_list should not contain Mvalue (AarrayEl) elements *)
   let expand a v v_list =
     let v_array = Array.of_list (List.map avar_of_mvar v_list) in
     Abstract1.expand man a (avar_of_mvar v) v_array
 
+  (* v and v_list should not contain Mvalue (AarrayEl) elements *)
   let fold a v_list =
     let v_array = Array.of_list (List.map avar_of_mvar v_list) in
     Abstract1.fold man a v_array
-
-  let bound_variable t v = Abstract1.bound_variable man t (avar_of_mvar v)
 
   let add_weak_cp a map =
     Mm.fold (fun v i a ->
@@ -687,6 +731,13 @@ module AbsNumImpl (Manager : AprManager) : AbsNumType = struct
     (* We bound the expression *)
     Abstract1.bound_texpr man a e'
 
+
+  let bound_variable t v = match v with
+    | Mvalue (AarrayEl _) ->
+      let env = Abstract1.env t in
+      bound_texpr t (Mtexpr.var env v)
+    | _ -> Abstract1.bound_variable man t (avar_of_mvar v)
+
   let env_add_mvar env v =
     let add_single v env =
       let av = avar_of_mvar v in
@@ -700,10 +751,12 @@ module AbsNumImpl (Manager : AprManager) : AbsNumType = struct
     | Mvalue (Avar at) | MvarOffset at ->
       add_single (Mvalue (Avar at)) env
       |> add_single (MvarOffset at)
+    | Mvalue (AarrayEl _ ) ->
+      List.fold_left (fun x y -> add_single y x) env (u8_blast_var v)
     | _ -> add_single v env
 
   (* If force is true then we do a forced strong update on v. *)
-  let assign_expr ?force:(force=false) a v (e : Mtexpr.t) =
+  let assign_expr_aux force a v (e : Mtexpr.t) =
     (* We use a different variable for each occurrence of weak variables *)
     let map,mexpr = Mtexpr.weak_transf Mm.empty e.mexpr in
     let a = add_weak_cp a map in
@@ -733,6 +786,27 @@ module AbsNumImpl (Manager : AprManager) : AbsNumType = struct
     let a = rem_weak_cp a map in
     if v_weak then fold a [v; v_cp] else a
 
+  (* Return the j-th term of the expression e seen in base b = 2^8:
+     ((e - (e mod b^j)) / b^j) mod b *)
+  let get_block e j =
+    let bj = mpq_pow (8 * j) |> Mpqf.of_mpq |> cst_of_mpqf Mtexpr.(e.env)
+    and b = mpq_pow 8 |> Mpqf.of_mpq |> cst_of_mpqf Mtexpr.(e.env) in
+    (* e - (e mod b^j) *)
+    let e1 = Mtexpr.binop Texpr1.Sub e (Mtexpr.binop Texpr1.Mod e bj ) in
+    (* e1 / b^j) mod b *)
+    Mtexpr.binop Texpr1.Mod ( Mtexpr.binop Texpr1.Div e1 bj) b
+
+  let assign_expr ?force:(force=false) a v e = match v with
+    | Mvalue (AarrayEl (gv,ws,i)) ->
+      let offset = (int_of_ws ws) / 8 * i in
+      List.fold_left (fun a j ->
+          let p = offset + ((int_of_ws ws) / 8) - 1 - j in
+          let mvj = Mvalue (AarrayEl (gv, U8, p)) in
+          let mej = get_block e j in
+          assign_expr_aux force a mvj mej)
+        a (List.init ((int_of_ws ws) / 8) (fun j -> j))
+
+    | _ -> assign_expr_aux force a v e
 
   let print : ?full:bool -> Format.formatter -> t -> unit =
     fun ?full:(full=false) fmt a ->
@@ -743,10 +817,11 @@ module AbsNumImpl (Manager : AprManager) : AbsNumType = struct
       let vars = Array.to_list arr_vars in
 
       let rec pp_abs fmt l = match l with
-        | [] -> Format.fprintf fmt ""
+        | [] -> ()
         | v :: t ->
           if not (Abstract1.is_variable_unconstrained man a v)
-          && not (variables_ignore v) then
+          (* REM *)
+          (* && not (variables_ignore v) *) then
             let vi = Abstract1.bound_variable man a v in
             Format.fprintf fmt "@[%s: %a@]%a%a"
               (Var.to_string v)
@@ -779,7 +854,9 @@ module AbsNumImpl (Manager : AprManager) : AbsNumType = struct
   let unify a a' = Abstract1.unify man a a'
 
   let change_environment a mvars =
-    let env_vars = List.map avar_of_mvar mvars |> Array.of_list
+    let env_vars = u8_blast_vars mvars
+                   |> List.map avar_of_mvar
+                   |> Array.of_list
     and empty_var_array = Array.make 0 (Var.of_string "") in
     let new_env = Environment.make env_vars empty_var_array in
     Abstract1.change_environment man a new_env false
@@ -792,7 +869,6 @@ end
 (*******************)
 (* Domains Product *)
 (*******************)
-
 
 type v_dom = Nrd of int | Ppl of int
 
@@ -1254,7 +1330,6 @@ module Scmp = struct
   let compare = compare
 end
 
-module Ms = Map.Make(Scmp)
 
 
 (* Type of expression that have been split to remove IfThenElse *)
@@ -1274,9 +1349,12 @@ let pp_s_expr fmt (e : s_expr) =
     (pp_list pp_el) e
 
 
+
 (*****************************)
 (* Points-to Abstract Domain *)
 (*****************************)
+
+module Ms = Map.Make(Scmp)
 
 type pt_expr = | PtVars of mvar list | PtTop
 
@@ -1398,6 +1476,170 @@ module PointsToImpl : PointsTo = struct
 
 end
 
+(*****************************************)
+(* Maps with Equivalence Classes of Keys *)
+(*****************************************)
+
+module type Ordered = sig
+  type t
+  val compare : t -> t -> int
+end
+
+module Mc = Map.Int
+
+module Map2 (M : Map.S) = struct
+  let map2 : ('a -> 'b -> 'c) -> 'a M.t -> 'b M.t -> 'c M.t =
+    fun f map_a map_b ->
+      M.mapi (fun k a ->
+          let b = M.find k map_b in
+          f a b)
+        map_a
+end
+
+module type EqMap = sig
+  type key
+  type 'a t
+
+  val empty : 'a t
+
+  val mem: key -> 'a t -> bool
+
+  val find: key -> 'a t -> 'a
+
+  val adds: key list -> 'a -> 'a t -> 'a t
+
+  val removes: key list -> 'a t -> 'a t
+
+  val map: ('a -> 'b) -> 'a t -> 'b t
+
+  val map2 : ('a -> 'a -> 'c) -> 'a t -> 'a t -> 'c t
+
+  val kfilter : (key -> bool) -> 'a t -> 'a t
+
+  val vmerge:
+    ('a option -> 'a option -> 'b option) -> 'a t -> 'a t -> 'b t
+end
+
+module MakeEqMap (K : Ordered) : EqMap with type key = K.t = struct
+  type key = K.t
+
+  module Mk = Map.Make(K)
+
+  type 'a t = { ktoc : int Mk.t;
+                ctov : 'a Mc.t;
+                _cpt : int }
+
+  let empty = { ktoc = Mk.empty;
+                ctov = Mc.empty;
+                _cpt = 0 }
+
+  let newc t = ({ t with _cpt = t._cpt + 1 }, t._cpt)
+
+  let mem k t = try Mc.mem (Mk.find k t.ktoc) t.ctov with Not_found -> false
+
+  let find k t = Mc.find (Mk.find k t.ktoc) t.ctov
+
+  let adds ks a t =
+    let t,i = newc t in
+    let ktoc =
+      List.fold_left (fun ktoc k -> Mk.add k i ktoc) t.ktoc ks in
+    { t with ktoc = ktoc; ctov = Mc.add i a t.ctov }
+
+  let map f t = { t with ctov = Mc.map f t.ctov }
+
+  (* This function unifies the equivalence classes of t and t' *)
+  let unify_classes : 'a t -> 'b t -> int * int Mk.t * 'a Mc.t * 'b Mc.t =
+    fun t t' ->
+      let open Utils in
+      let module Sk = Set.Make(K) in
+      (* This function groupe keys in the same equivalence class *)
+      let rec grp l = match l with
+        | [] | _ :: [] -> l
+        | (x1,l1) :: (x2,l2) :: l' ->
+          if x1 = x2 then grp ((x1,Sk.union l1 l2) :: l')
+          else (x1,l1) :: grp ((x2,l2) :: l') in
+
+      let s_binds x =
+        Mk.bindings x.ktoc
+        |> List.stable_sort (fun (_,i) (_,i') -> Pervasives.compare i i')
+        |> List.map (fun (x,y) -> (y,Sk.singleton x))
+        |> grp in
+
+      let lt,lt' = s_binds t,s_binds t' in
+      let ltk = List.fold_left (fun sk (_,sk') ->
+          Sk.union sk sk') Sk.empty lt in
+      let ltk' = List.fold_left (fun sk (_,sk') ->
+          Sk.union sk sk') Sk.empty lt' in
+
+      (* Tedious *)
+      let rec merge_ne f_next lt lt' cpt mk mc mc' t t' ltk ltk' = match lt with
+        | [] -> (* We inverse the arguments ! *)
+          f_next lt' lt cpt mk mc' mc t' t ltk' ltk
+        | (i,l) :: r ->
+          let k = Sk.any l in
+          let oi' = try Some (Mk.find k t'.ktoc) with Not_found -> None in
+          let l' = match obind (fun i' -> List.assoc_opt i' lt') oi' with
+            | Some s -> s
+            | None -> Sk.empty in
+          let join =
+            Sk.union
+              (Sk.inter l l')
+              (Sk.union
+                 (Sk.diff l ltk')
+                 (Sk.diff l' ltk)) in
+          let mk = Sk.fold (fun k mk -> Mk.add k cpt mk) join mk in
+          let mc = Mc.add cpt (Mc.find i t.ctov) mc in
+          let mc' = match oi' with
+            | None -> mc'
+            | Some i' -> Mc.add cpt (Mc.find i' t'.ctov) mc' in
+
+          let nl, nl' = Sk.diff l join, Sk.diff l' join in
+          let nlt = if Sk.is_empty nl then r else (i,nl) :: r in
+          let nlt' = match oi' with
+            | None -> lt'
+            | Some i' ->
+              if Sk.is_empty nl' then List.remove_assoc i' lt'
+              else assoc_up i' (fun _ -> nl') lt' in
+
+          merge_ne f_next nlt nlt' (cpt + 1) mk mc mc' t t' ltk ltk' in
+
+      merge_ne (merge_ne (fun _ _ cpt mk mc mc' _ _ _ _ -> (cpt,mk,mc,mc')))
+        lt lt' 0 Mk.empty Mc.empty Mc.empty t t' ltk ltk'
+
+  let map2 f t t' =
+    let cpt,mk,mc,mc' = unify_classes t t' in
+    let module M2 = Map2(Mc) in
+    { ktoc = mk;
+      ctov = M2.map2 f mc mc';
+      _cpt = cpt }
+
+  let kfilter (f : key -> bool) (t : 'a t) =
+    let module Si = Set.Int in
+    let ktoc = Mk.filter (fun k _ -> f k) t.ktoc in
+    let si = Mk.fold (fun _ i sk -> Si.add i sk) ktoc Si.empty in
+    let ctov = Mc.filter (fun i _ -> Si.mem i si) t.ctov in
+    { t with ctov = ctov; ktoc = ktoc }
+
+  let removes (ks : key list) (t : 'a t) =
+    kfilter (fun k -> not (List.mem k ks)) t
+
+  let vmerge f t t' =
+    let cpt,mk,mc,mc' = unify_classes t t' in
+    let mr = Mk.fold (fun _ i mr ->
+        if Mc.mem i mr then mr
+        else
+          let ov = Mc.Exceptionless.find i mc
+          and ov' = Mc.Exceptionless.find i mc' in
+          match f ov ov' with
+          | None -> mr
+          | Some rv -> Mc.add i rv mr)
+        mk Mc.empty in
+    let mk = Mk.filter (fun _ i -> Mc.mem i mr) mk in
+    { ktoc = mk; ctov = mr; _cpt = cpt }
+end
+
+module EMs = MakeEqMap(Scmp)
+
 
 (************************************************)
 (* Abstraction of numerical and boolean values. *)
@@ -1458,40 +1700,35 @@ end
 module AbsBoolNoRel (AbsNum : AbsNumType) (Pt : PointsTo)
   : AbsNumBoolType = struct
 
-  (* Ms.find s init is an over-approx of the program state where s
+  (* <Ms.find s init> is an over-approximation of the program state where s
      is *not* initialized.
      Remark: we lazily populate init *)
   type t = { bool : AbsNum.t Ms.t;
-             init : AbsNum.t Ms.t;
+             init : AbsNum.t EMs.t;
              num : AbsNum.t;
              points_to : Pt.t }
 
-  let map2 : ('a -> 'b -> 'c) -> 'a Ms.t -> 'b Ms.t -> 'c Ms.t =
-    fun f map_a map_b ->
-      Ms.mapi (fun k a ->
-          let b = Ms.find k map_b in
-          f a b)
-        map_a
-
   let merge_init_dom t t' =
-    let eb = Ms.merge (fun _ x _ -> match x with
+    let eb = EMs.vmerge (fun x _ -> match x with
         | None -> Some t.num
         | Some _ -> x) t.init t'.init
-    and eb' = Ms.merge (fun _ x _ -> match x with
+    and eb' = EMs.vmerge (fun x _ -> match x with
         | None -> Some t'.num
         | Some _ -> x) t'.init t.init in
     ({ t with init = eb }, { t' with init = eb' })
 
   let apply f fpt t = { bool = Ms.map f t.bool;
-                        init = Ms.map f t.init;
+                        init = EMs.map f t.init;
                         num = f t.num;
                         points_to = fpt t.points_to }
+
+  module Ms2 = Map2(Ms)
 
   (* Since init is lazily populated, we merge the domains before applying f *)
   let apply2 f fpt t t' =
     let t, t' = merge_init_dom t t' in
-    { bool = map2 f t.bool t'.bool;
-      init = map2 f t.init t'.init;
+    { bool = Ms2.map2 f t.bool t'.bool;
+      init = EMs.map2 f t.init t'.init;
       num = f t.num t'.num;
       points_to = fpt t.points_to t'.points_to }
 
@@ -1521,22 +1758,34 @@ module AbsBoolNoRel (AbsNum : AbsNumType) (Pt : PointsTo)
     let bmap = List.fold_left (fun bmap bv ->
         Ms.add bv abs bmap) Ms.empty b_vars in
     { bool = bmap;
-      init = Ms.empty;
+      init = EMs.empty;
       num = abs;
       points_to = Pt.make mls }
 
-  let unify_map : AbsNum.t Ms.t -> AbsNum.t Ms.t -> AbsNum.t Ms.t = fun b b' ->
-    let eb = Ms.merge (fun _ x y -> match x with
-        | None -> y
-        | Some _ -> x) b b'
-    and eb' = Ms.merge (fun _ x y -> match x with
-        | None -> y
-        | Some _ -> x) b' b in
-    map2 AbsNum.unify eb eb'
+  let unify_map : AbsNum.t Ms.t -> AbsNum.t Ms.t -> AbsNum.t Ms.t =
+    fun b b' ->
+      let eb = Ms.merge (fun _ x y -> match x with
+          | None -> y
+          | Some _ -> x) b b'
+      and eb' = Ms.merge (fun _ x y -> match x with
+          | None -> y
+          | Some _ -> x) b' b in
+      Ms2.map2 AbsNum.unify eb eb'
+
+
+  let eunify_map : AbsNum.t EMs.t -> AbsNum.t EMs.t -> AbsNum.t EMs.t =
+    fun b b' ->
+      let eb = EMs.vmerge (fun x y -> match x with
+          | None -> y
+          | Some _ -> x) b b'
+      and eb' = EMs.vmerge (fun x y -> match x with
+          | None -> y
+          | Some _ -> x) b' b in
+      EMs.map2 AbsNum.unify eb eb'
 
   let meet : t -> t -> t = fun t t' ->
-    { bool = map2 AbsNum.meet t.bool t'.bool;
-      init = unify_map t.init t'.init;
+    { bool = Ms2.map2 AbsNum.meet t.bool t'.bool;
+      init = eunify_map t.init t'.init;
       num = AbsNum.meet t.num t'.num;
       points_to = Pt.meet t.points_to t'.points_to }
 
@@ -1618,7 +1867,7 @@ module AbsBoolNoRel (AbsNum : AbsNumType) (Pt : PointsTo)
 
       let s_init = t.init in
       let points_to_init = t.points_to in
-      let t = { t with init = Ms.empty } in
+      let t = { t with init = EMs.empty } in
 
       (* We add temporary variables *)
       let n_env = AbsNum.get_env t.num in
@@ -1670,7 +1919,7 @@ module AbsBoolNoRel (AbsNum : AbsNumType) (Pt : PointsTo)
     let s_init = t.init in
     let points_to_init = t.points_to in
 
-    let t = { t with init = Ms.empty } in
+    let t = { t with init = EMs.empty } in
 
     let t_vb, f_vb = bvar_name vb true,
                      bvar_name vb false in
@@ -1694,7 +1943,7 @@ module AbsBoolNoRel (AbsNum : AbsNumType) (Pt : PointsTo)
 
   let unify : t -> t -> t = fun t t' ->
     { bool = unify_map t.bool t'.bool;
-      init = unify_map t.init t'.init;
+      init = eunify_map t.init t'.init;
       num = AbsNum.unify t.num t'.num;
       points_to = Pt.unify t.points_to t'.points_to }
 
@@ -1703,7 +1952,7 @@ module AbsBoolNoRel (AbsNum : AbsNumType) (Pt : PointsTo)
     and ivars = init_vars l in
     (* We remove the variables that are not in l *)
     let b = Ms.filter (fun s _ -> List.mem s bvars) t.bool
-    and init = Ms.filter (fun s _ -> List.mem s ivars) t.init in
+    and init = EMs.kfilter (fun s -> List.mem s ivars) t.init in
 
     (* We add the variables that are in l but not in t.bool's domain.
        We do not need to do it for t.init, since it is lazily populated *)
@@ -1714,28 +1963,26 @@ module AbsBoolNoRel (AbsNum : AbsNumType) (Pt : PointsTo)
     let f x = AbsNum.change_environment x l in
     apply f (fun x -> x) { t with bool = b; init = init }
 
-  let blast_if_array at = match at with
-    | Aarray v ->
-      let vi i = Mvalue (AarrayEl (v,i)) |> string_of_mvar in
-      List.init (arr_range v) vi
-    | _ -> [string_of_mvar (Mvalue at)]
 
   let clear_init : t -> atype list -> t = fun t l ->
-    let l_ext = List.flatten (List.map blast_if_array l)  in
-    let init = List.fold_left (fun init v -> Ms.remove v init) t.init l_ext in
+    let l_ext = u8_blast_ats l |> List.map string_of_mvar in
+    let init = EMs.removes l_ext t.init in
     { t with init = init }
 
   let is_init : t -> atype -> t = fun t at ->
-    let vats = blast_if_array at in
-    let add_el init x = Ms.add x (AbsNum.bottom t.num) init in
-    { t with init = List.fold_left add_el t.init vats }
+    let vats = u8_blast_at at |> List.map string_of_mvar in
+    { t with init = EMs.adds vats (AbsNum.bottom t.num) t.init }
 
   let check_init : t -> atype -> bool = fun t at ->
-    let vats = blast_if_array at in
+    let vats = u8_blast_at at |> List.map string_of_mvar in
     let check x =
-      let abs = try AbsNum.meet t.num (Ms.find x t.init) with
+      let abs = try AbsNum.meet t.num (EMs.find x t.init) with
         | Not_found -> t.num in
       AbsNum.is_bottom abs in
+    (* REM *)
+    let () = try
+        let r = List.find (fun x -> not (check x)) vats in
+        Format.eprintf "pb here: %s@;" r with Not_found -> () in
     List.for_all check vats
 
   let get_env : t -> Environment.t = fun t -> AbsNum.get_env t.num
@@ -1789,12 +2036,12 @@ let rec add_glob_expr s = function
   | Pglobal (sw,x) ->
     let ty = Bty (U sw) in
     Ms.add x (x,Conv.cty_of_ty ty) s
-  | Pcast(_,e)     -> add_glob_expr s e
   | Pvar x         -> add_glob_var s x
-  | Pget(x,e)      -> add_glob_expr (add_glob_var s x) e
+  | Pget(_,x,e)      -> add_glob_expr (add_glob_var s x) e
   | Pload(_,x,e)   -> add_glob_expr (add_glob_var s x) e
   | Papp1(_, e)    -> add_glob_expr s e
   | Papp2(_,e1,e2) -> add_glob_expr (add_glob_expr s e1) e2
+  | PappN (_,es) -> List.fold_left add_glob_expr s es
   | Pif(e,e1,e2)   -> add_glob_expr
                         (add_glob_expr
                            (add_glob_expr s e) e1) e2
@@ -1805,7 +2052,7 @@ let rec add_glob_lv s = function
   | Lnone _      -> s
   | Lvar x       -> add_glob_var s x
   | Lmem (_,x,e)
-  | Laset (x,e)  -> add_glob_expr (add_glob_var s x) e
+  | Laset (_,x,e)  -> add_glob_expr (add_glob_var s x) e
 
 let add_glob_lvs s lvs = List.fold_left add_glob_lv s lvs
 
@@ -1840,17 +2087,17 @@ let swap_op2 op e1 e2 =
 
 type safe_cond =
   | Initv of var
-  | Initai of var * expr
+  | Initai of var * wsize * expr
   | Inita of var * int
-  | InBound of int * expr
+  | InBound of int * wsize * expr
   | Valid of wsize * ty gvar * expr
   | NotZero of wsize * expr
 
 let add64 x e = Papp2 (E.Oadd ( E.Op_w Type.U64), Pvar x, e)
 
-let in_bound x e =
+let in_bound x ws e =
   match (L.unloc x).v_ty with
-  | Arr(_,n) -> InBound(n,e)
+  | Arr(ws',n) -> InBound(n * int_of_ws ws' / 8, ws, e)
   | _ -> assert false
 
 let safe_op2 e2 = function
@@ -1858,13 +2105,14 @@ let safe_op2 e2 = function
   | E.Oland _ | E.Olor _ | E.Olxor _
   | E.Olsr _ | E.Olsl _ | E.Oasr _
   | E.Oeq _ | E.Oneq _ | E.Olt _ | E.Ole _ | E.Ogt _ | E.Oge _ -> []
+
   | E.Odiv E.Cmp_int -> []
   | E.Omod Cmp_int  -> []
   | E.Odiv (E.Cmp_w(_, s)) -> [NotZero (s, e2)]
   | E.Omod (E.Cmp_w(_, s)) -> [NotZero (s, e2)]
 
-(* let well_shaped = function
- *   | *)
+  | E.Ovadd _ | E.Ovsub _ | E.Ovmul _
+  | E.Ovlsr _ | E.Ovlsl _ | E.Ovasr _ -> []
 
 let safe_var x = match (L.unloc x).v_ty with
   | Arr(_,n) -> Inita (L.unloc x, n)
@@ -1875,9 +2123,15 @@ let rec safe_e_rec safe = function
   | Pvar x -> safe_var x :: safe
 
   | Pload (ws,x,e) -> Valid (ws, L.unloc x, e) :: safe_e_rec safe e
-  | Pcast (_, e) | Papp1 (_, e) -> safe_e_rec safe e
-  | Pget (x, e) -> in_bound x e :: Initai(L.unloc x, e) :: safe
+  | Pget (ws, x, e) -> in_bound x ws e :: Initai(L.unloc x, ws, e) :: safe
+  | Papp1 (_, e) -> safe_e_rec safe e
   | Papp2 (op, e1, e2) -> safe_op2 e2 op @ safe_e_rec (safe_e_rec safe e1) e2
+  | PappN (E.Opack _,_) -> safe
+  (* | PappN (opn,_) ->
+   *   (\* TODO: nary *\)
+   *   let e_str = Format.asprintf "n-ary Operation not supported" in
+   *   raise (Aint_error e_str) *)
+
   | Pif  (e1, e2, e3) ->
     (* We do not check "is_defined e1 && is_defined e2" since
         (safe_e_rec (safe_e_rec safe e1) e2) implies it *)
@@ -1890,7 +2144,7 @@ let safe_es = List.fold_left safe_e_rec []
 let safe_lval = function
   | Lnone _ | Lvar _ -> []
   | Lmem(ws, x, e) -> Valid (ws, L.unloc x, e) :: safe_e_rec [] e
-  | Laset(x,e) -> in_bound x e :: safe_e_rec [] e
+  | Laset(ws,x,e) -> in_bound x ws e :: safe_e_rec [] e
 
 let safe_lvals = List.fold_left (fun safe x -> safe_lval x @ safe) []
 
@@ -1919,6 +2173,9 @@ let safe_opn safe opn es = match opn with
   | E.Ox86_VBROADCASTI128 | E.Ox86_VEXTRACTI128 | E.Ox86_VINSERTI128
   | E.Ox86_VPERM2I128 | E.Ox86_VPERMQ -> safe
 
+  | E.Ox86_ANDN _ | E.Ox86_VPSUB _ | E.Ox86_VPMULL _ | E.Ox86_VPSRA _ -> safe
+
+
 let safe_instr ginstr = match ginstr.i_desc with
   | Cassgn (lv, _, _, e) -> safe_e_rec (safe_lval lv) e
   | Copn (lvs,_,opn,es) -> safe_opn (safe_lvals lvs @ safe_es es) opn es
@@ -1934,6 +2191,16 @@ let safe_return main_decl =
 (*********)
 (* Utils *)
 (*********)
+
+let pcast ws e = match Conv.ty_of_cty (ty_expr e) with
+  | Bty Int -> Papp1 (E.Oword_of_int ws, e)
+  | Bty (U ws') ->
+    assert (int_of_ws ws' <= int_of_ws ws);
+    if ws = ws' then e
+    else Papp1 (E.Ozeroext (ws,ws'), e)
+
+  | Bty Bool | Arr _ -> assert false
+
 
 let obind2 f x y = match x, y with
   | Some u, Some v -> f u v
@@ -2020,6 +2287,7 @@ let fun_vars f_decl env =
 (* TODO: careful with signed words. Look at jasmin_word.ec *)
 let op1_to_abs_unop op1 = match op1 with
   | E.Oneg _   -> Some Texpr1.Neg
+  | E.Oword_of_int _ | E.Oint_of_word _ | E.Ozeroext _ -> assert false
   | _ -> None
 
 
@@ -2034,6 +2302,10 @@ let op2_to_abs_binop op2 = match op2 with
   | E.Oland _ | E.Olor _ | E.Olxor _ (* bit-wise boolean connectives *)
   | E.Olsr _ | E.Olsl _ | E.Oasr _
   | E.Oeq _ | E.Oneq _ | E.Olt _ | E.Ole _ | E.Ogt _ | E.Oge _ -> None
+
+  (* TODO: support for vetor expression *)
+  | Ovadd (_, _) | Ovsub (_, _) | Ovmul (_, _)
+  | Ovlsr (_, _) | Ovlsl (_, _) | Ovasr (_, _) -> None
 
 
 (* Return lin_expr mod 2^n *)
@@ -2120,24 +2392,61 @@ end = struct
 
 
   let app_abs f state = { state with abs = f state.abs }
+
+
+  (* Return true iff the linear expression overflows *)
+  let linexpr_overflow abs lin_expr signed ws =
+    let int = AbsDom.bound_texpr abs lin_expr in
+    let ws_int = word_interval signed ws in
+
+    not (Interval.is_leq int ws_int)
+
+  (* TODO: signed words *)
+  let wrap_if_overflow abs e _ ws =
+    if linexpr_overflow abs e false ws then
+      wrap_lin_expr (AbsDom.get_env abs) ws e
+    else e
+
+  (* Casting: lin_expr is a in_i word, and we cast it as an out_i word. *)
+  (* TODO: signed words *)
+  let cast_if_overflows abs out_i in_i lin_expr =
+    assert ((out_i <> -1)  && (in_i <> -1));
+    if out_i <= in_i then
+      wrap_if_overflow abs lin_expr false out_i
+    else
+      wrap_if_overflow abs lin_expr false in_i
+
+  let aeval_cst_var abs x =
+    let int = AbsDom.bound_variable abs (mvar_of_var (L.unloc x)) in
+    if Scalar.equal int.inf int.sup then
+      let tent_i = match int.inf with
+        | Scalar.Float f -> int_of_float f
+        | Scalar.Mpqf q -> Mpqf.to_float q |> int_of_float
+        | Scalar.Mpfrf f -> Mpfrf.to_float f |> int_of_float in
+      if Scalar.cmp_int int.inf tent_i = 0 then Some tent_i
+      else None
+    else None
+
   (* Try to evaluate e to a constant expression in abs *)
   let rec aeval_cst_int abs e = match e with
-    | Pvar x ->
-      check_is_int (L.unloc x);
-      let int = AbsDom.bound_variable abs (mvar_of_var (L.unloc x)) in
-      if Scalar.equal int.inf int.sup then
-        let tent_i = match int.inf with
-          | Scalar.Float f -> int_of_float f
-          | Scalar.Mpqf q -> Mpqf.to_float q |> int_of_float
-          | Scalar.Mpfrf f -> Mpfrf.to_float f |> int_of_float in
-        if Scalar.cmp_int int.inf tent_i = 0 then Some tent_i
-        else begin Format.eprintf "%a@." Interval.print int; None end
-      else begin Format.eprintf "%a@." Interval.print int; None end
+    | Pvar x -> begin match (L.unloc x).v_ty with
+        (* check_is_int (L.unloc x); *)
+        | Bty Int -> aeval_cst_var abs x
+        | Bty (U ws) ->
+          let env = AbsDom.get_env abs in
+          let line = Mtexpr.var env (mvar_of_var (L.unloc x)) in
+          if linexpr_overflow abs line false (int_of_ws ws) then None
+          else aeval_cst_var abs x
+        | _ -> raise (Failure "type error in aeval_cst_int") end
 
     | Pconst c -> Some (B.to_int c)
 
     | Papp1 (E.Oneg Op_int, e) ->
       obind (fun x -> Some (- x)) (aeval_cst_int abs e)
+
+    | Papp1 (E.Oint_of_word _, e) ->
+      obind (fun x -> Some x) (aeval_cst_int abs e)
+    (* No need to check for overflows because we do not allow word operations. *)
 
     | Papp2 (Oadd Op_int, e1, e2) ->
       obind2 (fun x y -> Some (x + y))
@@ -2170,41 +2479,18 @@ end = struct
 
       | Pvar x -> mvar_of_var (L.unloc x) :: acc
       | Pglobal (ws,x) -> Mglobal (x,Bty (U ws)) :: acc
-      | Pget(x,ei) ->
+      | Pget(ws,x,ei) ->
         let int = array_range abs ei in
-        Mvalue (AarrayEl (L.unloc x, int )) :: acc
+        Mvalue (AarrayEl (L.unloc x, ws, int )) :: acc
 
-      | Pcast (_,e1) | Papp1 (_, e1) -> aux acc e1
+      | Papp1 (_, e1) -> aux acc e1
+      | PappN (_, es) -> List.fold_left aux acc es
 
       | Pload _ -> raise Expr_contain_load
 
       | Pif (_,e1,e2) | Papp2 (_, e1, e2) -> aux (aux acc e1) e2 in
 
     try PtVars (aux [] e) with Expr_contain_load -> PtTop
-
-
-  (* Return true iff the linear expression overflows *)
-  let linexpr_overflow abs lin_expr signed ws =
-    let int = AbsDom.bound_texpr abs lin_expr in
-    let ws_int = word_interval signed ws in
-
-    not (Interval.is_leq int ws_int)
-
-  (* TODO: signed words *)
-  let wrap_if_overflow abs e _ ws =
-    if linexpr_overflow abs e false ws then
-      wrap_lin_expr (AbsDom.get_env abs) ws e
-    else e
-
-  (* Casting: lin_expr is a in_i word, and we cast it as an out_i word. *)
-  (* TODO: signed words *)
-  let cast_if_overflows abs out_i in_i lin_expr =
-    assert ((out_i <> -1)  && (in_i <> -1));
-    if out_i <= in_i then
-      wrap_if_overflow abs lin_expr false out_i
-    else
-      wrap_if_overflow abs lin_expr false in_i
-
 
   exception Unop_not_supported of E.sop1
 
@@ -2222,6 +2508,11 @@ end = struct
     | Pvar x ->
       check_is_int (L.unloc x);
       Mtexpr.var apr_env (Mvalue (Avar (L.unloc x)))
+
+    | Papp1(E.Oint_of_word sz,e1) ->
+      assert (ty_expr e1 = Type.Coq_sword sz);
+      let abs_expr1 = linearize_wexpr abs e1 in
+      wrap_if_overflow abs abs_expr1 false (int_of_ws sz)
 
     | Papp1 (op1, e1) ->
       begin match op1_to_abs_unop op1 with
@@ -2255,6 +2546,16 @@ end = struct
       let abs_expr1 = Mtexpr.var apr_env (Mglobal (x,Bty (U ws))) in
       abs_expr1
 
+    | Papp1(E.Oword_of_int sz,e1) ->
+      assert (ty_expr e1 = Type.Coq_sint);
+      let abs_expr1 = linearize_iexpr abs e1 in
+      wrap_if_overflow abs abs_expr1 false (int_of_ws sz)
+
+    | Papp1(E.Ozeroext (osz,isz),e1) ->
+      assert (ty_expr e1 = Type.Coq_sword isz);
+      let abs_expr1 = linearize_wexpr abs e1 in
+      cast_if_overflows abs (int_of_ws osz) (int_of_ws isz) abs_expr1
+
     | Papp1 (op1, e1) ->
       begin match op1_to_abs_unop op1 with
         | Some absop ->
@@ -2286,25 +2587,12 @@ end = struct
         | Some Texpr1.Div | Some Texpr1.Pow | None ->
           raise (Binop_not_supported op2) end
 
-    | Pcast(sz,e1) -> begin match ty_expr e1 with
-        | Type.Coq_sint ->
-          let abs_expr1 = linearize_iexpr abs e1 in
-          wrap_if_overflow abs abs_expr1 false (int_of_ws sz)
-
-        | Type.Coq_sword _ ->
-          let in_size = get_wsize (ty_expr e1) in
-          let abs_expr1 = linearize_wexpr abs e1 in
-          cast_if_overflows abs (int_of_ws sz) (int_of_ws in_size) abs_expr1
-
-        | _ ->  print_not_word_expr e1;
-          raise (Aint_error "linearize_wexpr : cast : bad type") end
-
-    | Pget(x,ei) ->
+    | Pget(ws,x,ei) ->
       let int = array_range abs ei in
-      Mtexpr.var apr_env (Mvalue (AarrayEl (L.unloc x, int )))
+      Mtexpr.var apr_env (Mvalue (AarrayEl (L.unloc x, ws, int )))
 
-    | Pload _ ->
-      (* We return top on loads *)
+    | PappN (E.Opack _, _) | Pload _ ->
+      (* We return top on loads and Opack *)
       let apr_env = AbsDom.get_env abs in
       Mtexpr.cst apr_env (Coeff.Interval Interval.top)
 
@@ -2317,13 +2605,9 @@ end = struct
 
     | Pconst _  | Pbool _ | Parr_init _ | Pvar _ | Pglobal _ -> None
 
-    | Pcast(sz,e1) ->
+    | Pget(ws,x,e1) ->
       remove_if_expr_aux e1
-      |> map_f (fun ex -> Pcast(sz,ex))
-
-    | Pget(x,e1) ->
-      remove_if_expr_aux e1
-      |> map_f (fun ex -> Pget(x,ex))
+      |> map_f (fun ex -> Pget(ws,x,ex))
 
     | Pload (sz, x, e1) ->
       remove_if_expr_aux e1
@@ -2334,10 +2618,23 @@ end = struct
       |> map_f (fun ex -> Papp1 (op1,ex))
 
     | Papp2 (op2, e1, e2) ->
-      match remove_if_expr_aux e1 with
-      | Some _ as e_opt -> map_f (fun ex -> Papp2 (op2, ex, e2)) e_opt
-      | None -> remove_if_expr_aux e2
-                |> map_f (fun ex -> Papp2 (op2, e1, ex))
+      begin match remove_if_expr_aux e1 with
+        | Some _ as e_opt -> map_f (fun ex -> Papp2 (op2, ex, e2)) e_opt
+        | None -> remove_if_expr_aux e2
+                |> map_f (fun ex -> Papp2 (op2, e1, ex)) end
+
+    | PappN (opn, es) ->
+      let rec f_expl i es = match es with
+        | [] -> (-1,None)
+        | e :: r_es -> match remove_if_expr_aux e with
+          | None -> f_expl (i + 1) r_es
+          | Some _ as r -> (i,r) in
+
+      match f_expl 0 es with
+      | _,None -> None
+      | i,Some (b,el,er) ->
+        let repi ex = List.mapi (fun j x -> if j = i then ex else x) es in
+        Some (b, PappN (opn, repi el), PappN (opn, repi er))
 
 
   let rec remove_if_expr (e : 'a Prog.gexpr) = match remove_if_expr_aux e with
@@ -2366,6 +2663,9 @@ end = struct
     | E.Ole k -> (Tcons1.SUPEQ, opk_of_cmpk k)
     | E.Ogt k -> (Tcons1.SUP, opk_of_cmpk k)
     | E.Oge k -> (Tcons1.SUPEQ, opk_of_cmpk k)
+
+    | Ovadd (_, _) | Ovsub (_, _) | Ovmul (_, _)
+    | Ovlsr (_, _) | Ovlsl (_, _) | Ovasr (_, _) -> assert false
 
   let rec bexpr_to_btcons_aux : AbsDom.t -> 'a Prog.gexpr -> btcons =
     fun abs e ->
@@ -2401,6 +2701,9 @@ end = struct
             | E.Oadd _ | E.Omul _ | E.Osub _
             | E.Odiv _ | E.Omod _ | E.Oland _ | E.Olor _
             | E.Olxor _ | E.Olsr _ | E.Olsl _ | E.Oasr _ -> assert false
+
+            | Ovadd (_, _) | Ovsub (_, _) | Ovmul (_, _)
+            | Ovlsr (_, _) | Ovlsl (_, _) | Ovasr (_, _) -> assert false
 
             | E.Oand -> BAnd ( aux e1, aux e2 )
 
@@ -2534,7 +2837,7 @@ end = struct
   let set_bounds f_args abs =
     List.fold_left (fun abs v ->
         let ws = match v with
-          | Mvalue (AarrayEl (t,_)) -> Some (arr_size t)
+          | Mvalue (AarrayEl (_,ws,_)) -> Some ws
           | Mvalue (Avar gv) -> begin match gv.v_ty with
               | Bty (U ws) -> Some ws
               | _ -> None end
@@ -2544,8 +2847,8 @@ end = struct
         if ws <> None then
           let int = word_interval false (oget ws |> int_of_ws)
           and env = AbsDom.get_env abs in
-          let z_expr = Mtexpr.cst env (Coeff.Interval int) in
-          let z_sexpr = sexpr_from_simple_expr z_expr in
+          let z_sexpr = Mtexpr.cst env (Coeff.Interval int)
+                        |> sexpr_from_simple_expr in
 
           AbsDom.assign_sexpr abs v z_sexpr
         else abs)
@@ -2566,8 +2869,7 @@ end = struct
          their types. E.g. register of type U 64 is in [0;2^64]. *)
       let abs = AbsDom.make (f_args @ m_locs) mem_locs
                 |> set_zeros (f_args @ m_locs)
-                |> set_bounds f_args
-      in
+                |> set_bounds f_args in
 
       (* We extend the environment to its local variables *)
       let f_vars = (List.map otolist f_in_args |> List.flatten)
@@ -2596,26 +2898,37 @@ end = struct
 
     | Inita (v,i) -> begin match mvar_of_var v with
         | Mvalue (Aarray v) ->
-          let vels = List.init i (fun n -> AarrayEl (v,n)) in
+          let ws = arr_size v in
+          let vels = List.init i (fun n -> AarrayEl (v,ws,n)) in
           List.for_all (AbsDom.check_init state.abs) vels
         | _ -> assert false end
 
-    | Initai (v,e) -> begin match mvar_of_var v with
+    | Initai (v,ws,e) -> begin match mvar_of_var v with
         | Mvalue (Aarray v) ->
           let i = array_range state.abs e in
-          AbsDom.check_init state.abs (AarrayEl (v,i))
+          AbsDom.check_init state.abs (AarrayEl (v,ws,i))
         | _ -> assert false end
 
-    | InBound (i,e) ->
-      (* We check that e is no larger than i *)
-      let be = Papp2 (E.Oge E.Cmp_int, e, Pconst (B.of_int i)) in
+    | InBound (i,ws,e) ->
+      (* We check that (e + 1) * ws/8 is no larger than i *)
+      let epp = Papp2 (E.Oadd E.Op_int,
+                       e,
+                       Pconst (B.of_int 1)) in
+      let wse = Papp2 (E.Omul E.Op_int,
+                       epp,
+                       Pconst (B.of_int ((int_of_ws ws) / 8))) in
+      let be = Papp2 (E.Ogt E.Cmp_int, wse, Pconst (B.of_int i)) in
+
+      (* REM *)
+      Format.eprintf "%a@;" (Printer.pp_expr ~debug:false) be;
+
       begin match bexpr_to_btcons be state.abs with
         | None -> false
         | Some c -> AbsDom.is_bottom (AbsDom.meet_btcons state.abs c) end
 
     | NotZero (ws,e) ->
       (* We check that e is never 0 *)
-      let be = Papp2 (E.Oeq (E.Op_w ws), e, Pcast (ws,Pconst (B.of_int 0))) in
+      let be = Papp2 (E.Oeq (E.Op_w ws), e, pcast ws (Pconst (B.of_int 0))) in
       begin match bexpr_to_btcons be state.abs with
         | None -> false
         | Some c -> AbsDom.is_bottom (AbsDom.meet_btcons state.abs c) end
@@ -2658,10 +2971,13 @@ end = struct
 
   let pp_safety_cond fmt = function
     | Initv x -> Format.fprintf fmt "is_init %a" pp_var x
-    | Initai(x,e) -> Format.fprintf fmt "is_init %a.[%a]" pp_var x pp_expr e
+    | Initai(x,ws,e) ->
+      Format.fprintf fmt "is_init (w%d)%a.[%a]" (int_of_ws ws) pp_var x pp_expr e
     | Inita(x,n) -> Format.fprintf fmt "is_init[%i] %a" n pp_var x
     | NotZero(sz,e) -> Format.fprintf fmt "%a <>%a zero" pp_expr e pp_ws sz
-    | InBound(n,e)  -> Format.fprintf fmt "in_bound %a %i" pp_expr e n
+    | InBound(n,ws,e)  ->
+      Format.fprintf fmt "in_bound %a-th block of (U%d) in array of length %i U8"
+        pp_expr e (int_of_ws ws) n
     | Valid (sz, x, e) ->
       Format.fprintf fmt "is_valid %s + %a W%a" x.v_name pp_expr e pp_ws sz
 
@@ -2689,9 +3005,9 @@ end = struct
         | _, Bty _ -> Mvalue (Avar ux) |> some
         | _, Arr _ -> Mvalue (Aarray ux) |> some end
 
-    | Laset (x,ei) ->
+    | Laset (ws, x, ei) ->
       let int = array_range abs ei in
-      Mvalue (AarrayEl (L.unloc x, int)) |> some
+      Mvalue (AarrayEl (L.unloc x, ws, int)) |> some
 
   let ty_gvar_of_mvar = function
     | Mvalue (Avar v) -> Some v
@@ -2728,7 +3044,7 @@ end = struct
   let aeval_offset abs ws_o outmv e = match e with
     | Pvar y ->
       if valid_offset_var abs ws_o y then
-        apply_offset_expr abs outmv (L.unloc y) (Pcast(U64,Pconst(B.of_int 0)))
+        apply_offset_expr abs outmv (L.unloc y) (pcast U64 (Pconst(B.of_int 0)))
       else aeval_top_offset abs outmv
 
     | Papp2 (op2,el,er) -> begin match op2,el with
@@ -2746,11 +3062,12 @@ end = struct
     | Mvalue (Aarray gv) -> begin match Mtexpr.(e.mexpr) with
         | Mtexpr.Mvar (Mvalue (Aarray ge)) ->
           let n = arr_range gv in
+          let ws = arr_size gv in
           assert (n = arr_range ge);
-          assert (arr_size gv = arr_size ge);
+          assert (ws = arr_size ge);
           List.fold_left (fun a i ->
-              let vi = Mvalue (AarrayEl (gv,i))  in
-              let eiv = Mvalue (AarrayEl (ge,i)) in
+              let vi = Mvalue (AarrayEl (gv,ws,i))  in
+              let eiv = Mvalue (AarrayEl (ge,ws,i)) in
               let ei = Mtexpr.var (AbsDom.get_env a) eiv
                        |> sexpr_from_simple_expr in
 
@@ -2944,7 +3261,7 @@ end = struct
 
   let split_opn n opn es = match opn with
     | E.Oset0 ws -> [None;None;None;None;None;
-                     Some (Pcast (ws, Pconst (B.of_int 0)))]
+                     Some (pcast ws (Pconst (B.of_int 0)))]
 
     | E.Ox86_CMP ws ->
       (* Input types: ws, ws *)
@@ -2974,7 +3291,7 @@ end = struct
   let rec aeval_ginstr : ('ty,'info) ginstr -> astate -> astate =
     fun ginstr state ->
       debug (fun () ->
-          Format.eprintf "@[<v>@[<v>%a@]@;%d Instr: %a %a@;@]%!"
+          Format.eprintf "@[<v>@[<v>%a@]%d Instr: %a %a@;@]%!"
             (AbsDom.print ~full:true) state.abs
             (let a = !num_instr_evaluated in incr num_instr_evaluated; a)
             L.pp_sloc (fst ginstr.i_loc)
@@ -3036,7 +3353,7 @@ end = struct
           let rstate = eval_branch { lstate with abs = state.abs } noec c2 in
 
           Format.eprintf "@[<v>If join %a for Instr:@;%a @;\
-                          Of:@;%a@;And:@;%a@;@]%!"
+                          Of:@;%aAnd:@;%a@]%!"
             L.pp_sloc (fst ginstr.i_loc)
             (Printer.pp_instr ~debug:false) ginstr
             (AbsDom.print ~full:true) lstate.abs
@@ -3065,7 +3382,7 @@ end = struct
 
             (* We evaluate the while loop body *)
             let state_o = aeval_gstmt (c2 @ c1) state_i in
-            Format.eprintf "@[<v 2>Join of:@;%a@;And (join):@;%a@;@]%!"
+            Format.eprintf "@[<v 2>Join of:@;%aAnd (join):@;%a@]%!"
               (AbsDom.print ~full:true) state.abs
               (AbsDom.print ~full:true) state_o.abs;
             (* We compute the join with the initial abstract state *)
@@ -3082,7 +3399,7 @@ end = struct
               (state,None) end
             else
               let state' = unroll_once state in
-              Format.eprintf "@[<v 2>Widening of:@;%a@;And (widening):@;%a@;@]%!"
+              Format.eprintf "@[<v 2>Widening of:@;%aAnd (widening):@;%a@]%!"
                 (AbsDom.print ~full:true) state.abs
                 (AbsDom.print ~full:true) state'.abs;
               let w_abs = AbsDom.widening state.abs state'.abs in
@@ -3251,8 +3568,8 @@ end = struct
 
         print_mem_ranges final_st main_decl;
 
-        (* TODO:temp. *)
-        (* assert (not final_st.violation); *)
+        (* TODO: temporary *)
+        assert (not final_st.violation);
 
         let () = debug (fun () -> print_stats ()) in
         let () = Sys.set_signal Sys.sigint old_handler in
