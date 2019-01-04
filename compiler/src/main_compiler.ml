@@ -161,10 +161,19 @@ let main () =
     eprint Compiler.ParamsExpansion (Printer.pp_prog ~debug:true) prog;
 
     if !check_safety then begin
-      let module AbsInt = Safety.AbsInterpreter(Safety.AbsDom) in
       let _ =
         List.for_all (fun f_decl ->
-            if f_decl.f_cc = Export then AbsInt.analyze f_decl prog else true)
+            if f_decl.f_cc = Export then
+              let () = Format.eprintf "@[<v>Analyzing function %s@;@]@."
+                  f_decl.f_name.fn_name in
+
+              let module AbsInt = Safety.AbsInterpreter(struct
+                  let main = f_decl
+                  let prog = prog
+                end) in
+
+              AbsInt.analyze ()
+            else true)
           (snd prog) in ()
     end;
 
@@ -249,7 +258,7 @@ let main () =
     let stk_alloc_fd cfd =
       let fd = Conv.fdef_of_cfdef tbl cfd in
       if !debug then Format.eprintf "START stack alloc@." ;
-      let stk_i = 
+      let stk_i =
         Var0.Var.vname (Conv.cvar_of_var tbl Array_expand.vstack) in
       let alloc, sz = Array_expand.stk_alloc_func fd in
       let alloc =

@@ -389,19 +389,6 @@ fn poly1305_ref3_last(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k, reg u64
 
 
 
-fn poly1305_ref3_local(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
-{
-  reg u64[3] h;
-  reg u64[2] r;
-  reg u64 len r54;
-
-  h, r, r54, k = poly1305_ref3_setup(k);
-  len = inlen;
-  in, len, h = poly1305_ref3_update(in, len, h, r, r54);
-  poly1305_ref3_last(out, in, len, k, h, r, r54);
-}
-
-
 //-----------------------------------------
 // end of inline of "../ref3/poly1305.jazz"
 //-----------------------------------------
@@ -1164,7 +1151,7 @@ fn poly1305_avx2_update(
 }
 
 
-
+export
 fn poly1305_avx2_wrapper(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
 {
   reg u64[3] h;
@@ -1173,23 +1160,15 @@ fn poly1305_avx2_wrapper(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
   stack u256[5] r4444   r1234;
   stack u256[4] r4444x5 r1234x5;
 
-  len = inlen;
+  if(inlen >= 257){
+    len = inlen;
 
-  h, r, r54, k = poly1305_ref3_setup(k);
-  r4444, r4444x5, r1234, r1234x5 = poly1305_avx2_setup(r, r54);
+    h, r, r54, k = poly1305_ref3_setup(k);
+    r4444, r4444x5, r1234, r1234x5 = poly1305_avx2_setup(r, r54);
 
-  in, len, h = poly1305_avx2_update(in, len, r4444, r4444x5, r1234, r1234x5);
-  in, len, h = poly1305_ref3_update(in, len, h, r, r54);
+    in, len, h = poly1305_avx2_update(in, len, r4444, r4444x5, r1234, r1234x5);
+    in, len, h = poly1305_ref3_update(in, len, h, r, r54);
 
-  poly1305_ref3_last(out, in, len, k, h, r, r54);
-}
-
-
-
-export fn poly1305_avx2(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
-{
-  if(inlen < 257)
-  { poly1305_ref3_local(out, in, inlen, k); }
-  else
-  { poly1305_avx2_wrapper(out, in, inlen, k); }
+    poly1305_ref3_last(out, in, len, k, h, r, r54);
+  }
 }

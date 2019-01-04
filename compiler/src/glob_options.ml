@@ -11,6 +11,7 @@ let print_list = ref []
 let ecfile = ref ""
 let ec_list = ref []
 let check_safety = ref true
+let relational = ref None
 
 let lea = ref false
 let set0 = ref false
@@ -52,6 +53,11 @@ let set_ec f =
 let set_constTime () = model := ConstantTime
 let set_safety () = model := Safety
 
+let set_relational s =
+  relational := Some (String.split_on_char ',' s)
+
+
+
 let print_strings = function
   | Compiler.Typing                      -> "typing"   , "typing"
   | Compiler.ParamsExpansion             -> "cstexp"   , "constant expansion"
@@ -92,9 +98,8 @@ let options = [
     "-ec"       , Arg.String  set_ec    , "[f]: extract function [f] and its dependencies to an easycrypt file";
     "-oec"     ,  Arg.Set_string ecfile , "[filename]: use filename as output destination for easycrypt extraction";
     "-CT" , Arg.Unit set_constTime      , ": generates model for constant time verification";
-    "-safety", Arg.Unit set_safety      , ": generates model for safety verification"
-
-
+    "-safety", Arg.Unit set_safety      , ": generates model for safety verification";
+    "-relational", Arg.String set_relational, ": use a relational abstraction for the given variables"
   ] @  List.map print_option poptions
 
 let usage_msg = "Usage : jasminc [option] filename"

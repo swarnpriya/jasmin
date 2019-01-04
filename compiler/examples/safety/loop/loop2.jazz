@@ -1,9 +1,8 @@
 export
-fn poly1305(reg u64 in, reg u64 inlen) -> reg u32 {
+fn poly1305(reg u64 in, reg u64 inlen) -> reg u64 {
   inline int i;
   reg u8 tmp;
-  reg u32 tmp32, one;
-  reg u64 ret;
+  reg u64 ret, one;
   reg bool of, cf, sf, zf;
   stack u32[17] r, h, c;
 
