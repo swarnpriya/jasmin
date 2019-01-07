@@ -141,7 +141,21 @@ Definition Instr_of_instr (id:instr_desc_t) : Instruction :=
      wsizei := id.(id_wsize);
   |}. 
 
-Lemma get_instr_desc o : get_instr (Ox86 o) = Instr_of_instr
+Lemma get_instr_desc o : get_instr (Ox86 o) = Instr_of_instr (instr_desc o).
+Proof.
+  rewrite /Instr_of_instr; case: o => /= *;f_equal.
+  match goal with |- ?X = _ => move: X end; move: (sem_prod_xprod _ _);
+  rewrite /sem_xtuple /sem_tuple /sem_prod /sem_xprod /=.
+  match goal with |- forall (_ : ?X = _), _ => move: X end.
+  move=> T h o.
+Print eq_ind.   
+  match h in (_ = T) -> 
+  pattern T at 2 3 5.
+case h.
+destruct h.
+case h.
+  destruct (sem_prod_xprod _ _).
+ _ _).[:: sword _w_] (exec (sem_tuple [:: sword _w_]))
 (* -------------------------------------------------------------------- *)
 Theorem assemble_x86_opnP gd ii out op args loargs s1 m1 s2 :
   lom_eqv s1 m1 →

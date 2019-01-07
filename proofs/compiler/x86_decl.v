@@ -406,6 +406,7 @@ Canonical msb_flag_eqType := EqType msb_flag msb_flag_eqMixin.
 
 Definition sem_xtuple ts := ltuple (map sem_oxt ts).
  *)
+
 Record instr_desc_t := mk_instr_desc {
   (* Info for x86 sem *)
   id_msb_flag : msb_flag; 
