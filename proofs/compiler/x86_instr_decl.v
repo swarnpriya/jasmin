@@ -672,10 +672,10 @@ Notation mk_instr_w_b4w_00 name semi check := (fun sz =>
   mk_instr (pp_sz name sz) (w_ty sz) (b4w_ty sz) [:: E 0] (implicit_flags_noCF ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2_b name semi msb ain aout check := (fun sz =>
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b_ty) ain aout msb (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b_ty) ain aout msb (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2_b5 name semi msb ain  check := (fun sz =>
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5_ty) ain implicit_flags msb (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5_ty) ain implicit_flags msb (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2_b5w name semi msb ain aout check := (fun sz =>
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w_ty sz) ain (implicit_flags ++ aout) msb (semi sz) (check sz) sz)  (only parsing).
@@ -687,10 +687,10 @@ Notation mk_instr_w2b_b5w_010 name semi check := (fun sz =>
   mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) ([:: E 0; E 1] ++ [::iCF]) (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2_b5w2 name semi msb ain aout check := (fun sz =>
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) ain (implicit_flags ++ aout) msb (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) ain (implicit_flags ++ aout) msb (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w3_b5w2_da0ad name semi check := (fun sz =>
-  mk_instr (pp_sz name sz) (w3_ty sz) (b5w2_ty sz) [:: R RDX; R RAX; E 0]  (implicit_flags ++ [:: R RAX; R RDX]) MSB_CLEAR (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (w3_ty sz) (b5w2_ty sz) [:: R RDX; R RAX; E 0]  (implicit_flags ++ [:: R RAX; R RDX]) MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2_w_120 name semi check := (fun sz =>
   mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi sz) check sz)  (only parsing).
@@ -737,6 +737,11 @@ Definition fake_check_sz_sz' (sz sz':wsize) (_:list asm_arg) : bool := true.
 (* ---------------------------------------------------------------- *)
 Module Checks.
 
+Definition none (_:list asm_arg) : bool := true.
+Definition none_sz (sz:wsize) (_:list asm_arg) : bool := true.
+
+(* ---------------------------------------------------------------- *)
+
 (* Recursively apply checks *)
 
 (* One operand *)
@@ -752,7 +757,7 @@ Definition apply_1 (sz: wsize) (f: list (wsize -> asm_arg -> bool)) (args: list 
   | _          => false
   end.
 
-(* Two operand *)
+(* Two operands *)
 Fixpoint rec_2 (sz: wsize) (lf : list (wsize -> asm_arg -> asm_arg -> bool)) (a b: asm_arg) :=
   match lf with
   | [::] => false
@@ -777,6 +782,19 @@ Definition apply_2' (szi szo: wsize) (f: list (wsize -> wsize -> asm_arg -> asm_
   | _          => false
   end.
 
+
+(* Three operands *)
+Fixpoint rec_3 (sz: wsize) (lf : list (wsize -> asm_arg -> asm_arg -> asm_arg -> bool)) (a b c: asm_arg) :=
+  match lf with
+  | [::] => false
+  | f :: lf => if (f sz a b c) == true then true else rec_3 sz lf a b c
+  end.
+
+Definition apply_3 (sz: wsize) (f: list (wsize -> asm_arg -> asm_arg -> asm_arg -> bool)) (args: list asm_arg) : bool :=
+  match args with
+  | [:: a ; b ; c] => rec_3 sz f a b c
+  | _          => false
+  end.
 
 (* ---------------------------------------------------------------- *)
 
@@ -813,10 +831,18 @@ Definition rm (sz:wsize) a :=
   | _ => false
   end.
 
+Definition rm_8 (sz:wsize) a :=
+  match a with
+  | Reg _ => (sz == U8)
+  | Adr _ => (sz == U8)
+  | _ => false
+  end.
+
 (* ---------------------------------------------------------------- *)
 
 Definition rm_r (sz:wsize) a b :=
   match a , b with
+  | Reg _ , Reg _ => true
   | Adr _ , Reg _ => true
   | _, _ => false
   end.
@@ -829,6 +855,14 @@ Definition r_rm (sz:wsize) a b :=
   | _, _ => false
   end.
 
+Definition rm_r_8plus (sz:wsize) a b :=
+  match a , b with
+  | Adr _ , Reg _ => (sz > U8)
+  | Reg _ , Reg _ => (sz > U8)
+  | Glob _ , Reg _ => (sz > U8)
+  | _, _ => false
+  end.
+
 Definition r_imm_same_size (sz: wsize) a b :=
   match a , b with
   | Reg _ , Imm sz' _ => sz == sz'
@@ -837,9 +871,19 @@ Definition r_imm_same_size (sz: wsize) a b :=
 
 Definition rm_imm_near_size (sz: wsize) a b :=
   match a , b with
+  | Reg _ , Imm sz' _ => imm32 sz sz'
   | Adr _ , Imm sz' _ => imm32 sz sz'
   | _, _ => false
   end.
+
+Definition rm_imm_8plus (sz: wsize) a b :=
+  match a , b with
+  | Reg _ , Imm U8 _ => (sz > U8)
+  | Adr _ , Imm U8 _ => (sz > U8)
+  | Glob _ , Imm U8 _ => (sz > U8)
+  | _, _ => false
+  end.
+
 
 Definition r_rm_8_8 (sz sz': wsize) a b :=
   match a, b with
@@ -859,10 +903,26 @@ Definition r_rm_16_16 (sz sz': wsize) a b :=
 
 Definition r_rm_16plus (sz : wsize) a b :=
   match a, b with
-  | Reg _, Reg _ => (sz >= U16)
-  | Reg _, Adr _ => (sz >= U16)
-  | Reg _, Glob _ => (sz >= U16)
+  | Reg _, Reg _ => (sz > U8)
+  | Reg _, Adr _ => (sz > U8)
+  | Reg _, Glob _ => (sz > U8)
   | _ , _ => false
+  end.
+
+Definition r_rm_imm_8 (sz : wsize) a b c :=
+  match a, b, c with
+  | Reg _, Reg _, Imm U8 _ => (sz > U8)
+  | Reg _, Adr _, Imm U8 _ => (sz > U8)
+  | Reg _, Glob _, Imm U8 _ => (sz > U8)
+  | _ , _, _ => false
+  end.
+
+Definition r_rm_imm_16plus (sz : wsize) a b c :=
+  match a, b, c with
+  | Reg _, Reg _, Imm sz' _ => (sz > U8) && (sz == sz')
+  | Reg _, Adr _, Imm sz' _ => (sz > U8) && (sz == sz')
+  | Reg _, Glob _, Imm sz' _ => (sz > U8) && (sz == sz')
+  | _ , _, _ => false
   end.
 
 (* ---------------------------------------------------------------- *)
@@ -883,6 +943,27 @@ apply_2 sz [:: ri32 ; opdr32 ] args.
 Definition neg_inc_dec sz (args: list asm_arg) :=
 apply_1 sz [:: rm ] args.
 
+Definition mul_div sz (args:list asm_arg) :=
+apply_1 sz [:: rm ] args.
+
+Definition multr sz (args: list asm_arg) :=
+apply_2 sz [:: r_rm_16plus ] args.
+
+Definition multri sz (args: list asm_arg) :=
+apply_3 sz [:: r_rm_imm_8 ; r_rm_imm_16plus ] args.
+
+Definition setcc (args: list asm_arg) :=
+apply_1 U8 [:: rm_8 ] args.
+
+Definition bt sz (args: list asm_arg) :=
+apply_2 sz [:: rm_r_8plus ; rm_imm_8plus ] args.
+
+Definition test sz (args: list asm_arg) :=
+apply_2 sz [:: rm_imm_near_size ; rm_r ] args.
+
+Definition cmp sz (args: list asm_arg) :=
+apply_2 sz [:: rm_imm_near_size ; rm_imm_8plus ; rm_r ; r_rm ] args.
+
 End Checks.
 
 
@@ -894,23 +975,23 @@ Definition Ox86_CMOVcc_instr            := mk_instr_bw2_w_0211 "CMOVcc" x86_CMOV
 Definition Ox86_ADD_instr               := mk_instr_w2_b5w_010 "ADD" x86_ADD          Checks.regmemi32.
 Definition Ox86_SUB_instr               := mk_instr_w2_b5w_010 "SUB" x86_SUB          Checks.regmemi32.
 
-Definition Ox86_MUL_instr               := mk_instr_w2_b5w2 "MUL"  x86_MUL  msb_dfl   [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
-Definition Ox86_IMUL_instr              := mk_instr_w2_b5w2 "IMUL" x86_IMUL msb_dfl   [:: R RAX; E 0] [:: R RDX; R RAX] fake_check.
-Definition Ox86_IMULr_instr             := mk_instr_w2_b5w_010 "IMULr" x86_IMULt      fake_check_sz.
-Definition Ox86_IMULri_instr            := mk_instr_w2_b5w "IMULri" x86_IMULt msb_dfl [:: E 1; E 2] [:: E 0] fake_check_sz. (* /!\ same as above *)
-Definition Ox86_DIV_instr               := mk_instr_w3_b5w2_da0ad "DIV" x86_DIV       fake_check.
-Definition Ox86_IDIV_instr              := mk_instr_w3_b5w2_da0ad "IDIV" x86_IDIV     fake_check.
-Definition Ox86_CQO_instr               := mk_instr_w_w "CQO" x86_CQO msb_dfl         [:: R RAX] [:: R RDX] fake_check_sz.
+Definition Ox86_MUL_instr               := mk_instr_w2_b5w2 "MUL"  x86_MUL  msb_dfl   [:: R RAX; E 0] [:: R RDX; R RAX] Checks.mul_div.
+Definition Ox86_IMUL_instr              := mk_instr_w2_b5w2 "IMUL" x86_IMUL msb_dfl   [:: R RAX; E 0] [:: R RDX; R RAX] Checks.mul_div.
+Definition Ox86_IMULr_instr             := mk_instr_w2_b5w_010 "IMULr" x86_IMULt      Checks.multr.
+Definition Ox86_IMULri_instr            := mk_instr_w2_b5w "IMULri" x86_IMULt msb_dfl [:: E 1; E 2] [:: E 0] Checks.multri. (* /!\ same as above *)
+Definition Ox86_DIV_instr               := mk_instr_w3_b5w2_da0ad "DIV" x86_DIV       Checks.mul_div.
+Definition Ox86_IDIV_instr              := mk_instr_w3_b5w2_da0ad "IDIV" x86_IDIV     Checks.mul_div.
+Definition Ox86_CQO_instr               := mk_instr_w_w "CQO" x86_CQO msb_dfl         [:: R RAX] [:: R RDX] Checks.none_sz.
 Definition Ox86_ADC_instr               := mk_instr_w2b_b5w_010 "ADC" x86_ADC         Checks.regmemi32.
 Definition Ox86_SBB_instr               := mk_instr_w2b_b5w_010 "SBB" x86_SBB         Checks.regmemi32.
 Definition Ox86_NEG_instr               := mk_instr_w_b5w "NEG" x86_NEG msb_dfl       [:: E 0] [:: E 0] Checks.neg_inc_dec.
 Definition Ox86_INC_instr               := mk_instr_w_b4w_00 "INC" x86_INC            Checks.neg_inc_dec.
 Definition Ox86_DEC_instr               := mk_instr_w_b4w_00 "DEC" x86_DEC            Checks.neg_inc_dec.
-Definition Ox86_SETcc_instr             := mk_instr (pp_s "SETcc") b_ty w8_ty         [:: E 0] [:: E 1] msb_dfl x86_SETcc fake_check U8.
-Definition Ox86_BT_instr                := mk_instr_w2_b "BT" x86_BT msb_dfl          [:: E 0; E 1] [:: F CF] fake_check.
+Definition Ox86_SETcc_instr             := mk_instr (pp_s "SETcc") b_ty w8_ty         [:: E 0] [:: E 1] msb_dfl x86_SETcc Checks.setcc U8.
+Definition Ox86_BT_instr                := mk_instr_w2_b "BT" x86_BT msb_dfl          [:: E 0; E 1] [:: F CF] Checks.bt.
 Definition Ox86_LEA_instr               := mk_instr_w4_w "LEA" x86_LEA msb_dfl        [:: E 1; E 2; E 3; E 4] [:: E 0] fake_check.
-Definition Ox86_TEST_instr              := mk_instr_w2_b5 "TEST" x86_TEST msb_dfl     [:: E 0; E 1] fake_check.
-Definition Ox86_CMP_instr               := mk_instr_w2_b5 "CMP" x86_CMP msb_dfl       [:: E 0; E 1] fake_check.
+Definition Ox86_TEST_instr              := mk_instr_w2_b5 "TEST" x86_TEST msb_dfl     [:: E 0; E 1] Checks.test.
+Definition Ox86_CMP_instr               := mk_instr_w2_b5 "CMP" x86_CMP msb_dfl       [:: E 0; E 1] Checks.cmp.
 Definition Ox86_AND_instr               := mk_instr_w2_b5w_010 "AND" x86_AND          fake_check_sz.
 Definition Ox86_OR_instr                := mk_instr_w2_b5w_010 "OR" x86_OR            fake_check_sz.
 Definition Ox86_XOR_instr               := mk_instr_w2_b5w_010 "XOR" x86_XOR          fake_check_sz.
