@@ -693,13 +693,13 @@ Notation mk_instr_w3_b5w2_da0ad name semi check := (fun sz =>
   mk_instr (pp_sz name sz) (w3_ty sz) (b5w2_ty sz) [:: R RDX; R RAX; E 0]  (implicit_flags ++ [:: R RAX; R RDX]) MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2_w_120 name semi check := (fun sz =>
-  mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w4_w name semi msb ain aout check := (fun sz =>
   mk_instr (pp_sz name sz) (w4_ty sz) (w_ty sz) ain aout msb (semi sz) check sz)  (only parsing).
 
 Notation mk_instr_ww8_w_120 name semi check := (fun sz =>
-  mk_instr (pp_sz name sz) (ww8_ty sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0]  MSB_CLEAR (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (ww8_ty sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0]  MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_ww8_b2w_0c0 name semi check := (fun sz =>
   mk_instr (pp_sz name sz) (ww8_ty sz) (b2w_ty sz) [:: E 0; ADExplicit 1 (Some RCX)] [::F OF; F CF; E 0] MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
@@ -711,19 +711,19 @@ Notation mk_instr_w2w8_b5w_01c0 name semi check := (fun sz =>
   mk_instr (pp_sz name sz) (w2w8_ty sz) (b5w_ty sz) [:: E 0; E 1; ADExplicit 2 (Some RCX)] (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w2w8_w_1230 name semi check := (fun sz =>
-  mk_instr (pp_sz name sz) (w2w8_ty sz) (w_ty sz) [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (w2w8_ty sz) (w_ty sz) [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_instr_w_w128_10 name semi check := (fun sz =>
-  mk_instr (pp_sz name sz) (w_ty sz) (w128_ty) [:: E 1] [:: E 0]  MSB_MERGE (semi sz) check sz)  (only parsing).
+  mk_instr (pp_sz name sz) (w_ty sz) (w128_ty) [:: E 1] [:: E 0]  MSB_MERGE (semi sz) (check sz) sz)  (only parsing).
 
 Notation mk_ve_instr_w_w_10 name semi check := (fun (ve:velem) sz =>
-  mk_instr (pp_ve_sz name ve sz) (w_ty ve) (w_ty sz) [:: E 1] [:: E 0] MSB_CLEAR (semi ve sz) check sz)  (only parsing).
+  mk_instr (pp_ve_sz name ve sz) (w_ty ve) (w_ty sz) [:: E 1] [:: E 0] MSB_CLEAR (semi ve sz) (check sz) sz)  (only parsing).
 
 Notation mk_ve_instr_w2_w_120 name semi check := (fun (ve:velem) sz =>
-  mk_instr (pp_ve_sz name ve sz) (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi ve sz) check sz)  (only parsing).
+  mk_instr (pp_ve_sz name ve sz) (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi ve sz) (check sz) sz)  (only parsing).
 
 Notation mk_ve_instr_ww8_w_120 name semi check := (fun ve sz =>
-  mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi ve sz) check sz)  (only parsing).
+  mk_instr (pp_ve_sz name ve sz) (ww8_ty sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (semi ve sz) (check sz) sz)  (only parsing).
 
 Definition msb_dfl := MSB_CLEAR.
 
@@ -747,20 +747,20 @@ Definition none_sz (sz:wsize) (_:list asm_arg) : bool := true.
 (* One operand *)
 Fixpoint rec_1 (sz: wsize) (lf : list (wsize -> asm_arg -> bool)) (a: asm_arg) :=
   match lf with
-  | [::] => false
+  | [::]    => false
   | f :: lf => if (f sz a) == true then true else rec_1 sz lf a
   end.
 
 Definition apply_1 (sz: wsize) (f: list (wsize -> asm_arg -> bool)) (args: list asm_arg) : bool :=
   match args with
   | [:: a ] => rec_1 sz f a
-  | _          => false
+  | _       => false
   end.
 
 (* Two operands *)
 Fixpoint rec_2 (sz: wsize) (lf : list (wsize -> asm_arg -> asm_arg -> bool)) (a b: asm_arg) :=
   match lf with
-  | [::] => false
+  | [::]    => false
   | f :: lf => if (f sz a b) == true then true else rec_2 sz lf a b
   end.
 
@@ -772,7 +772,7 @@ Definition apply_2 (sz: wsize) (f: list (wsize -> asm_arg -> asm_arg -> bool)) (
 
 Fixpoint rec_2' (szi szo: wsize) (lf : list (wsize -> wsize -> asm_arg -> asm_arg -> bool)) (a b: asm_arg) :=
   match lf with
-  | [::] => false
+  | [::]    => false
   | f :: lf => if (f szi szo a b) == true then true else rec_2' szi szo lf a b
   end.
 
@@ -786,14 +786,27 @@ Definition apply_2' (szi szo: wsize) (f: list (wsize -> wsize -> asm_arg -> asm_
 (* Three operands *)
 Fixpoint rec_3 (sz: wsize) (lf : list (wsize -> asm_arg -> asm_arg -> asm_arg -> bool)) (a b c: asm_arg) :=
   match lf with
-  | [::] => false
+  | [::]    => false
   | f :: lf => if (f sz a b c) == true then true else rec_3 sz lf a b c
   end.
 
 Definition apply_3 (sz: wsize) (f: list (wsize -> asm_arg -> asm_arg -> asm_arg -> bool)) (args: list asm_arg) : bool :=
   match args with
   | [:: a ; b ; c] => rec_3 sz f a b c
-  | _          => false
+  | _              => false
+  end.
+
+(* Four operands *)
+Fixpoint rec_4 (sz: wsize) (lf : list (wsize -> asm_arg -> asm_arg -> asm_arg -> asm_arg -> bool)) (a b c d: asm_arg) :=
+  match lf with
+  | [::]    => false
+  | f :: lf => if (f sz a b c d) == true then true else rec_4 sz lf a b c d
+  end.
+
+Definition apply_4 (sz: wsize) (f: list (wsize -> asm_arg -> asm_arg -> asm_arg -> asm_arg -> bool)) (args: list asm_arg) : bool :=
+  match args with
+  | [:: a ; b ; c ; d] => rec_4 sz f a b c d
+  | _              => false
   end.
 
 (* ---------------------------------------------------------------- *)
@@ -825,47 +838,47 @@ Definition r_16 (sz:wsize) a :=
 (* ---------------------------------------------------------------- *)
 
 Definition rm_r (sz:wsize) a b :=
-  match a , b with
-  | Reg _ , Reg _ => true
-  | Adr _ , Reg _ => true
+  match a, b with
+  | Reg _, Reg _ => true
+  | Adr _, Reg _ => true
   (* dest cannot be glob *)
   | _, _ => false
   end.
 
 Definition r_rm (sz:wsize) a b :=
-  match a , b with
-  | Reg _ , Adr _ => true
-  | Reg _ , Reg _ => true
-  | Reg _ , Glob _ => true
+  match a, b with
+  | Reg _, Adr _ => true
+  | Reg _, Reg _ => true
+  | Reg _, Glob _ => true
   | _, _ => false
   end.
 
 Definition r_imm_eq (sz: wsize) a b :=
-  match a , b with
-  | Reg _ , Imm sz' _ => sz == sz'
+  match a, b with
+  | Reg _ , Imm sz' _ => (sz == sz')
   | _, _ => false
   end.
 
 Definition rm_imm_near_eq (sz: wsize) a b :=
-  match a , b with
-  | Reg _ , Imm sz' _ => near_eq sz sz'
-  | Adr _ , Imm sz' _ => near_eq sz sz'
+  match a, b with
+  | Reg _, Imm sz' _ => near_eq sz sz'
+  | Adr _, Imm sz' _ => near_eq sz sz'
   | _, _ => false
   end.
 
 Definition rm_imm8 (sz: wsize) a b :=
-  match a , b with
-  | Reg _ , Imm U8 _ => true
-  | Adr _ , Imm U8 _ => true
-  | Glob _ , Imm U8 _ => true (* need to be checked *)
+  match a, b with
+  | Reg _, Imm U8 _ => true
+  | Adr _, Imm U8 _ => true
+  | Glob _, Imm U8 _ => true (* need to be checked *)
   | _, _ => false
   end.
 
 Definition rm_imm_8 (sz: wsize) a b :=
-  match a , b with
-  | Reg _ , Imm U8 _ => (sz > U8)
-  | Adr _ , Imm U8 _ => (sz > U8)
-  | Glob _ , Imm U8 _ => (sz > U8) (* need to be checked *)
+  match a, b with
+  | Reg _, Imm U8 _ => (sz > U8)
+  | Adr _, Imm U8 _ => (sz > U8)
+  | Glob _, Imm U8 _ => (sz > U8) (* need to be checked *)
   | _, _ => false
   end.
 
@@ -878,10 +891,10 @@ Definition r_rm_8 (sz : wsize) a b :=
   end.
 
 Definition rm_r_8 (sz:wsize) a b :=
-  match a , b with
-  | Adr _ , Reg _ => (sz > U8)
-  | Reg _ , Reg _ => (sz > U8)
-  | Glob _ , Reg _ => (sz > U8) (* need to be checked *)
+  match a, b with
+  | Adr _, Reg _ => (sz > U8)
+  | Reg _, Reg _ => (sz > U8)
+  | Glob _, Reg _ => (sz > U8) (* need to be checked *)
   | _, _ => false
   end.
 
@@ -906,6 +919,34 @@ Definition r_rm_16_16 (sz sz': wsize) a b :=
   | Reg _, Reg _ => (sz > U16) && (sz' == U16)
   | Reg _, Adr _ => (sz > U16) && (sz' == U16)
   | Reg _, Glob _ => (sz > U16) && (sz' == U16)
+  | _ , _ => false
+  end.
+
+Definition xmm_rm_16 (sz: wsize) a b :=
+  match a, b with
+  | XMM _, Reg _ => (sz > U16)
+  | XMM _, Adr _ => (sz > U16)
+  | XMM _, Glob _ => (sz > U16)
+  | _ , _ => false
+  end.
+
+Definition xmm_r_16 (sz: wsize) a b :=
+  match a, b with
+  | XMM _, Reg _ => (sz > U16)
+  | _ , _ => false
+  end.
+
+Definition rm_xmm_16 (sz: wsize) a b :=
+  match a, b with
+  | Reg _, XMM _ => (sz > U16)
+  | Adr _, XMM _ => (sz > U16)
+  | Glob _, XMM _ => (sz > U16)
+  | _ , _ => false
+  end.
+
+Definition xmm_xmm (sz: wsize) a b :=
+  match a, b with
+  | XMM _, XMM _ => true
   | _ , _ => false
   end.
 
@@ -937,11 +978,57 @@ Definition rm_r_imm8_8 (sz : wsize) a b c :=
 
 Definition r_V_rm_16 (sz : wsize) (a b c: asm_arg) :=
   match a, b, c with
-  | Reg _ , _ , Reg _ => (sz > U16)
-  | Reg _ , _ , Adr _ => (sz > U16)
-  | Reg _ , _ , Glob _ => (sz > U16)
-  | _ , _ , _ => false
+  | Reg _, _, Reg _ => (sz > U16)
+  | Reg _, _, Adr _ => (sz > U16)
+  | Reg _, _, Glob _ => (sz > U16)
+  | _, _, _ => false
   end.
+
+
+Definition xmm_xmm_xmm (sz: wsize) a b c :=
+  match a, b, c with
+  | XMM _, XMM _, XMM _ => true
+  | _, _, _ => false
+  end.
+
+Definition xmm_xmm_imm8 (sz: wsize) a b c :=
+  match a, b, c with
+  | XMM _, XMM _, Imm U8 _ => true
+  | _, _, _ => false
+  end.
+
+Definition rm_xmm_imm8_eq8 (sz : wsize) a b c :=
+  match a, b, c with
+  | Reg _, XMM _, Imm U8 _ => (sz == U8)
+  | Adr _, XMM _, Imm U8 _ => (sz == U8)
+  (* dest cannot be Glob *)
+  | _, _, _ => false
+  end.
+
+Definition rm_xmm_imm8_16 (sz : wsize) a b c :=
+  match a, b, c with
+  | Reg _, XMM _, Imm U8 _ => (sz > U16)
+  | Adr _, XMM _, Imm U8 _ => (sz > U16)
+  (* dest cannot be Glob *)
+  | _, _, _ => false
+  end.
+
+(* ----------------------------------- *)
+
+Definition xmm_xmm_rm_imm8_16 (sz : wsize) a b c d :=
+  match a, b, c, d with
+  | XMM _, XMM _, Reg _, Imm U8 _ => (sz > U16)
+  | XMM _, XMM _, Adr _, Imm U8 _ => (sz > U16)
+  (* dest cannot be Glob *)
+  | _, _, _, _ => false
+  end.
+
+Definition xmm_xmm_xmm_imm8 (sz : wsize) a b c d :=
+  match a, b, c, d with
+  | XMM _, XMM _, XMM _, Imm U8 _ => true
+  | _, _, _, _ => false
+  end.
+
 
 (* ---------------------------------------------------------------- *)
 
@@ -995,8 +1082,35 @@ apply_3 sz [:: rm_r_imm8_8 ] args.
 Definition bswap sz (args: list asm_arg) :=
 apply_1 sz [:: r_16 ] args.
 
-End Checks.
+Definition movd_movq sz (args: list asm_arg) :=
+apply_2 sz [:: xmm_rm_16 ; rm_xmm_16 ] args. (* but it looks like our definition of movd is only [movd xmm rm] *)
 
+Definition xmm_xmm_ sz (args: list asm_arg) :=
+apply_2 sz [:: xmm_xmm ] args.
+
+Definition xmm_xmm_xmm_ sz (args: list asm_arg) :=
+apply_3 sz [:: xmm_xmm_xmm ] args.
+
+Definition xmm_xmm_imm8_ sz (args: list asm_arg) :=
+apply_3 sz [:: xmm_xmm_imm8 ] args.
+
+Definition vpextr sz (args: list asm_arg) :=
+apply_3 sz [:: rm_xmm_imm8_eq8 ; rm_xmm_imm8_16 ] args.
+
+Definition xmm_xmm_rm_imm8_16_ sz (args: list asm_arg) :=
+apply_4 sz [:: xmm_xmm_rm_imm8_16 ] args.
+
+Definition xmm_xmm_xmm_imm8_ sz (args: list asm_arg) :=
+apply_4 sz [:: xmm_xmm_xmm_imm8 ] args.
+
+Definition vpbroadcast sz (args: list asm_arg) :=
+apply_2 sz [:: xmm_r_16 ; xmm_xmm ] args.
+(* VPBROADCASTB/W/D/Q—Load with Broadcast Integer Data from General Purpose Register *)
+(* xmm_r_16 ;  *)
+(* VPBROADCAST—Load Integer and Broadcast *)
+(* xmm_xmm *)
+
+End Checks.
 
 Definition Ox86_MOV_instr               := mk_instr_w_w "MOV" x86_MOV msb_dfl         [:: E 1] [:: E 0] Checks.mov.
 Definition Ox86_MOVSX_instr             := mk_instr_w_w'_10 "MOVSX" x86_MOVSX         Checks.movsx_movzx.
@@ -1039,44 +1153,45 @@ Definition Ox86_SHRD_instr              := mk_instr_w2w8_b5w_01c0 "SHRD" x86_SHR
 Definition Ox86_BSWAP_instr             := mk_instr_w_w "BSWAP" x86_BSWAP msb_dfl     [:: E 0] [:: E 0] Checks.bswap.
 
 (* Vectorized instruction *)
-Definition Ox86_MOVD_instr              := mk_instr_w_w128_10   "MOVD"    x86_MOVD    fake_check.
-Definition Ox86_VMOVDQU_instr           := mk_instr_w_w         "VMOVDQU" x86_VMOVDQU MSB_CLEAR [:: E 1] [:: E 0] fake_check_sz.
-Definition Ox86_VPAND_instr             := mk_instr_w2_w_120    "VPAND"   x86_VPAND   fake_check.
-Definition Ox86_VPANDN_instr            := mk_instr_w2_w_120    "VPANDN"  x86_VPANDN  fake_check.
-Definition Ox86_VPOR_instr              := mk_instr_w2_w_120    "VPOR"    x86_VPOR    fake_check.
-Definition Ox86_VPXOR_instr             := mk_instr_w2_w_120    "VPXOR"   x86_VPXOR   fake_check.
-Definition Ox86_VPADD_instr             := mk_ve_instr_w2_w_120 "VPADD"   x86_VPADD   fake_check.
-Definition Ox86_VPSUB_instr             := mk_ve_instr_w2_w_120 "VPSUB"   x86_VPSUB   fake_check.
+Definition Ox86_MOVD_instr              := mk_instr_w_w128_10   "MOVD"    x86_MOVD    Checks.movd_movq.
+Definition Ox86_VMOVDQU_instr           := mk_instr_w_w         "VMOVDQU" x86_VMOVDQU MSB_CLEAR [:: E 1] [:: E 0] Checks.xmm_xmm_.
+Definition Ox86_VPAND_instr             := mk_instr_w2_w_120    "VPAND"   x86_VPAND   Checks.xmm_xmm_xmm_.
+Definition Ox86_VPANDN_instr            := mk_instr_w2_w_120    "VPANDN"  x86_VPANDN  Checks.xmm_xmm_xmm_.
+Definition Ox86_VPOR_instr              := mk_instr_w2_w_120    "VPOR"    x86_VPOR    Checks.xmm_xmm_xmm_.
+Definition Ox86_VPXOR_instr             := mk_instr_w2_w_120    "VPXOR"   x86_VPXOR   Checks.xmm_xmm_xmm_.
+Definition Ox86_VPADD_instr             := mk_ve_instr_w2_w_120 "VPADD"   x86_VPADD   Checks.xmm_xmm_xmm_.
+Definition Ox86_VPSUB_instr             := mk_ve_instr_w2_w_120 "VPSUB"   x86_VPSUB   Checks.xmm_xmm_xmm_.
 
-Definition Ox86_VPMULL_instr            := mk_ve_instr_w2_w_120 "VPMULL" x86_VPMULL fake_check.
-Definition Ox86_VPMULU_instr sz         := mk_instr (pp_s "VPMULU") (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (@x86_VPMULU sz) fake_check sz.
+Definition Ox86_VPMULL_instr            := mk_ve_instr_w2_w_120 "VPMULL" x86_VPMULL Checks.xmm_xmm_xmm_.
+Definition Ox86_VPMULU_instr sz         := mk_instr (pp_s "VPMULU") (w2_ty sz sz) (w_ty sz) [:: E 1 ; E 2] [:: E 0] MSB_CLEAR (@x86_VPMULU sz) (Checks.xmm_xmm_xmm_ sz) sz.
 
 (* 128 *)
-Definition Ox86_VPEXTR_instr ve         := mk_instr (pp_sz "VPEXTR" ve) w128w8_ty (w_ty ve) [:: E 1 ; E 2] [:: E 0] msb_dfl (@x86_VPEXTR ve) fake_check U128.
-Definition Ox86_VPINSR_instr (ve:velem) := mk_instr (pp_ve "VPINSR" ve) (w128ww8_ty ve) w128_ty [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (x86_VPINSR ve) fake_check U128.
+Definition Ox86_VPEXTR_instr sz         := mk_instr (pp_sz "VPEXTR" sz) w128w8_ty (w_ty sz) [:: E 1 ; E 2] [:: E 0] msb_dfl (@x86_VPEXTR sz) (Checks.vpextr sz) U128.
+Definition Ox86_VPINSR_instr (sz:velem) := mk_instr (pp_ve "VPINSR" sz) (w128ww8_ty sz) w128_ty [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (x86_VPINSR sz) (Checks.xmm_xmm_rm_imm8_16_ sz) U128.
+(*velem vs wsize ???? *)
 
-Definition Ox86_VPSLL_instr             := mk_ve_instr_ww8_w_120  "VPSLL"       x86_VPSLL       fake_check.
-Definition Ox86_VPSRL_instr             := mk_ve_instr_ww8_w_120  "VPSRL"       x86_VPSRL       fake_check.
-Definition Ox86_VPSRA_instr             := mk_ve_instr_ww8_w_120  "VPSRA"       x86_VPSRA       fake_check.
-Definition Ox86_VPSLLV_instr            := mk_ve_instr_w2_w_120   "VPSLLV"      x86_VPSLLV      fake_check.
-Definition Ox86_VPSRLV_instr            := mk_ve_instr_w2_w_120   "VPSRLV"      x86_VPSRLV      fake_check.
-Definition Ox86_VPSLLDQ_instr           := mk_instr_ww8_w_120     "VPSLLDQ"     x86_VPSLLDQ     fake_check.
-Definition Ox86_VPSRLDQ_instr           := mk_instr_ww8_w_120     "VPSRLDQ"     x86_VPSRLDQ     fake_check.
-Definition Ox86_VPSHUFB_instr           := mk_instr_w2_w_120      "VPSHUFB"     x86_VPSHUFB     fake_check.
-Definition Ox86_VPSHUFHW_instr          := mk_instr_ww8_w_120     "VPSHUFHW"    x86_VPSHUFHW    fake_check.
-Definition Ox86_VPSHUFLW_instr          := mk_instr_ww8_w_120     "VPSHUFLW"    x86_VPSHUFLW    fake_check.
-Definition Ox86_VPSHUFD_instr           := mk_instr_ww8_w_120     "VPSHUFD"     x86_VPSHUFD     fake_check.
-Definition Ox86_VPUNPCKH_instr          := mk_ve_instr_w2_w_120   "VPUNPCKH"    x86_VPUNPCKH    fake_check.
-Definition Ox86_VPUNPCKL_instr          := mk_ve_instr_w2_w_120   "VPUNPCKL"    x86_VPUNPCKL    fake_check.
-Definition Ox86_VPBLENDD_instr          := mk_instr_w2w8_w_1230   "VPBLENDD"    x86_VPBLENDD    fake_check.
-Definition Ox86_VPBROADCAST_instr       := mk_ve_instr_w_w_10     "VPBROADCAST" x86_VPBROADCAST fake_check.
+Definition Ox86_VPSLL_instr             := mk_ve_instr_ww8_w_120  "VPSLL"       x86_VPSLL       Checks.xmm_xmm_imm8_.
+Definition Ox86_VPSRL_instr             := mk_ve_instr_ww8_w_120  "VPSRL"       x86_VPSRL       Checks.xmm_xmm_imm8_.
+Definition Ox86_VPSRA_instr             := mk_ve_instr_ww8_w_120  "VPSRA"       x86_VPSRA       Checks.xmm_xmm_imm8_.
+Definition Ox86_VPSLLV_instr            := mk_ve_instr_w2_w_120   "VPSLLV"      x86_VPSLLV      Checks.xmm_xmm_xmm_.
+Definition Ox86_VPSRLV_instr            := mk_ve_instr_w2_w_120   "VPSRLV"      x86_VPSRLV      Checks.xmm_xmm_xmm_.
+Definition Ox86_VPSLLDQ_instr           := mk_instr_ww8_w_120     "VPSLLDQ"     x86_VPSLLDQ     Checks.xmm_xmm_imm8_.
+Definition Ox86_VPSRLDQ_instr           := mk_instr_ww8_w_120     "VPSRLDQ"     x86_VPSRLDQ     Checks.xmm_xmm_imm8_.
+Definition Ox86_VPSHUFB_instr           := mk_instr_w2_w_120      "VPSHUFB"     x86_VPSHUFB     Checks.xmm_xmm_xmm_.
+Definition Ox86_VPSHUFHW_instr          := mk_instr_ww8_w_120     "VPSHUFHW"    x86_VPSHUFHW    Checks.xmm_xmm_imm8_.
+Definition Ox86_VPSHUFLW_instr          := mk_instr_ww8_w_120     "VPSHUFLW"    x86_VPSHUFLW    Checks.xmm_xmm_imm8_.
+Definition Ox86_VPSHUFD_instr           := mk_instr_ww8_w_120     "VPSHUFD"     x86_VPSHUFD     Checks.xmm_xmm_imm8_.
+Definition Ox86_VPUNPCKH_instr          := mk_ve_instr_w2_w_120   "VPUNPCKH"    x86_VPUNPCKH    Checks.xmm_xmm_xmm_.
+Definition Ox86_VPUNPCKL_instr          := mk_ve_instr_w2_w_120   "VPUNPCKL"    x86_VPUNPCKL    Checks.xmm_xmm_xmm_.
+Definition Ox86_VPBLENDD_instr          := mk_instr_w2w8_w_1230   "VPBLENDD"    x86_VPBLENDD    Checks.xmm_xmm_xmm_imm8_.
+Definition Ox86_VPBROADCAST_instr       := mk_ve_instr_w_w_10     "VPBROADCAST" x86_VPBROADCAST Checks.vpbroadcast.
 
 (* 256 *)
-Definition Ox86_VBROADCASTI128_instr    := mk_instr (pp_s "VBROADCASTI128")  w128_ty       w256_ty [:: E 1]           [:: E 0] MSB_CLEAR (x86_VPBROADCAST U256) fake_check U256.
-Definition Ox86_VEXTRACTI128_instr      := mk_instr (pp_s "VEXTRACTI128")    w256w8_ty     w128_ty [:: E 1; E 2]      [:: E 0] MSB_CLEAR x86_VEXTRACTI128       fake_check U256.
-Definition Ox86_VINSERTI128_instr       := mk_instr (pp_s "VINSERTI128")     w256w128w8_ty w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VINSERTI128        fake_check U256.
-Definition Ox86_VPERM2I128_instr        := mk_instr (pp_s "VPERM2I128")      w256x2w8_ty   w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VPERM2I128         fake_check U256.
-Definition Ox86_VPERMQ_instr            := mk_instr (pp_s "VPERMQ")          w256w8_ty     w256_ty [:: E 1; E 2]      [:: E 0] MSB_CLEAR x86_VPERMQ             fake_check U256.
+Definition Ox86_VBROADCASTI128_instr    := mk_instr (pp_s "VBROADCASTI128")  w128_ty       w256_ty [:: E 1]           [:: E 0] MSB_CLEAR (x86_VPBROADCAST U256) (Checks.vpbroadcast U256) U256.
+Definition Ox86_VEXTRACTI128_instr      := mk_instr (pp_s "VEXTRACTI128")    w256w8_ty     w128_ty [:: E 1; E 2]      [:: E 0] MSB_CLEAR x86_VEXTRACTI128       (Checks.xmm_xmm_imm8_ U256) U256.
+Definition Ox86_VINSERTI128_instr       := mk_instr (pp_s "VINSERTI128")     w256w128w8_ty w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VINSERTI128        (Checks.xmm_xmm_xmm_imm8_ U256) U256.
+Definition Ox86_VPERM2I128_instr        := mk_instr (pp_s "VPERM2I128")      w256x2w8_ty   w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VPERM2I128         (Checks.xmm_xmm_xmm_imm8_ U256) U256.
+Definition Ox86_VPERMQ_instr            := mk_instr (pp_s "VPERMQ")          w256w8_ty     w256_ty [:: E 1; E 2]      [:: E 0] MSB_CLEAR x86_VPERMQ             (Checks.xmm_xmm_imm8_ U256) U256.
 
 Definition instr_desc o : instr_desc_t :=
   match o with
