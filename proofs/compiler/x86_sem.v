@@ -201,7 +201,6 @@ Definition eval_arg_in (s:x86_mem) (args:asm_args) (ty:stype) (ad:arg_desc) : ex
   match ty with
   | sword sz => eval_arg_in_word s args sz ad
   | sbool    => eval_arg_in_bool s args ad
-  (* FIXME *)
   | sint     => type_error
   | sarr _   => type_error
   end.
@@ -307,7 +306,6 @@ Definition mem_write_ty (f:msb_flag) (s:x86_mem) (args:asm_args) (ad:arg_desc) (
   match ty return sem_ot ty -> exec x86_mem with
    | sword sz => @mem_write_word f s args ad sz
    | sbool    => mem_write_bool s args ad
-  (* FIXME *)
    | sint     => fun _ => type_error
    | sarr _   => fun _ => type_error
    end.
@@ -333,6 +331,20 @@ Definition eval_instr_op idesc args (s:x86_mem) : exec x86_mem :=
   mem_write_res idesc.(id_msb_flag) args s p.
 
 (* -------------------------------------------------------------------- *)
+Definition is_special o := 
+  match o with
+  | LEA _ => true
+  | _     => false 
+  end.
+
+Definition eval_special o args m := 
+  match o, args with 
+  | LEA sz, [:: Reg r; Adr addr] =>
+    Let _ := check_size_16_64 sz in
+    let p := decode_addr m addr in
+    ok (mem_write_reg r (zero_extend sz p) m)
+  | _, _ => type_error
+  end.
 
 Definition eval_instr (i : asm) (s: x86_state) : exec x86_state :=
   match i with
@@ -340,6 +352,14 @@ Definition eval_instr (i : asm) (s: x86_state) : exec x86_state :=
   | JMP   lbl    => eval_JMP lbl s
   | Jcc   lbl ct => eval_Jcc lbl ct s
   | AsmOp o args =>
+    if is_special o then
+      Let m := eval_special o args s.(xm) in
+      ok {|
+        xm := m;
+        xc := s.(xc);
+        xip := s.(xip).+1
+      |}      
+    else 
     let id := instr_desc o in
     Let m := eval_instr_op id args s.(xm) in
     ok {|
