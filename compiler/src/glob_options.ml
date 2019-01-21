@@ -12,6 +12,7 @@ let ecfile = ref ""
 let ec_list = ref []
 let check_safety = ref true
 let relational = ref None
+let pointers = ref None
 
 let lea = ref false
 let set0 = ref false
@@ -56,6 +57,8 @@ let set_safety () = model := Safety
 let set_relational s =
   relational := Some (String.split_on_char ',' s)
 
+let set_pointers s =
+  pointers := Some (String.split_on_char ',' s)
 
 
 let print_strings = function
@@ -99,6 +102,7 @@ let options = [
     "-oec"     ,  Arg.Set_string ecfile , "[filename]: use filename as output destination for easycrypt extraction";
     "-CT" , Arg.Unit set_constTime      , ": generates model for constant time verification";
     "-safety", Arg.Unit set_safety      , ": generates model for safety verification";
+    "-pointers", Arg.String set_pointers, ": precise what variables are pointers";
     "-relational", Arg.String set_relational, ": use a relational abstraction for the given variables"
   ] @  List.map print_option poptions
 

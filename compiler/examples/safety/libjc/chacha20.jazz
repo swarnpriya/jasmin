@@ -755,7 +755,7 @@ fn rounds_x8(reg u256[16] k, stack u256 s_r16 s_r8) -> reg u256[16]
 
 
 
-fn chacha20_more_than_256(reg u64 output plain, reg u32 len, reg u64 key nonce, reg u32 counter)
+fn more_than_256(reg u64 output plain, reg u32 len, reg u64 key nonce, reg u32 counter)
 {
   stack u256[16] st;
   reg   u256[16]  k;
@@ -785,7 +785,7 @@ fn chacha20_more_than_256(reg u64 output plain, reg u32 len, reg u64 key nonce, 
 
 
 
-fn chacha20_less_than_257(reg u64 output plain, reg u32 len, reg u64 key nonce, reg u32 counter)
+fn less_than_257(reg u64 output plain, reg u32 len, reg u64 key nonce, reg u32 counter)
 {
   reg u256[4] st k1 k2;
 
@@ -815,7 +815,7 @@ fn chacha20_less_than_257(reg u64 output plain, reg u32 len, reg u64 key nonce, 
 export fn chacha20_avx2(reg u64 output plain, reg u32 len, reg u64 key nonce, reg u32 counter)
 {
   if(len < 257)
-  { chacha20_less_than_257(output, plain, len, key, nonce, counter); }
+  { less_than_257(output, plain, len, key, nonce, counter); }
   else
-  { chacha20_more_than_256(output, plain, len, key, nonce, counter); }
+  { more_than_256(output, plain, len, key, nonce, counter); }
 }

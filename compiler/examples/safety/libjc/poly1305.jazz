@@ -338,7 +338,7 @@ fn freeze(reg u64[3] h) -> reg u64[3]
 
 
 
-fn poly1305_ref3_setup(reg u64 k) -> reg u64[3], reg u64[2], reg u64, reg u64
+fn ref3_setup(reg u64 k) -> reg u64[3], reg u64[2], reg u64, reg u64
 {
   inline int i;
   reg u64[3] h;
@@ -353,29 +353,29 @@ fn poly1305_ref3_setup(reg u64 k) -> reg u64[3], reg u64[2], reg u64, reg u64
 
 
 
-fn poly1305_ref3_update(reg u64 in, reg u64 inlen, reg u64[3] h, reg u64[2] r, reg u64 r54) -> reg u64, reg u64, reg u64[3]
+fn ref3_update(reg u64 in, reg u64 len, reg u64[3] h, reg u64[2] r, reg u64 r54) -> reg u64, reg u64, reg u64[3]
 {
   reg u64[2] m;
 
-  while(inlen >= 16)
+  while(len >= 16)
   { m = load(in);
     h = add_bit(h, m, 1);
     h = mulmod(h, r, r54);
     in += 16;
-    inlen -= 16;
+    len -= 16;
   }
 
-  return in, inlen, h;
+  return in, len, h;
 }
 
 
 
-fn poly1305_ref3_last(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k, reg u64[3] h, reg u64[2] r, reg u64 r54)
+fn ref3_last(reg u64 out, reg u64 in, reg u64 len, reg u64 k, reg u64[3] h, reg u64[2] r, reg u64 r54)
 {
   reg u64[2] m, s;
 
-  if(inlen > 0)
-  { m = load_last(in, inlen);
+  if(len > 0)
+  { m = load_last(in, len);
     h = add_bit(h, m, 0); // load last already sets the last bit
     h = mulmod(h, r, r54);
   }
@@ -389,16 +389,15 @@ fn poly1305_ref3_last(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k, reg u64
 
 
 
-fn poly1305_ref3_local(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
+fn local(reg u64 out, reg u64 in, reg u64 len, reg u64 k)
 {
   reg u64[3] h;
   reg u64[2] r;
-  reg u64 len r54;
+  reg u64 r54;
 
-  h, r, r54, k = poly1305_ref3_setup(k);
-  len = inlen;
-  in, len, h = poly1305_ref3_update(in, len, h, r, r54);
-  poly1305_ref3_last(out, in, len, k, h, r, r54);
+  h, r, r54, k = ref3_setup(k);
+  in, len, h = ref3_update(in, len, h, r, r54);
+  ref3_last(out, in, len, k, h, r, r54);
 }
 
 
@@ -486,7 +485,7 @@ fn broadcast_r4(stack u256[5] r1234, stack u256[4] r1234x5) -> stack u256[5], st
 
 
 
-fn poly1305_avx2_setup(reg u64[2] r, reg u64 r54) ->
+fn avx2_setup(reg u64[2] r, reg u64 r54) ->
   stack u256[5], stack u256[4],
   stack u256[5], stack u256[4]
 {
@@ -1129,7 +1128,7 @@ fn final_avx2_v0(
 
 
 // update AVX2
-fn poly1305_avx2_update(
+fn avx2_update(
   reg u64 in, reg u64 len,
   stack u256[5] r4444,
   stack u256[4] r4444x5,
@@ -1165,31 +1164,29 @@ fn poly1305_avx2_update(
 
 
 
-fn poly1305_avx2_wrapper(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
+fn wrapper(reg u64 out, reg u64 in, reg u64 len, reg u64 k)
 {
   reg u64[3] h;
   reg u64[2] r;
-  reg u64 len r54;
+  reg u64 r54;
   stack u256[5] r4444   r1234;
   stack u256[4] r4444x5 r1234x5;
 
-  len = inlen;
+  h, r, r54, k = ref3_setup(k);
+  r4444, r4444x5, r1234, r1234x5 = avx2_setup(r, r54);
 
-  h, r, r54, k = poly1305_ref3_setup(k);
-  r4444, r4444x5, r1234, r1234x5 = poly1305_avx2_setup(r, r54);
+  in, len, h = avx2_update(in, len, r4444, r4444x5, r1234, r1234x5);
+  in, len, h = ref3_update(in, len, h, r, r54);
 
-  in, len, h = poly1305_avx2_update(in, len, r4444, r4444x5, r1234, r1234x5);
-  in, len, h = poly1305_ref3_update(in, len, h, r, r54);
-
-  poly1305_ref3_last(out, in, len, k, h, r, r54);
+  ref3_last(out, in, len, k, h, r, r54);
 }
 
 
 
-export fn poly1305_avx2(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
+export fn poly1305_avx2(reg u64 out, reg u64 in, reg u64 len, reg u64 k)
 {
-  if(inlen < 257)
-  { poly1305_ref3_local(out, in, inlen, k); }
+  if(len < 257)
+  { local(out, in, len, k); }
   else
-  { poly1305_avx2_wrapper(out, in, inlen, k); }
+  { wrapper(out, in, len, k); }
 }
