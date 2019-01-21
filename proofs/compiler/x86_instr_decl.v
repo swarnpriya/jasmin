@@ -141,14 +141,8 @@ Definition pp_ve_sz (s: string) (ve: velem) (sz: wsize) (_: unit) : string := s 
 Definition pp_ve    (s: string) (ve: velem)             (_: unit)   : string := s ++ " " ++ string_of_velem ve.
 
 (* ----------------------------------------------------------------------------- *)
-Notation xword8   := (xword U8).
-Notation xword16  := (xword U16).
-Notation xword32  := (xword U32).
-Notation xword64  := (xword U64).
-Notation xword128 := (xword U128).
-Notation xword256 := (xword U256).
 
-Definition b_ty             := [:: xbool].
+(* Definition b_ty             := [:: xbool].
 Definition b4_ty            := [:: xbool; xbool; xbool; xbool].
 Definition b5_ty            := [:: xbool; xbool; xbool; xbool; xbool].
 
@@ -176,7 +170,7 @@ Definition w128w8_ty        := [:: xword128; xword8].
 Definition w128ww8_ty sz    := [:: xword128; xword sz; xword8].
 Definition w256w8_ty        := [:: xword256; xword8].
 Definition w256w128w8_ty    := [:: xword256; xword128; xword8].
-Definition w256x2w8_ty      := [:: xword256; xword256; xword8].
+Definition w256x2w8_ty      := [:: xword256; xword256; xword8]. *)
 
 (* -------------------------------------------------------------------- *)
 (* ----------------------------------------------------------------------------- *)
@@ -192,51 +186,51 @@ Definition ZF_of_word sz (w : word sz) :=
 
 (* -------------------------------------------------------------------- *)
   (*  OF; CF; SF;    PF;    ZF  *)
-Definition rflags_of_bwop sz (w : word sz) : (sem_xtuple b5_ty) :=
+Definition rflags_of_bwop sz (w : word sz) : (sem_tuple b5_ty) :=
   (*  OF;  CF;    SF;           PF;           ZF  *)
   (:: Some false, Some false, Some (SF_of_word w), Some (PF_of_word w) & Some (ZF_of_word w)).
 
 (* -------------------------------------------------------------------- *)
 (*  OF; CF ;SF; PF; ZF  *)
-Definition rflags_of_aluop sz (w : word sz) (vu vs : Z) : (sem_xtuple b5_ty) :=
+Definition rflags_of_aluop sz (w : word sz) (vu vs : Z) : (sem_tuple b5_ty) :=
   (*  OF;             CF;                SF;           PF;           ZF  *)
   (:: Some (wsigned  w != vs), Some (wunsigned w != vu), Some (SF_of_word w), Some (PF_of_word w) & Some (ZF_of_word w )).
 
 (* -------------------------------------------------------------------- *)
-Definition rflags_of_mul (ov : bool) : (sem_xtuple b5_ty) :=
+Definition rflags_of_mul (ov : bool) : (sem_tuple b5_ty) :=
   (*  OF; CF; SF;    PF;    ZF  *)
   (:: Some ov, Some ov, None, None & None).
 
 (* -------------------------------------------------------------------- *)
 
-Definition rflags_of_div : (sem_xtuple b5_ty):=
+Definition rflags_of_div : (sem_tuple b5_ty):=
   (*  OF;    CF;    SF;    PF;    ZF  *)
   (:: None, None, None, None & None).
 
 (* -------------------------------------------------------------------- *)
 
-Definition rflags_of_andn sz (w: word sz) : (sem_xtuple b5_ty) :=
+Definition rflags_of_andn sz (w: word sz) : (sem_tuple b5_ty) :=
   (* OF ; CF ; SF ; PF ; ZF *)
   (:: Some false , Some false , Some (SF_of_word w) , None & Some (ZF_of_word w) ).
 
 (* -------------------------------------------------------------------- *)
 
-Definition rflags_None_w {sz} w : (sem_xtuple (b5w_ty sz)):=
+Definition rflags_None_w {sz} w : (sem_tuple (b5w_ty sz)):=
   (*  OF;    CF;    SF;    PF;    ZF  *)
   (:: None, None, None, None, None & w).
 
 
 (* -------------------------------------------------------------------- *)
 (*  OF; SF; PF; ZF  *)
-Definition rflags_of_aluop_nocf sz (w : word sz) (vs : Z) : (sem_xtuple b4_ty) :=
+Definition rflags_of_aluop_nocf sz (w : word sz) (vs : Z) : (sem_tuple b4_ty) :=
   (*  OF                 SF          ; PF          ; ZF          ] *)
   (:: Some (wsigned   w != vs), Some (SF_of_word w), Some (PF_of_word w) & Some (ZF_of_word w)).
 
 Definition flags_w {l1} (bs: ltuple l1) {sz} (w: word sz):=
-  (merge_tuple bs (w : sem_xtuple (w_ty sz))).
+  (merge_tuple bs (w : sem_tuple (w_ty sz))).
 
 Definition flags_w2 {l1} (bs: ltuple l1) {sz} w :=
-  (merge_tuple bs (w : sem_xtuple (w2_ty sz sz))).
+  (merge_tuple bs (w : sem_tuple (w2_ty sz sz))).
 
 Definition rflags_of_aluop_w sz (w : word sz) (vu vs : Z) :=
   flags_w (rflags_of_aluop w vu vs) w.
@@ -249,7 +243,7 @@ Definition rflags_of_bwop_w sz (w : word sz) :=
 
 (* -------------------------------------------------------------------- *)
 
-Notation "'ex_tpl' A" := (exec (sem_xtuple A)) (at level 200, only parsing).
+Notation "'ex_tpl' A" := (exec (sem_tuple A)) (at level 200, only parsing).
 
 Definition x86_MOV sz (x: word sz) : exec (word sz) :=
   Let _ := check_size_8_64 sz in
@@ -372,7 +366,7 @@ Definition x86_NEG sz (w: word sz) : ex_tpl (b5w_ty sz) :=
   let vs := (- wsigned w)%Z in
   let v := (- w)%R in
   ok (flags_w
-  ((:: Some (wsigned   v != vs), Some ((w != 0)%R), Some (SF_of_word v), Some (PF_of_word v) & Some (ZF_of_word v)) : sem_xtuple b5_ty)
+  ((:: Some (wsigned   v != vs), Some ((w != 0)%R), Some (SF_of_word v), Some (PF_of_word v) & Some (ZF_of_word v)) : sem_tuple b5_ty)
   v).
 
 Definition x86_INC sz (w: word sz) : ex_tpl (b4w_ty sz) :=

@@ -177,14 +177,14 @@ Definition Oset0_instr     :=
                  ok (::vf, vf, vf, vf, Some true & (0%R: word sz))).                  
 Definition Ox86MOVZX32_instr := sem_type.mk_instr (pp_s "Ox86_MOVZX32") [:: sword32] [:: sword64] (λ x : u32, ok (zero_extend U64 x)) U32.
 
-Definition xtype2stype (ty:xtype) := 
+(* Definition xtype2stype (ty:xtype) := 
   match ty with
   | xword sz => sword sz
   | xbool    => sbool
   end.
-
-Lemma noarr_xtype (tin : seq (arg_desc * xtype)) : all is_not_sarr [seq xtype2stype i | i <- [seq i.2 | i <- tin]].
-Proof. elim: tin => [ | [ a [sz | ]] tin hrec] //=. Qed.
+ *)
+(* Lemma noarr_xtype (tin : seq (arg_desc * xtype)) : all is_not_sarr [seq xtype2stype i | i <- [seq i.2 | i <- tin]].
+Proof. elim: tin => [ | [ a [sz | ]] tin hrec] //=. Qed. *)
 
 Definition get_instr o := 
   match o with
@@ -200,10 +200,11 @@ Definition get_instr o :=
       let id := instr_desc instr1 in
       {|
         str  := id.(id_str_jas);
-        tin  := [seq xtype2stype i.2 | i <- id.(id_in)];
-        tout := [seq xtype2stype i.2 | i <- id.(id_out)];
+        tin  := [seq i.2 | i <- id.(id_in)];
+        tout := [seq i.2 | i <- id.(id_out)];
         semi := id.(id_semi); 
-        tin_narr := noarr_xtype id.(id_in);
+        tin_narr := refl_equal;
+(* is_true (all is_not_sarr [seq i.2 | i <- id.(id_in)]); *)
         wsizei := id.(id_wsize);
       |} 
     end
