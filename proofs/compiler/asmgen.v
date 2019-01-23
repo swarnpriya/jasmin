@@ -8,9 +8,9 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(*Variant source_position :=
+Variant source_position :=
   | InArgs of nat
-  | InRes  of nat. *)
+  | InRes  of nat.
 
 Definition pexpr_of_lval ii (lv:lval) : ciexec pexpr :=
   match lv with
@@ -20,7 +20,7 @@ Definition pexpr_of_lval ii (lv:lval) : ciexec pexpr :=
   | Laset _ _ _ => cierror ii (Cerr_assembler (AsmErr_string "pexpr_of_lval"))
   end.
 
-(*
+
 Definition get_loarg ii (outx: seq lval) (inx:seq pexpr) (d:source_position) : ciexec pexpr :=
   let o2e {A} (m: option A) :=
       match m with
@@ -31,7 +31,7 @@ Definition get_loarg ii (outx: seq lval) (inx:seq pexpr) (d:source_position) : c
   | InArgs x => o2e (onth inx x)
   | InRes  x => o2e (onth outx x) >>= pexpr_of_lval ii
   end.
-*)
+
 Definition nmap (T:Type) := nat -> option T.
 Definition nget (T:Type) (m:nmap T) (n:nat) := m n.
 Definition nset (T:Type) (m:nmap T) (n:nat) (t:T) :=
@@ -52,7 +52,7 @@ Definition check_oreg o a :=
   | Some _, _       => false
   end.
 
-Definition compile_arg ii (ade: (arg_desc * xtype) * pexpr) (m: nmap asm_arg) : ciexec (nmap asm_arg) :=
+Definition compile_arg ii (ade: (arg_desc * stype) * pexpr) (m: nmap asm_arg) : ciexec (nmap asm_arg) :=
   let ad := ade.1 in
   let e := ade.2 in
   match ad.1 with
@@ -73,11 +73,11 @@ Definition compile_arg ii (ade: (arg_desc * xtype) * pexpr) (m: nmap asm_arg) : 
       else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : not compatible asm_arg"))              
     end
   end.
-    
+
 Definition compile_args ii adts (es:pexprs) (m: nmap asm_arg) := 
   foldM (compile_arg ii) m (zip adts es).
 
-Definition check_sopn_arg ii (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc * xtype) :=
+Definition check_sopn_arg ii (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc * stype) :=
   match adt.1 with
   | ADImplicit i => eq_expr x (Pvar (VarI (var_of_implicit i) xH))
   | ADExplicit n o =>
@@ -101,7 +101,7 @@ Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) :=
     else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false check")) 
   end.
 
-Lemma sem_ot_oxt ty : sem_ot (xtype2stype ty) = sem_oxt ty.
+(* Lemma sem_ot_oxt ty : sem_ot (xtype2stype ty) = sem_oxt ty.
 Proof. by case: ty. Qed.
 
 Lemma sem_t_xt ty : sem_t (xtype2stype ty) = sem_xt ty.
@@ -129,15 +129,17 @@ Lemma sem_prod_xprod (tin tout : seq (arg_desc * xtype)) :
 Proof.
   by rewrite sem_prod_xprod_T sem_tuple_xtuple.
 Qed.
-
+ *)
 Definition Instr_of_instr (id:instr_desc_t) : Instruction := 
   {|
      str  := id.(id_str_jas);
-     tin  := [seq xtype2stype i.2 | i <- id.(id_in)];
-     tout := [seq xtype2stype i.2 | i <- id.(id_out)];
-     semi := eq_rect _ (λ A : Type, A) (id_semi id) _ 
-                    (sem_prod_xprod (id_in id) (id_out id)); 
-     tin_narr := noarr_xtype id.(id_in);
+     tin  := [seq i.2 | i <- id.(id_in)];
+     tout := [seq i.2 | i <- id.(id_out)];
+     semi := id_semi id;
+(* eq_rect _ (λ A : Type, A) (id_semi id) _ 
+                    (sem_prod_xprod (id_in id) (id_out id));  *)
+     tin_narr := refl_equal;
+(* noarr_xtype id.(id_in); *)
      wsizei := id.(id_wsize);
   |}. 
 
