@@ -29,8 +29,8 @@ let hndl_apr_exc e = match e with
 (***********************)
 
 module Aparam = struct
-  (* Number of unrolling of a loop body before applying the widening. Higher values
-     yield a more precise (and more costly) analysis. *)
+  (* Number of unrolling of a loop body before applying the widening. Higher
+     values yield a more precise (and more costly) analysis. *)
   let k_unroll = 1;;
 
   assert (k_unroll >= 0)
@@ -60,6 +60,7 @@ module Aparam = struct
 
   (* Add disjunction with if statement when possible *)
   let if_disj = true
+
 
   (***********************)
   (* Printing parameters *)
@@ -92,11 +93,7 @@ end = struct
 
   let htv = Hashtbl.create ~random:false 16
 
-  let rec mk_uniq main_decl (glob_decls, fun_decls) =
-    let m_decl = mk_f main_decl in
-    (m_decl, (mk_globs glob_decls, List.map mk_f fun_decls))
-
-  and mk_gv v = v ^ "##g"
+  let rec mk_gv v = v ^ "##g"
 
   and mk_glob (ws, t, i) = (ws, mk_gv t, i)
 
@@ -162,6 +159,13 @@ end = struct
     | Pif (e, el, er)  -> Pif (mk_expr fn e, mk_expr fn el, mk_expr fn er)
 
   and mk_exprs fn exprs = List.map (mk_expr fn) exprs
+
+  let mk_uniq main_decl (glob_decls, fun_decls) =
+    Hashtbl.clear ht_uniq;
+    Hashtbl.clear htv;
+
+    let m_decl = mk_f main_decl in
+    (m_decl, (mk_globs glob_decls, List.map mk_f fun_decls))
 
 end
 
@@ -233,16 +237,12 @@ type atype =
   | Aarray of ty gvar                   (* Array *)
   | AarrayEl of ty gvar * wsize * int   (* Array element *)
 
-type spos =
-  | Main
-  | Sif of int
-
 type mvar =
   | Temp of string * int * ty   (* Temporary variable *)
   | WTemp of string * int * ty  (* Temporary variable (weak updates) *)
   | Mglobal of Name.t * ty      (* Global variable *)
   | Mvalue of atype             (* Variable value *)
-  | MinValue of ty gvar * spos  (* Variable initial value *)
+  | MinValue of ty gvar         (* Variable initial value *)
   | MvarOffset of ty gvar       (* Variable offset *)
   | MmemRange of mem_loc        (* Memory location range *)
 
@@ -255,7 +255,8 @@ let weak_update v = match v with
   | MmemRange _ -> true
   | WTemp _ -> true
 
-let string_of_mloc = function MemLoc s -> s.v_name
+let string_of_mloc = function
+  | MemLoc s -> s.v_name
 
 let string_of_atype = function
   | Avar s -> "v_" ^ s.v_name
@@ -267,11 +268,10 @@ let string_of_mvar = function
   | Temp (s, i, _) -> "tmp_" ^ s ^ "_" ^ string_of_int i
   | WTemp (s, i, _) -> "wtmp_" ^ s ^ "_" ^ string_of_int i
   | Mglobal (n,_) -> "g_" ^ n
-  | MinValue (s, Main) -> "inv_" ^ s.v_name
-  | MinValue (s, Sif i) -> "inv@" ^ string_of_int i ^ "_" ^ s.v_name
+  | MinValue s -> "inv_" ^ s.v_name
   | Mvalue at -> string_of_atype at
   | MvarOffset s -> "o_" ^ s.v_name
-  | MmemRange loc -> "rmem_" ^ string_of_mloc loc
+  | MmemRange loc -> "mem_" ^ string_of_mloc loc
 
 let pp_mvar fmt v = Format.fprintf fmt "%s" (string_of_mvar v)
 
@@ -309,7 +309,7 @@ let ty_mvar = function
   | Temp (_,_,ty) -> ty
   | WTemp (_,_,ty) -> ty
   | Mglobal (_,ty) -> ty
-  | MinValue (s,_) -> s.v_ty
+  | MinValue s -> s.v_ty
   | Mvalue at -> ty_atype at
   | MvarOffset _ -> Bty Int
   | MmemRange _ -> Bty Int
@@ -2371,7 +2371,7 @@ module PIMake (PW : ProgWrap) : PartInit = struct
     let vdom = function
       | Temp _ | WTemp _ -> assert false
 
-      | Mvalue (Avar v) | MinValue (v,_) ->
+      | Mvalue (Avar v) | MinValue v ->
         if Sv.mem v v_rel then Ppl 0 else Nrd 0
 
       | MvarOffset v
@@ -2477,74 +2477,6 @@ module PIMake (PW : ProgWrap) : PartInit = struct
               |> List.map (fun (c,l) -> (c, List.rev l
                                             |> add_zero ))
 
-
-  (* (\* Inherits constraints from callers *\)
-   * let eq_inherit l_dis =
-   *   let eq = fpt f (Mv.equal Sv.equal) pa_res.pa_eq in
-   *
-   *   let l_dis_add =
-   *     List.filter (fun v ->
-   *         not (List.mem_assoc v l_dis))
-   *       ( Mv.bindings eq
-   *         |> List.filter (fun (v,_) -> match v.v_ty with
-   *             | Bty (U _) -> true
-   *             | _ -> false)
-   *         |> List.map (fun (x,_) -> mvar_of_var x) )
-   *     |> List.map (fun x -> (x,[])) in
-   *   let l_dis_ext = l_dis @ l_dis_add in
-   *
-   *   List.fold_left (fun acc (c,l) ->
-   *       let eq_vs = Pa.dp_v eq (ty_gvar_of_mvar c |> oget)
-   *                   |> Sv.to_list
-   *                   |> List.map mvar_of_var in
-   *
-   *       let n_zs =
-   *         List.map (fun v ->
-   *             try List.assoc v l_dis with Not_found -> []) eq_vs
-   *         |> List.flatten  in
-   *       (c, List.sort_uniq Pervasives.compare (n_zs @ l))
-   *       :: acc
-   *     ) [] l_dis_ext
-   *   |> List.rev
-   *   |> List.filter (fun (_,l) -> l <> [])
-   *
-   * let l_dis =
-   *   if not constraints_cross_fun_calls then l_dis
-   *   else eq_inherit l_dis
-   *
-   *
-   * let l_cdis = List.map (fun (c,zs) ->
-   *     let vc = Array.of_list [avar_of_mvar c]
-   *     and empty_var_array = Array.make 0 (Var.of_string "") in
-   *     let env = Environment.make vc empty_var_array in
-   *     let mc = Mtexpr.var env c in
-   *
-   *     (c,List.map (fun z ->
-   *          let ze = mtexpr_of_bigint env z in
-   *          Mtcons.make (Mtexpr.binop Texpr0.Sub ze mc) Tcons1.SUPEQ) zs)
-   *   ) l_dis
-   *
-   * let rec make_sk f = function
-   *   | [] -> f ()
-   *   | c :: t -> Ptree.Node(c, f (), make_sk f t)
-   *
-   * let rec sk_f ldis = match ldis with
-   *   | [] -> Ptree.Leaf ()
-   *   | cs :: ldis' -> make_sk (fun () -> sk_f ldis') cs
-   *
-   * let skel vs =
-   *   let l_ceq = List.filter (fun (c,_) -> List.mem (avar_of_mvar c) vs) l_ceq
-   *               |> List.map snd in
-   *   let l_cdis = List.filter (fun (c,_) -> List.mem (avar_of_mvar c) vs) l_cdis
-   *               |> List.map snd in
-   *   make_sk (fun () -> sk_f l_cdis) l_ceq;;
-   *
-   * let all_vs = List.map fst l_ceq @ List.map fst l_cdis
-   *              |> List.sort_uniq Pervasives.compare
-   *              |> List.map avar_of_mvar
-   *
-   * let () = Format.eprintf "@[<v 2>Partition tree skeleton:@;@[%a@]@;@]@."
-   *     (Ptree.pp_ptree (fun fmt () -> Format.fprintf fmt "Leaf")) (skel all_vs) *)
 end
 
 
@@ -2765,8 +2697,21 @@ end
 (* Points-to Abstract Domain *)
 (*****************************)
 
+(* Pointer expressions *)
+type ptr_expr = PtVars of mvar list | PtTopExpr
 
-type pt_expr = | PtVars of mvar list | PtTop
+(* Symbolic pointers *)
+type ptrs = Ptrs of mem_loc list | TopPtr
+
+let pp_memloc fmt = function MemLoc v -> Format.fprintf fmt "%s" v.v_name
+
+let pp_memlocs fmt l =
+  pp_list ~sep:(fun fmt () -> Format.fprintf fmt "@ ") pp_memloc fmt l
+
+let pp_ptr fmt = function
+  | Ptrs m -> Format.fprintf fmt "%a" pp_memlocs m
+  | TopPtr -> Format.fprintf fmt "\#TopPtr"
+
 
 module type PointsTo = sig
   type t
@@ -2782,13 +2727,13 @@ module type PointsTo = sig
   val forget_list : t -> mvar list -> t
   val is_included : t -> t -> bool
 
-  val top_mem_loc : t -> mem_loc list
+  (* val top_mem_loc : t -> mem_loc list *)
 
   val expand : t -> mvar -> mvar list -> t
   val fold : t -> mvar list -> t
 
-  val var_points_to : t -> mvar -> mem_loc list
-  val assign_pt_expr : t -> mvar -> pt_expr -> t
+  val var_points_to : t -> mvar -> ptrs
+  val assign_ptr_expr : t -> mvar -> ptr_expr -> t
 
   val unify : t -> t -> t
 
@@ -2796,51 +2741,52 @@ module type PointsTo = sig
 end
 
 module PointsToImpl : PointsTo = struct
-  type t = { pts : mem_loc list Ms.t;
-             top : mem_loc list }
+  (* Points-to abstract value *)
+  type t = { pts : mem_loc list Ms.t }
+             (* top : mem_loc list } *)
 
   let make mls =
     let string_of_var v = match v.v_ty with
-      | Arr _ -> raise (Aint_error "We should not have arrays as inputs to \
-                                    export functions.")
+      | Arr _ -> raise (Aint_error "Array(s) in export function's inputs")
       | Bty _ -> string_of_mvar (Mvalue (Avar v)) in
 
     let pts = List.fold_left (fun pts x -> match x with
         | MemLoc v -> Ms.add (string_of_var v) [x] pts)
         Ms.empty mls in
-    { pts = pts ; top = mls }
+    { pts = pts }
+    (* { pts = pts ; top = mls } *)
 
   let meet : t -> t -> t = fun t t' ->
     let pts'' =
       Ms.merge (fun _ aop bop -> match aop,bop with
-          (* TODO: pt fix here *)
-          | None, x | x, None -> x
+          | None, x | x, None -> x (* None corresponds to TopPtr *)
 
           | Some l, Some l' ->
             let l_inter = List.filter (fun x -> List.mem x l') l in
-            Some (List.sort_uniq Pervasives.compare l_inter ))
-        t.pts t'.pts in
+            Some (List.sort_uniq Pervasives.compare l_inter )
+        ) t.pts t'.pts in
+
     { t with pts = pts'' }
 
   let join : t -> t -> t = fun t t' ->
     let pts'' =
       Ms.merge (fun _ aop bop -> match aop,bop with
-          (* TODO: pt fix here *)
-          | None, _ | _, None -> None
+          | None, _ | _, None -> None (* None corresponds to TopPtr *)
 
           | Some l, Some l' ->
-            Some (List.sort_uniq Pervasives.compare (l @ l')))
-        t.pts t'.pts in
+            Some (List.sort_uniq Pervasives.compare (l @ l'))
+        ) t.pts t'.pts in
+
     { t with pts = pts'' }
 
   let widening t t' = join t t'
 
-  let svar_points_to : t -> string -> mem_loc list = fun t s_var ->
-    if Ms.mem s_var t.pts then Ms.find s_var t.pts else []
+  let svar_points_to : t -> string -> ptrs = fun t s_var ->
+    if Ms.mem s_var t.pts then Ptrs (Ms.find s_var t.pts)
+    else TopPtr
 
-  let var_points_to : t -> mvar -> mem_loc list = fun t var ->
-    let s_var = string_of_mvar var in
-    svar_points_to t s_var
+  let var_points_to : t -> mvar -> ptrs = fun t var ->
+    svar_points_to t (string_of_mvar var)
 
   let forget_list : t -> mvar list -> t = fun t l_rem ->
     let vl_rem = List.map string_of_mvar l_rem in
@@ -2848,39 +2794,47 @@ module PointsToImpl : PointsTo = struct
 
   let is_included : t -> t -> bool = fun t t' ->
     Ms.for_all (fun v l ->
-        let l' = svar_points_to t' v in
-        List.for_all (fun x -> List.mem x l') l) t.pts
+        if Ms.mem v t'.pts then true
+        else
+          let l' = Ms.find v t'.pts in
+          List.for_all (fun x -> List.mem x l') l
+      ) t.pts
 
-  let top_mem_loc : t -> mem_loc list = fun t -> t.top
+  (* let top_mem_loc : t -> mem_loc list = fun t -> t.top *)
 
-  let assign_pt_expr : t -> mvar -> pt_expr -> t = fun t v e ->
-    let v_pts = match e with
-      | PtTop -> t.top
-      | PtVars el ->
+  let join_ptrs_list ptrss =
+    let rec aux acc = function
+      | [] -> Ptrs (List.sort_uniq Pervasives.compare acc)
+      | TopPtr :: _ -> TopPtr
+      | Ptrs l :: tail -> aux (l @ acc) tail in
+
+    aux [] ptrss
+
+  let pt_assign : t -> string -> ptrs -> t = fun t v ptrs -> match ptrs with
+    | Ptrs vpts -> { t with pts = Ms.add v vpts t.pts }
+    | TopPtr -> { t with pts = Ms.remove v t.pts }
+
+  let assign_ptr_expr : t -> mvar -> ptr_expr -> t = fun t v e -> match e with
+    | PtTopExpr -> { t with pts = Ms.remove (string_of_mvar v) t.pts }
+    | PtVars el ->
+      let v_pts =
         List.fold_left (fun acc var ->
-            var_points_to t var @ acc) [] el
-        |> List.sort_uniq Pervasives.compare in
-    { t with pts = Ms.add (string_of_mvar v) v_pts t.pts }
+            var_points_to t var :: acc) [] el
+        |> join_ptrs_list in
+
+      pt_assign t (string_of_mvar v) v_pts
 
   let unify : t -> t -> t = meet
 
   let expand : t -> mvar -> mvar list -> t = fun t v l ->
     let v_pts = var_points_to t v in
-    let pts' = List.fold_left (fun acc v' ->
-        Ms.add (string_of_mvar v') v_pts acc) t.pts l in
-    { t with pts = pts' }
+    List.fold_left (fun t v' -> pt_assign t (string_of_mvar v') v_pts ) t l
 
   let fold : t -> mvar list -> t = fun t l -> match l with
     | [] -> assert false
     | v :: tail ->
-      let t' = assign_pt_expr t v (PtVars l) in
+      let t' = assign_ptr_expr t v (PtVars l) in
       forget_list t' tail
-
-  let pp_memlocs ppf l =
-    pp_list ~sep:(fun fmt () -> Format.fprintf fmt "@ ")
-      (fun ppf x -> match x with
-           MemLoc v -> Format.fprintf ppf "%s" v.v_name)
-      ppf l
 
   let print ppf t =
     Format.fprintf ppf "@[<hov 4>* Points-to:@ %a@]@;"
@@ -3081,7 +3035,7 @@ module type AbsNumBoolType = sig
   val is_included : t -> t -> bool
   val is_bottom : t -> bool
 
-  val top_mem_loc : t -> mem_loc list
+  (* val top_mem_loc : t -> mem_loc list *)
 
   val expand : t -> mvar -> mvar list -> t
   val fold : t -> mvar list -> t
@@ -3093,8 +3047,8 @@ module type AbsNumBoolType = sig
   val assign_sexpr : ?force:bool -> t -> mvar -> s_expr -> t
   val assign_bexpr : t -> string -> btcons -> t
 
-  val var_points_to : t -> mvar -> mem_loc list
-  val assign_pt_expr : t -> mvar -> pt_expr -> t
+  val var_points_to : t -> mvar -> ptrs
+  val assign_ptr_expr : t -> mvar -> ptr_expr -> t
 
   val meet_btcons : t -> btcons -> t
 
@@ -3235,7 +3189,7 @@ module AbsBoolNoRel (AbsNum : AbsNumT) (Pt : PointsTo)
     && (for_all2 AbsNum.NR.is_included t.bool t'.bool)
     && (Pt.is_included t.points_to t'.points_to)
 
-  let top_mem_loc : t -> mem_loc list = fun t -> Pt.top_mem_loc t.points_to
+  (* let top_mem_loc : t -> mem_loc list = fun t -> Pt.top_mem_loc t.points_to *)
 
   let is_bottom : t -> bool = fun t -> AbsNum.R.is_bottom t.num
 
@@ -3372,8 +3326,8 @@ module AbsBoolNoRel (AbsNum : AbsNumT) (Pt : PointsTo)
 
   let var_points_to t v = Pt.var_points_to t.points_to v
 
-  let assign_pt_expr t v pt_e =
-    { t with points_to = Pt.assign_pt_expr t.points_to v pt_e }
+  let assign_ptr_expr t v pt_e =
+    { t with points_to = Pt.assign_ptr_expr t.points_to v pt_e }
 
   let meet_btcons : t -> btcons -> t = fun t c ->
     let cn = abs_eval_btcons t c in
@@ -3550,6 +3504,55 @@ type safe_cond =
   | Valid of wsize * ty gvar * expr
   | NotZero of wsize * expr
 
+let pp_var = Printer.pp_var ~debug:false
+let pp_expr = Printer.pp_expr ~debug:false
+let pp_ws fmt ws = Format.fprintf fmt "%i" (int_of_ws ws)
+
+let pp_safety_cond fmt = function
+  | Initv x -> Format.fprintf fmt "is_init %a" pp_var x
+  | Initai(x,ws,e) ->
+    Format.fprintf fmt "is_init (w%d)%a.[%a]" (int_of_ws ws) pp_var x pp_expr e
+  | Inita(x,n) -> Format.fprintf fmt "is_init[%i] %a" n pp_var x
+  | NotZero(sz,e) -> Format.fprintf fmt "%a <>%a zero" pp_expr e pp_ws sz
+  | InBound(n,ws,e)  ->
+    Format.fprintf fmt "in_bound: %a-th block of (U%d) words in array of \
+                        length %i U8"
+      pp_expr e (int_of_ws ws) n
+  | Valid (sz, x, e) ->
+    Format.fprintf fmt "is_valid %s + %a W%a" x.v_name pp_expr e pp_ws sz
+
+type violation_loc =
+  | InProg of Prog.L.t
+  | InReturn of funname
+
+type violation = violation_loc * safe_cond
+
+let pp_violation_loc fmt = function
+  | InProg loc -> Format.fprintf fmt "%a" L.pp_sloc loc
+  | InReturn fn -> Format.fprintf fmt "%s return" fn.fn_name
+
+let pp_violation fmt (loc,cond) =
+  Format.fprintf fmt "%a: %a"
+    pp_violation_loc loc
+    pp_safety_cond cond
+
+let pp_violation fmt violations =
+  Format.fprintf fmt "@[<v 2>*** Safety Violation(s):@;\
+                      @[<v>%a@]@;@]"
+    (pp_list pp_violation) violations
+
+let vloc_compare v v' = match v, v' with
+  | InReturn fn, InReturn fn' -> Pervasives.compare fn fn'
+  | InProg _, InReturn _ -> 1
+  | InReturn _, InProg _ -> -1
+  | InProg l, InProg l' ->
+    Pervasives.compare (fst l.loc_start) (fst l'.loc_start)
+
+let v_compare v v' =
+  let c = vloc_compare (fst v) (fst v') in
+  if c <> 0 then c
+  else Pervasives.compare (snd v) (snd v')
+
 let add64 x e = Papp2 (E.Oadd ( E.Op_w Type.U64), Pvar x, e)
 
 let in_bound x ws e =
@@ -3700,14 +3703,12 @@ let fun_args_no_offset f_decl = List.map mvar_of_var f_decl.f_args
 
 let fun_args f_decl = fun_args_no_offset f_decl |> add_offsets
 
-let in_cp_var spos v = match v with
-  | Mvalue (Avar v) -> Some (MinValue (v,spos))
+let in_cp_var v = match v with
+  | Mvalue (Avar v) -> Some (MinValue v)
   | _ -> None
 
-let fun_in_args_no_offset spos f_decl =
-  fun_args_no_offset f_decl |> List.map (in_cp_var spos)
-
-(* let fun_in_args f_decl = fun_args f_decl |> List.map in_cp_var *)
+let fun_in_args_no_offset f_decl =
+  fun_args_no_offset f_decl |> List.map in_cp_var
 
 let fun_rets_no_offsets f_decl =
   List.map (fun x -> L.unloc x |> mvar_of_var) f_decl.f_ret
@@ -3769,8 +3770,7 @@ let word_interval signed ws =
     Interval.of_mpqf (Mpqf.of_int 0) up_mpq
 
 (* We wrap lin_expr as an out_i word.
-   On unsigned word, we do:
-   ((lin_expr % 2^n) + 2^n) % 2^n) *)
+   On unsigned word, we do: ((lin_expr % 2^n) + 2^n) % 2^n) *)
 (* TODO: this is correct only on unsigned words *)
 let wrap_lin_expr n lin_expr =
   let env = Mtexpr.(lin_expr.env) in
@@ -3850,7 +3850,7 @@ end = struct
                   env : s_env;
                   prog : unit prog;
                   s_effects : mem_loc list;
-                  violation : bool }
+                  violations : violation list }
 
   (* Return true iff the linear expression overflows *)
   let linexpr_overflow abs lin_expr signed ws =
@@ -3923,7 +3923,7 @@ end = struct
     | None -> arr_full_range x
 
   (* Collect all variables appearing in e. *)
-  let pt_expr_of_expr abs e =
+  let ptr_expr_of_expr abs e =
     let exception Expr_contain_load in
     let rec aux acc e = match e with
       | Pbool _ | Parr_init _ | Pconst _ -> acc
@@ -3942,7 +3942,7 @@ end = struct
 
       | Pif (_,e1,e2) | Papp2 (_, e1, e2) -> aux (aux acc e1) e2 in
 
-    try PtVars (aux [] e) with Expr_contain_load -> PtTop
+    try PtVars (aux [] e) with Expr_contain_load -> PtTopExpr
 
   exception Unop_not_supported of E.sop1
 
@@ -4333,7 +4333,7 @@ end = struct
          empty relational abstraction *)
       let f_args = if f_args = [] then [dummy_mvar] else f_args in
 
-      let f_in_args = List.map (in_cp_var Main) f_args
+      let f_in_args = List.map in_cp_var f_args
       and m_locs = List.map (fun mloc -> MmemRange mloc ) env.m_locs in
 
 
@@ -4367,7 +4367,8 @@ end = struct
         env = env;
         prog = (glob_decls, fun_decls);
         s_effects = [];
-        violation = false }
+        violations = [] }
+
       |> init_args (fun_args main_decl)
 
   (* Checks that all safety conditions hold, except for valid memory access. *)
@@ -4414,25 +4415,29 @@ end = struct
     | Valid _ -> true
 
   (* Update abs with the abstract memory range for memory accesses. *)
-  let rec mem_safety_apply (abs, s_effect) = function
-    | Valid (ws,x,e) ->
-      let pts = AbsDom.var_points_to abs (mvar_of_var x) in
-      if List.length pts = 1 then
-        let pt = List.hd pts in
-        let x_o = Mtexpr.var (AbsDom.get_env abs) (MvarOffset x) in
-        let lin_e = linearize_wexpr abs e in
-        let c_ws =
-          ((int_of_ws ws) / 8)
-          |> Coeff.s_of_int
-          |> Mtexpr.cst (AbsDom.get_env abs) in
-        let ws_plus_e = Mtexpr.binop Texpr1.Add c_ws lin_e in
-        let sexpr = Mtexpr.binop Texpr1.Add x_o ws_plus_e
-                    |> sexpr_from_simple_expr in
+  let rec mem_safety_apply (abs, violations, s_effect) = function
+    | Valid (ws,x,e) as pv ->
+      begin match AbsDom.var_points_to abs (mvar_of_var x) with
+        | Ptrs pts ->
+          if List.length pts = 1 then
+            let pt = List.hd pts in
+            let x_o = Mtexpr.var (AbsDom.get_env abs) (MvarOffset x) in
+            let lin_e = linearize_wexpr abs e in
+            let c_ws =
+              ((int_of_ws ws) / 8)
+              |> Coeff.s_of_int
+              |> Mtexpr.cst (AbsDom.get_env abs) in
+            let ws_plus_e = Mtexpr.binop Texpr1.Add c_ws lin_e in
+            let sexpr = Mtexpr.binop Texpr1.Add x_o ws_plus_e
+                        |> sexpr_from_simple_expr in
 
-        ( AbsDom.assign_sexpr abs (MmemRange pt) sexpr,
-          if List.mem pt s_effect then s_effect else pt :: s_effect )
-      else assert false         (* TEMP abs *)
-    | _ -> (abs, s_effect)
+            ( AbsDom.assign_sexpr abs (MmemRange pt) sexpr,
+              violations,
+              if List.mem pt s_effect then s_effect else pt :: s_effect)
+          else (abs, pv :: violations, s_effect)
+        | TopPtr -> (abs, pv :: violations, s_effect) end
+
+    | _ -> (abs, violations, s_effect)
 
   let rec check_safety_rec state unsafe = function
     | [] -> unsafe
@@ -4444,35 +4449,18 @@ end = struct
     | [] -> a
     | c :: t -> mem_safety_rec (mem_safety_apply a c) t
 
-  let pp_var = Printer.pp_var ~debug:false
-  let pp_expr = Printer.pp_expr ~debug:false
-  let pp_ws fmt ws = Format.fprintf fmt "%i" (int_of_ws ws)
 
-  let pp_safety_cond fmt = function
-    | Initv x -> Format.fprintf fmt "is_init %a" pp_var x
-    | Initai(x,ws,e) ->
-      Format.fprintf fmt "is_init (w%d)%a.[%a]" (int_of_ws ws) pp_var x pp_expr e
-    | Inita(x,n) -> Format.fprintf fmt "is_init[%i] %a" n pp_var x
-    | NotZero(sz,e) -> Format.fprintf fmt "%a <>%a zero" pp_expr e pp_ws sz
-    | InBound(n,ws,e)  ->
-      Format.fprintf fmt "in_bound: %a-th block of (U%d) words in array of \
-                          length %i U8"
-        pp_expr e (int_of_ws ws) n
-    | Valid (sz, x, e) ->
-      Format.fprintf fmt "is_valid %s + %a W%a" x.v_name pp_expr e pp_ws sz
+  let add_violations : astate -> violation list -> astate = fun state ls ->
+    { state with violations = List.sort_uniq v_compare (ls @ state.violations) }
 
-  let rec check_safety state conds =
-    let unsafe = check_safety_rec state [] conds in
-    let state =
-      if unsafe <> [] then begin
-        Format.eprintf "@[<v>*** Safety Violation(s):@;@[<v>%a@]@;@]@."
-          (pp_list pp_safety_cond) unsafe;
-        { state with violation = true } end
-      else state in
-
-    let abs, s_effects = mem_safety_rec (state.abs, state.s_effects) conds in
-    { state with abs = abs;
-                 s_effects = s_effects }
+  let rec check_safety state loc conds =
+    let vsc = check_safety_rec state [] conds in
+    let abs, mvsc, s_effects =
+      mem_safety_rec (state.abs, [], state.s_effects) conds in
+    let state = { state with abs = abs; s_effects = s_effects } in
+    let unsafe = vsc @ mvsc |> List.map (fun x -> (loc,x)) in
+    if unsafe <> [] then Format.eprintf "%a@." pp_violation unsafe;
+    add_violations state unsafe
 
   type mlvar = MLnone | MLvar of mvar | MLvars of mvar list
 
@@ -4519,9 +4507,9 @@ end = struct
 
   let valid_offset_var abs ws_o y =
     if ws_o = Bty (U (U64)) then
-      let my = mvar_of_var (L.unloc y) in
-      let y_pts = AbsDom.var_points_to abs my in
-      List.length y_pts = 1
+      match AbsDom.var_points_to abs (mvar_of_var (L.unloc y)) with
+      | TopPtr -> false
+      | Ptrs ypts -> List.length ypts = 1
     else false
 
   (* Evaluate the offset abstraction *)
@@ -4558,7 +4546,7 @@ end = struct
               (* Numerical abstraction *)
               let a = AbsDom.assign_sexpr a vi ei in
               (* Points-to abstraction *)
-              AbsDom.assign_pt_expr a vi (PtVars [eiv]))
+              AbsDom.assign_ptr_expr a vi (PtVars [eiv]))
             a (List.init n (fun i -> i))
 
         | _ -> assert false end
@@ -4584,8 +4572,8 @@ end = struct
         let abs = AbsDom.assign_sexpr state.abs mvar s_expr in
 
         (* Points-to abstraction *)
-        let pt_expr = pt_expr_of_expr state.abs e in
-        let abs = AbsDom.assign_pt_expr abs mvar pt_expr in
+        let ptr_expr = ptr_expr_of_expr state.abs e in
+        let abs = AbsDom.assign_ptr_expr abs mvar ptr_expr in
 
         (* Offset abstraction *)
         let abs = aeval_offset abs out_ty mvar e in
@@ -4685,8 +4673,8 @@ end = struct
             let abs = AbsDom.assign_sexpr abs mlv s_expr in
 
             (* Points-to abstraction *)
-            let pt_expr = PtVars [rvar] in
-            let abs = AbsDom.assign_pt_expr abs mlv pt_expr in
+            let ptr_expr = PtVars [rvar] in
+            let abs = AbsDom.assign_ptr_expr abs mlv ptr_expr in
 
             (* Offset abstraction *)
             match ty_gvar_of_mvar rvar with
@@ -4782,8 +4770,8 @@ end = struct
                   prog = state.prog;
                   s_effects = List.unique (state.s_effects @ fstate.s_effects);
                   cstack = state.cstack;
-                  violation = state.violation
-                              || fstate.violation } in
+                  violations = List.sort_uniq v_compare
+                      (state.violations @ fstate.violations) } in
 
     (* Finally, we assign the returned values in the corresponding lvalues *)
     let f_decl = get_fun_def fstate.prog fname |> oget in
@@ -4878,7 +4866,7 @@ end = struct
       else
         (* We check the safety conditions *)
         let conds = safe_instr ginstr in
-        let state = check_safety state conds in
+        let state = check_safety state (InProg (fst ginstr.i_loc)) conds in
         aeval_ginstr_aux ginstr state
 
   and aeval_ginstr_aux : ('ty,'info) ginstr -> astate -> astate =
@@ -4939,7 +4927,7 @@ end = struct
 
         (* We now check that e is safe *)
         let conds = safe_e e in
-        let state = check_safety state conds in
+        let state = check_safety state (InProg (fst ginstr.i_loc)) conds in
 
         let oec = bexpr_to_btcons e state.abs in
 
@@ -5036,7 +5024,7 @@ end = struct
 
         (* We check the safety conditions of the return *)
         let conds = safe_return f_decl in
-        let fstate = check_safety fstate conds in
+        let fstate = check_safety fstate (InReturn fn) conds in
 
         debug(print_return ginstr fstate.abs fn.fn_name);
 
@@ -5131,8 +5119,9 @@ end = struct
 
 
   let print_mem_ranges state f_decl =
-    let in_vars = fun_in_args_no_offset Main f_decl
-                  |> List.map otolist |> List.flatten in
+    let in_vars = fun_in_args_no_offset f_decl
+                  |> List.map otolist
+                  |> List.flatten in
     let vars_to_keep = in_vars @ get_mem_range state.env in
     let vars = in_vars @ fun_vars f_decl state.env in
     let rem_vars = List.fold_left (fun acc v ->
@@ -5168,17 +5157,18 @@ end = struct
 
       (* We check the safety conditions of the return *)
       let conds = safe_return main_decl in
-      let final_st = check_safety final_st conds in
+      let final_st = check_safety final_st (InReturn main_decl.f_name) conds in
 
+      Format.eprintf "%a" pp_violation final_st.violations;
       print_mem_ranges final_st main_decl;
 
       (* TODO: temporary *)
-      assert (not final_st.violation);
+      assert (final_st.violations = []);
 
       let () = debug (fun () -> print_stats ()) in
       let () = Sys.set_signal Sys.sigint old_handler in
 
-      not final_st.violation
+      final_st.violations = []
     with
     | Manager.Error _ as e -> hndl_apr_exc e
 end
