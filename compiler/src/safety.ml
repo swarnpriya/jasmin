@@ -2304,11 +2304,7 @@ let mtexpr_of_bigint env z =
   let mpq_z = Mpq.init_set_str (B.to_string z) ~base:10 in
   Mtexpr.cst env (Coeff.s_of_mpq mpq_z)
 
-module type PartInit = sig
-  module VD : VDomWrap
-end
-
-module PIMake (PW : ProgWrap) : PartInit = struct
+module PIMake (PW : ProgWrap) : VDomWrap = struct
 
   (* We compute the dependency heuristic graph *)
   let pa_res = Pa.pa_make PW.main PW.prog
@@ -2366,117 +2362,19 @@ module PIMake (PW : ProgWrap) : PartInit = struct
       (Sv.cardinal v_pt)
       pp_rel_vars v_pt
 
+  let vdom = function
+    | Temp _ | WTemp _ -> assert false
 
-  module VD = struct
-    let vdom = function
-      | Temp _ | WTemp _ -> assert false
+    | Mvalue (Avar v) | MinValue v ->
+      if Sv.mem v v_rel then Ppl 0 else Nrd 0
 
-      | Mvalue (Avar v) | MinValue v ->
-        if Sv.mem v v_rel then Ppl 0 else Nrd 0
+    | MvarOffset v
+    | MmemRange (MemLoc v) ->
+      if Sv.mem v v_pt then Ppl 0 else Nrd 0
 
-      | MvarOffset v
-      | MmemRange (MemLoc v) ->
-        if Sv.mem v v_pt then Ppl 0 else Nrd 0
-
-      | Mglobal _
-      | Mvalue (AarrayEl _)
-      | Mvalue (Aarray _) -> Nrd 0
-  end
-
-  exception Bad_op2
-
-  let valid_op2 = function
-    | E.Oeq (E.Op_w _) -> Tcons1.EQ
-    | E.Oneq (E.Op_w _) -> Tcons1.EQ (* We use the same than for Oeq *)
-    | E.Olt (E.Cmp_w _) -> Tcons1.SUP
-    | E.Ole (E.Cmp_w _) -> Tcons1.SUPEQ
-    | E.Ogt (E.Cmp_w _) -> Tcons1.SUP
-    | E.Oge (E.Cmp_w _) -> Tcons1.SUPEQ
-    | _ -> raise Bad_op2
-
-  let inc z = B.add z (B.of_int 1)
-  let dec z = B.sub z (B.of_int 1)
-
-  let mvar_of_var v = match v.v_ty with
-    | Bty (U _) -> Mvalue (Avar v)
-    | _ -> raise Bad_op2
-
-  let mvar_of_var_i v = mvar_of_var (L.unloc v)
-
-  (* ------------------------------------------------------- *)
-  (*    We now build the skeleton for the partition tree.    *)
-  (* ------------------------------------------------------- *)
-
-  (* We gather in l a list of constraints between a variable v and a
-     constant c:
-     - equality constraints v = c
-     - inequalities v <= c  *)
-  let l = List.fold_left (fun acc e -> match e with
-      | Papp2 (op2, e1, e2) ->
-        begin try
-            let cop2 = valid_op2 op2 in
-            let e1,e2 = swap_op2 op2 e1 e2 in
-            (* Remark: we assume that z does not overflow in the cast form int
-               to words *)
-            match cop2,e1,e2 with
-            | Tcons1.EQ, Pvar v, Papp1 (E.Oword_of_int _, Pconst z)
-            | Tcons1.EQ, Papp1 (E.Oword_of_int _, Pconst z), Pvar v ->
-              (Tcons1.EQ, mvar_of_var_i v, z) :: acc
-
-            | Tcons1.SUP, Pvar v, Papp1 (E.Oword_of_int _, Pconst z) ->
-              (Tcons1.SUPEQ, mvar_of_var_i v, dec z) :: acc
-
-            | Tcons1.SUPEQ, Papp1 (E.Oword_of_int _, Pconst z), Pvar v ->
-              (Tcons1.SUPEQ, mvar_of_var_i v, dec z) :: acc
-
-            | Tcons1.SUPEQ, Pvar v, Papp1 (E.Oword_of_int _, Pconst z) ->
-              (Tcons1.SUPEQ, mvar_of_var_i v, z) :: acc
-
-            | Tcons1.SUP, Papp1 (E.Oword_of_int _, Pconst z), Pvar v ->
-              (Tcons1.SUPEQ, mvar_of_var_i v, z) :: acc
-
-            | _ -> acc
-          with Bad_op2 -> acc end
-      | _ -> acc
-    ) [] pa_res.if_conds
-
-  let luniq = List.sort_uniq Pervasives.compare l
-
-  let p_cmp (_,v,z) (_,v',z') =
-    if v = v' then Pervasives.compare z z'
-    else Pervasives.compare v v'
-
-  (* Equalities constraints *)
-  let l_eq = List.filter (function (Tcons1.EQ,_,_) -> true | _ -> false) luniq
-             |> List.sort p_cmp
-
-  let l_ceq = List.map (fun (_,c,z) ->
-      let vc = Array.of_list [avar_of_mvar c]
-      and empty_var_array = Array.make 0 (Var.of_string "") in
-      let env = Environment.make vc empty_var_array in
-      let mc = Mtexpr.var env c in
-
-      let ze = mtexpr_of_bigint env z in
-      (c,Mtcons.make (Mtexpr.binop Texpr0.Sub ze mc) Tcons1.EQ)) l_eq
-
-  (* Disequalities constraints *)
-  let f_fun = function
-    |  (Tcons1.SUPEQ,v,_) -> VD.vdom v = Ppl 0
-    | _ -> false
-
-  let add_zero l = match l with
-    | x :: _ -> if B.equal x B.zero then l else B.zero :: l
-    | [] -> assert false
-
-  let l_dis = List.filter f_fun luniq
-              |> List.sort p_cmp
-              |> List.fold_left (fun acc (_,c,z) -> match acc with
-                  | [] -> [c,[z]]
-                  | (c',l) :: r -> if c = c' then  (c,z :: l) :: r
-                    else (c,[z]) :: acc) []
-              |> List.map (fun (c,l) -> (c, List.rev l
-                                            |> add_zero ))
-
+    | Mglobal _
+    | Mvalue (AarrayEl _)
+    | Mvalue (Aarray _) -> Nrd 0
 end
 
 
@@ -2665,10 +2563,7 @@ module type AbsNumT = sig
 end
 
 module AbsNumTMake (PW : ProgWrap) : AbsNumT = struct
-
-  module PI = PIMake (PW)
-
-  module VDW = PI.VD
+  module VDW = PIMake (PW)
 
   module RProd = AbsNumProd (VDW) (AbsNumI(BoxManager)) (AbsNumI(PplManager))
 
