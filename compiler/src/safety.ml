@@ -73,7 +73,7 @@ module Aparam = struct
   let glob_no_print = true
 
   (* Turn on printing of non-relational variables *)
-  let nrel_no_print = false
+  let nrel_no_print = ref false
 
   (* Turn on printing of unconstrained variables *)
   let ignore_unconstrained = true
@@ -1068,44 +1068,11 @@ module AbsNumI (Manager : AprManager) : AbsNumType = struct
     let () = List.iteri (fun i c -> Lincons1.array_set arr i c) l in
     arr
 
-  (* (\* REM *\)
-   * let thrs env =
-   *   let j = Var.of_string "v_j" in
-   *   let len = Var.of_string "v_len#avx2_update" in
-   *   let len2 = Var.of_string "v_len#ref3_update" in
-   *   let lco = if Environment.mem_var env j then
-   *       let c = lcons env j (Mpqf.of_int 16) true false in
-   *       let lc = Lincons1.make c Lincons0.SUP in
-   *       Format.eprintf "lincons: %a\n" Lincons1.print lc;
-   *       Some lc
-   *     else None in
-   *   let lcbo = if Environment.mem_var env len then
-   *       let c = lcons env len (Mpqf.of_int 0) false false in
-   *       let lc = Lincons1.make c Lincons0.SUPEQ in
-   *       Format.eprintf "lincons: %a\n" Lincons1.print lc;
-   *       Some lc
-   *     else None in
-   *   let lcco = if Environment.mem_var env len then
-   *       let c = lcons env len (Mpqf.of_int 128) false true in
-   *       let lc = Lincons1.make c Lincons0.SUPEQ in
-   *       Format.eprintf "lincons: %a\n" Lincons1.print lc;
-   *       Some lc
-   *     else None in
-   *   let lcdo = if Environment.mem_var env len2 then
-   *       let c = lcons env len2 (Mpqf.of_int 16) false true in
-   *       let lc = Lincons1.make c Lincons0.SUPEQ in
-   *       Format.eprintf "lincons: %a\n" Lincons1.print lc;
-   *       Some lc
-   *     else None in
-   *
-   *   let cons = otolist lco @ otolist lcbo @ otolist lcco @ otolist lcdo in
-   *   to_earray env cons *)
-
   let thrs_of_oc oc env =
     match omap_dfl (fun x -> Mtcons.to_lincons x env) None oc with
     | None -> []
     | Some lc ->
-      Format.eprintf "threshold: %a\n" Lincons1.print lc;
+      debug(fun () -> Format.eprintf "threshold: %a\n" Lincons1.print lc);
       [lc]
 
 
@@ -1317,7 +1284,7 @@ module AbsNumI (Manager : AprManager) : AbsNumType = struct
 
       let vars_p = List.filter (fun v ->
           (not Aparam.ignore_unconstrained ||
-           (not Aparam.nrel_no_print || is_relational ()) &&
+           (not !Aparam.nrel_no_print || is_relational ()) &&
            not (Abstract1.is_variable_unconstrained man a v)) &&
           not (variables_ignore v)) vars in
 
@@ -1454,9 +1421,13 @@ let is_prefix u v =
     String.sub v 0 (String.length u) = u
   else false
 
+type analyzer_param = { relationals : string list option;
+                        pointers : string list option }
+
 module type ProgWrap = sig
   val main : unit Prog.func
   val prog : unit Prog.prog
+  val param : analyzer_param
 end
 
 module type VDomWrap = sig
@@ -1706,9 +1677,13 @@ module AbsNumProd (VDW : VDomWrap) (NonRel : AbsNumType) (PplDom : AbsNumType)
       let pp_map pp_el fmt l =
         pp_list pp_el fmt (List.map snd (Mdom.bindings l)) in
 
-      Format.fprintf fmt "@[<v 0>* NonRel:@;%a* Rel:@;%a@]"
-        (pp_map (NonRel.print ~full:full)) a.nrd
-        (pp_map (PplDom.print ~full:full)) a.ppl
+      if Mdom.cardinal a.nrd = 0 then
+        Format.fprintf fmt "@[<v 0>* Rel:@;%a@]"
+          (pp_map (PplDom.print ~full:full)) a.ppl
+      else
+        Format.fprintf fmt "@[<v 0>* NonRel:@;%a* Rel:@;%a@]"
+          (pp_map (NonRel.print ~full:full)) a.nrd
+          (pp_map (PplDom.print ~full:full)) a.ppl
 
   let change_environment a mvars =
     let (ores,pres) = split_doms mvars in
@@ -2329,7 +2304,7 @@ module PIMake (PW : ProgWrap) : VDomWrap = struct
      Glob_options.relational to v.
      - the variable appears in while loops conditions. *)
   let sv_ini =
-    match !Glob_options.relational with
+    match PW.param.relationals with
     | None -> PW.main.f_args |> Sv.of_list
     | Some v_rel ->
       List.filter (fun v -> List.mem v.v_name v_rel) PW.main.f_args
@@ -2342,7 +2317,7 @@ module PIMake (PW : ProgWrap) : VDomWrap = struct
   (* v is a pointer variable iff there is a direct flow from the intersection
      of PW.main.f_args and Glob_options.pointers to v. *)
   let pt_ini =
-    match !Glob_options.pointers with
+    match PW.param.pointers with
     | None -> PW.main.f_args |> Sv.of_list
     | Some v_pt ->
       List.filter (fun v -> List.mem v.v_name v_pt) PW.main.f_args
@@ -2355,12 +2330,13 @@ module PIMake (PW : ProgWrap) : VDomWrap = struct
       (List.sort (fun v v' -> Pervasives.compare v.v_name v'.v_name)
          (Sv.elements rel))
 
-  let () = Format.eprintf "@[<hov 2>%d relational variables:@ @,%a@]@;\
-                           @[<hov 2>%d pointers:@ @,%a@]@;@."
-      (Sv.cardinal v_rel)
-      pp_rel_vars v_rel
-      (Sv.cardinal v_pt)
-      pp_rel_vars v_pt
+  let () = debug(fun () ->
+      Format.eprintf "@[<hov 2>%d relational variables:@ @,%a@]@;\
+                      @[<hov 2>%d pointers:@ @,%a@]@;@."
+        (Sv.cardinal v_rel)
+        pp_rel_vars v_rel
+        (Sv.cardinal v_pt)
+        pp_rel_vars v_pt)
 
   let vdom = function
     | Temp _ | WTemp _ -> assert false
@@ -2605,7 +2581,7 @@ let pp_memlocs fmt l =
 
 let pp_ptr fmt = function
   | Ptrs m -> Format.fprintf fmt "%a" pp_memlocs m
-  | TopPtr -> Format.fprintf fmt "\#TopPtr"
+  | TopPtr -> Format.fprintf fmt "#TopPtr"
 
 
 module type PointsTo = sig
@@ -3431,10 +3407,12 @@ let pp_violation fmt (loc,cond) =
     pp_violation_loc loc
     pp_safety_cond cond
 
-let pp_violation fmt violations =
-  Format.fprintf fmt "@[<v 2>*** Safety Violation(s):@;\
-                      @[<v>%a@]@;@]"
-    (pp_list pp_violation) violations
+let pp_violations fmt violations =
+  if violations = [] then
+    Format.fprintf fmt "@[<v>*** No Safety Violation@;@]"
+  else
+    Format.fprintf fmt "@[<v 2>*** Safety Violation(s):@;@[<v>%a@]@;@]"
+      (pp_list pp_violation) violations
 
 let vloc_compare v v' = match v, v' with
   | InReturn fn, InReturn fn' -> Pervasives.compare fn fn'
@@ -3725,7 +3703,9 @@ module ItMap = Map.Make(ItKey)
 (************************)
 
 module AbsInterpreter (PW : ProgWrap) : sig
-  val analyze : unit -> bool
+  val analyze : unit -> violation list
+                        * (Format.formatter -> unit -> unit)
+                        * (Format.formatter -> mvar -> unit)
 end = struct
 
   (* We ensure that all variable names are unique *)
@@ -3736,6 +3716,7 @@ end = struct
   module AbsDom = AbsDomMake (struct
       let main = main_decl
       let prog = prog
+      let param = PW.param
     end)
 
 
@@ -4354,7 +4335,7 @@ end = struct
       mem_safety_rec (state.abs, [], state.s_effects) conds in
     let state = { state with abs = abs; s_effects = s_effects } in
     let unsafe = vsc @ mvsc |> List.map (fun x -> (loc,x)) in
-    if unsafe <> [] then Format.eprintf "%a@." pp_violation unsafe;
+    if unsafe <> [] then Format.eprintf "%a@." pp_violations unsafe;
     add_violations state unsafe
 
   type mlvar = MLnone | MLvar of mvar | MLvars of mvar list
@@ -4655,9 +4636,10 @@ end = struct
     let fstate = forget_no_side_effect fstate fstate.s_effects in
     let fname = List.hd fstate.cstack in
 
-    Format.eprintf "@[<v 0>Side effects of %s: @[<hov 2>%a@]@]@."
-      fname.fn_name
-      (pp_list pp_mvar) (List.map (fun x -> MmemRange x) fstate.s_effects);
+    debug(fun () ->
+        Format.eprintf "@[<v 0>Side effects of %s: @[<hov 2>%a@]@]@."
+          fname.fn_name
+          (pp_list pp_mvar) (List.map (fun x -> MmemRange x) fstate.s_effects));
 
     let state = { abs = AbsDom.meet state.abs fstate.abs;
                   it = fstate.it;
@@ -5012,8 +4994,18 @@ end = struct
               (AbsDom.print ~full:true) state.abs) in
       state
 
+  let print_mem_ranges state =
+    debug(fun () -> Format.eprintf
+             "@[<v 0>@;Final offsets full abstract value:@;@[%a@]@]@."
+             (AbsDom.print ~full:true) state.abs)
 
-  let print_mem_ranges state f_decl =
+  let print_var_interval state fmt mvar =
+    let int = AbsDom.bound_variable state.abs mvar in
+    Format.fprintf fmt "@[%a: %a@]"
+      pp_mvar mvar
+      Interval.print int
+
+  let mem_ranges_printer state f_decl fmt () =
     let in_vars = fun_in_args_no_offset f_decl
                   |> List.map otolist
                   |> List.flatten in
@@ -5023,20 +5015,23 @@ end = struct
         if (List.mem v vars_to_keep) then acc else v :: acc )
         [] vars in
 
-    let abs_proj = AbsDom.forget_list state.abs rem_vars in
-    Format.eprintf "@[<v 0>@;Final offsets full abstract value:@;@[%a@]@]@."
-      (AbsDom.print ~full:true) state.abs;
-    Format.eprintf "@[<v 0>@;Final offsets:@;@[%a@]@]@."
-      (AbsDom.print ~full:true) abs_proj
+    let abs_proj = AbsDom.forget_list state.abs rem_vars
+                   |> AbsDom.pop_cnstr_blck in
+
+    let sb = !Aparam.nrel_no_print in (* Not very clean *)
+    Aparam.nrel_no_print := true;
+    Format.fprintf fmt "@[%a@]"
+      (AbsDom.print ~full:true) abs_proj;
+    Aparam.nrel_no_print := sb
 
 
-  let analyze : unit -> bool = fun () ->
+  let analyze () =
     (* Stats *)
     let exception Done in
 
     let t_start = Sys.time () in
     let print_stats _ =
-      Format.eprintf "@[<v 0>Duration: %1f@;%a@]@."
+      Format.eprintf "@[<v 0>Duration: %1f@;%a@]"
         (Sys.time () -. t_start)
         Prof.print () in
 
@@ -5054,16 +5049,82 @@ end = struct
       let conds = safe_return main_decl in
       let final_st = check_safety final_st (InReturn main_decl.f_name) conds in
 
-      Format.eprintf "%a" pp_violation final_st.violations;
-      print_mem_ranges final_st main_decl;
-
-      (* TODO: temporary *)
-      assert (final_st.violations = []);
+      debug(fun () -> Format.eprintf "%a" pp_violations final_st.violations);
+      print_mem_ranges final_st;
 
       let () = debug (fun () -> print_stats ()) in
       let () = Sys.set_signal Sys.sigint old_handler in
 
-      final_st.violations = []
+      ( final_st.violations,
+        mem_ranges_printer final_st main_decl,
+        print_var_interval final_st )
     with
     | Manager.Error _ as e -> hndl_apr_exc e
+end
+
+
+module type ExportWrap = sig
+  val main : unit Prog.func
+  val prog : unit Prog.prog
+end
+
+module AbsAnalyzer (EW : ExportWrap) = struct
+  let parse_pt_rel s = match String.split_on_char ';' s with
+    | [pts;rels] -> { relationals = String.split_on_char ',' rels |> some;
+                      pointers = String.split_on_char ',' pts |> some }
+    | [_] ->
+      raise (Failure "-safetyparam ill-formed (maybe you forgot a ';' ?)")
+    | _ ->
+      raise (Failure "-safetyparam ill-formed (too many ';' ?)")
+
+  let parse_pt_rels s = String.split_on_char ':' s |> List.map parse_pt_rel
+
+  let parse_params : string -> (string option * analyzer_param list) list =
+    fun s ->
+      String.split_on_char '|' s
+      |> List.map (fun s -> match String.split_on_char '>' s with
+          | [fn;ps] -> (Some fn, parse_pt_rels ps)
+          | [ps] -> (None, parse_pt_rels ps)
+          | _ -> raise (Failure "-safetyparam ill-formed (too many '>' ?)"))
+
+  let analyze () =
+    let ps_assoc = omap_dfl (fun s_p -> parse_params s_p)
+        [ None, [ { relationals = None; pointers = None } ]]
+        !Glob_options.safety_param in
+
+    let ps = try List.assoc (Some EW.main.f_name.fn_name) ps_assoc with
+      | Not_found -> try List.assoc None ps_assoc with
+        | Not_found -> [ { relationals = None; pointers = None } ] in
+
+    let pt_vars =
+      List.fold_left (fun acc p -> match p.pointers with
+          | None -> acc
+          | Some l -> l @ acc) [] ps
+      |> List.sort_uniq Pervasives.compare
+      |> List.map (fun pt ->
+          try List.find (fun x -> x.v_name = pt) EW.main.f_args with
+          | Not_found ->
+            raise (Failure ("-safetyparam ill-formed (" ^ pt ^ " unknown)"))) in
+
+    let npt = List.filter (fun x -> not (List.mem x pt_vars)) EW.main.f_args
+              |> List.map (fun x -> MmemRange (MemLoc x)) in
+
+    let l_res = List.map (fun p ->
+        let module AbsInt = AbsInterpreter (struct
+            include EW
+            let param = p
+          end) in
+        AbsInt.analyze ()) ps in
+
+    match l_res with
+    | [] -> raise (Failure "-safetyparam ill-formed (empty list of params)")
+    | (violations, _, print_mvar_interval) :: _->
+      Format.eprintf "@.@[<v>%a@;@;\
+                      @[<v 2>Memory ranges:@;%a@]@;\
+                      %a@]@."
+        pp_violations violations
+        (pp_list print_mvar_interval) npt
+        (pp_list (fun fmt (_,f,_) -> f fmt ())) l_res;
+
+      assert (violations = [])  (* TODO:temp *)
 end

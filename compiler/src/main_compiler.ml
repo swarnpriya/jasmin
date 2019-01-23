@@ -161,19 +161,18 @@ let main () =
     eprint Compiler.ParamsExpansion (Printer.pp_prog ~debug:true) prog;
 
     if !check_safety then begin
-      let _ =
-        List.for_all (fun f_decl ->
+      let () =
+        List.iter (fun f_decl ->
             if f_decl.f_cc = Export then
               let () = Format.eprintf "@[<v>Analyzing function %s@;@]@."
                   f_decl.f_name.fn_name in
 
-              let module AbsInt = Safety.AbsInterpreter(struct
+              let module AbsInt = Safety.AbsAnalyzer(struct
                   let main = f_decl
                   let prog = prog
                 end) in
 
-              AbsInt.analyze ()
-            else true)
+              AbsInt.analyze ())
           (snd prog) in ()
     end;
 
