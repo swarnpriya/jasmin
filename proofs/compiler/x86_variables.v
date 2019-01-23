@@ -659,7 +659,7 @@ move=> /= /andP [] /eqP <- {op'}.
 by case: op pe pe'=> // sz [] // z [] //= z' /eqP ->.
 Qed.
 
-Lemma arg_of_pexpr_eq_expr ii ty pe pe' o :
+(*Lemma arg_of_pexpr_eq_expr ii ty pe pe' o :
   eq_expr pe pe' →
   arg_of_pexpr ii ty pe = ok o →
   arg_of_pexpr ii ty pe = arg_of_pexpr ii ty pe'.
@@ -672,3 +672,4 @@ by t_xrbindP => he c hc; rewrite (assemble_cond_eq_expr he hc).
 Qed.
 
  *)
+*)

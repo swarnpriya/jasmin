@@ -89,6 +89,16 @@ Definition check_sopn_arg ii (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc 
     end
   end.
 
+(*Lemma compile_low_eval ii gd ty m lom pe g sz a v :
+  lom_eqv m lom →
+  sem_pexpr gd m pe = ok v →
+  compile_pexpr ii (ty, pe) = ok g →
+  arg_of_garg sz g = Some a ->
+  check_esize sz pe ->
+  ∃ v',
+    eval_low gd lom a = ok v' ∧
+    value_uincl v v'. *)
+
 Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) := 
   let id := instr_desc op in 
   Let m := compile_args ii id.(id_in) inx (nempty _) in
@@ -100,6 +110,28 @@ Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) :=
     if id.(id_check) asm_args then ok asm_args
     else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false check")) 
   end.
+
+Definition check_sopn_args ii (loargs : seq asm_arg) (xs : seq pexpr) (adt : seq (arg_desc * stype)) := 
+  all2 (check_sopn_arg ii loargs) xs adt.
+
+Definition check_sopn_dest ii (loargs : seq asm_arg) (outx : seq lval) (adt : seq (arg_desc * stype)) := 
+  match mapM (pexpr_of_lval ii) outx with 
+  | Ok eoutx => all2 (check_sopn_arg ii loargs) eoutx adt
+  | _  => false
+  end.
+
+(*
+let id := instr_desc op in 
+sem_sopn gd o m lvs args = ok m' ->
+check_sopn_args ii loargs args id.(id_in) ->
+check_sopn_dest ii loargs lvs id.(id_out) ->
+lom_eqv m s ->
+exists s', eval_instr_op id lorags s = ok s' /\ lom_eqv m' s'
+*)
+
+
+
+
 
 (* Lemma sem_ot_oxt ty : sem_ot (xtype2stype ty) = sem_oxt ty.
 Proof. by case: ty. Qed.
