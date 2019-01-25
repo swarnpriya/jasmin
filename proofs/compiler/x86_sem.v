@@ -31,7 +31,7 @@ From CoqWord Require Import ssrZ.
 Require Import ZArith utils strings low_memory word global oseq.
 Import Utf8 Relation_Operators.
 Import Memory.
-Require Import sem_type x86_decl x86_instr_decl.
+Require Import sem_type x86_decl x86_instr_decl sem.
 
 Set   Implicit Arguments.
 Unset Strict Implicit.
@@ -205,6 +205,19 @@ Definition eval_arg_in (s:x86_mem) (args:asm_args) (ty:stype) (ad:arg_desc) : ex
   | sarr _   => type_error
   end.
 
+Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (aty:arg_desc * stype) : exec value := 
+  Let v := eval_arg_in s args aty.2 aty.1 in ok (to_val v).
+  
+Definition eval_args_in (s:x86_mem) (args:asm_args) (tin : seq (arg_desc * stype)) := 
+  mapM (eval_arg_in_v s args) tin.
+
+Definition eval_instr_op idesc args (s:x86_mem) := 
+  Let _   := assert (idesc.(id_check) args) ErrType in
+  Let vs  := eval_args_in s args idesc.(id_in) in
+  Let t   := app_sopn _ idesc.(id_semi) vs in
+  ok (list_ltuple t).                 
+
+(*
 Fixpoint app_asm_op T (s:x86_mem) (args:asm_args) (tin : seq (arg_desc * stype)) : 
    sem_prod (map snd tin) (exec T) -> exec T :=
   match tin return sem_prod (map snd tin) (exec T) → exec T with
@@ -213,6 +226,7 @@ Fixpoint app_asm_op T (s:x86_mem) (args:asm_args) (tin : seq (arg_desc * stype))
     Let v := eval_arg_in s args aty.2 aty.1 in
     @app_asm_op T s args tin (o v)
   end.
+*)
 
 (* -------------------------------------------------------------------- *)
 
@@ -304,12 +318,33 @@ Definition mem_write_bool(s:x86_mem) (args:asm_args) (ad:arg_desc) (b:option boo
 
 Definition mem_write_ty (f:msb_flag) (s:x86_mem) (args:asm_args) (ad:arg_desc) (ty:stype) : sem_ot ty -> exec x86_mem := 
   match ty return sem_ot ty -> exec x86_mem with
-   | sword sz => @mem_write_word f s args ad sz
-   | sbool    => mem_write_bool s args ad
-   | sint     => fun _ => type_error
-   | sarr _   => fun _ => type_error
-   end.
+  | sword sz => @mem_write_word f s args ad sz
+  | sbool    => mem_write_bool s args ad
+  | sint     => fun _ => type_error
+  | sarr _   => fun _ => type_error
+  end.
 
+
+Definition oof_val (ty: stype) (v:value) : exec (sem_ot ty) := 
+  match ty return exec (sem_ot ty) with
+  | sbool => 
+    match v with
+    | Vbool b => ok (Some b)
+    | Vundef sbool => ok None
+    | _ => type_error
+    end
+  | sword ws => to_word ws v
+  | _ => type_error
+  end. 
+
+Definition mem_write_val (f:msb_flag) (args:asm_args) (aty: arg_desc * stype) (v:value) (s:x86_mem) : exec x86_mem :=
+  Let v := oof_val aty.2 v in
+  mem_write_ty f s args aty.1 v.
+
+Definition mem_write_vals (f:msb_flag) (s:x86_mem) (args:asm_args) (aty: seq (arg_desc * stype)) (vs:values) :=
+  fold2 ErrType (mem_write_val f args) aty vs s.
+
+(*
 Fixpoint mem_write_res (f:msb_flag) (args:asm_args) (tout : seq (arg_desc * stype)) (s:x86_mem) : sem_tuple (map snd tout) -> exec x86_mem :=
   match tout return sem_tuple (map snd tout) -> exec x86_mem with
   | [::] => fun _ => ok s
@@ -324,11 +359,11 @@ Fixpoint mem_write_res (f:msb_flag) (args:asm_args) (tout : seq (arg_desc * styp
         rec s p.2 
     end rec
   end.
+*)
 
-Definition eval_instr_op idesc args (s:x86_mem) : exec x86_mem := 
-  Let _   := assert (idesc.(id_check) args) ErrType in
-  Let p   := app_asm_op s args idesc.(id_semi) in
-  mem_write_res idesc.(id_msb_flag) args s p.
+Definition exec_instr_op idesc args (s:x86_mem) : exec x86_mem := 
+  Let vs := eval_instr_op idesc args s in
+  mem_write_vals idesc.(id_msb_flag) s args idesc.(id_out) vs.
 
 (* -------------------------------------------------------------------- *)
 Definition is_special o := 
@@ -361,7 +396,7 @@ Definition eval_instr (i : asm) (s: x86_state) : exec x86_state :=
       |}      
     else 
     let id := instr_desc o in
-    Let m := eval_instr_op id args s.(xm) in
+    Let m := exec_instr_op id args s.(xm) in
     ok {|
         xm := m;
         xc := s.(xc);
