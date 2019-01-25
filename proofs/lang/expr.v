@@ -193,21 +193,16 @@ Definition get_instr o :=
   | Osubcarry sz => Osubcarry_instr sz
   | Oset0     sz => Oset0_instr sz
   | Ox86MOVZX32   => Ox86MOVZX32_instr
-  | Ox86   instr => 
-    (* Work around silly optimisation of Coq for pattern matching *)
-    match instr with
-    | ADD _ as instr1 | instr1 => 
-      let id := instr_desc instr1 in
+  | Ox86   instr =>
+      let id := instr_desc instr in
       {|
         str  := id.(id_str_jas);
         tin  := [seq i.2 | i <- id.(id_in)];
         tout := [seq i.2 | i <- id.(id_out)];
         semi := id.(id_semi); 
-        tin_narr := refl_equal;
-(* is_true (all is_not_sarr [seq i.2 | i <- id.(id_in)]); *)
+        tin_narr := id.(id_tin_narr);
         wsizei := id.(id_wsize);
       |} 
-    end
   end.
 
 Definition string_of_sopn o : string := str (get_instr o) tt.

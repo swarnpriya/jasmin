@@ -416,7 +416,7 @@ Record instr_desc_t := mk_instr_desc {
   id_check    : list asm_arg -> bool;
   id_nargs    : nat;
   (* Info for jasmin *)
+  id_tin_narr : all is_not_sarr [seq i.2 | i <- id_in];
   id_str_jas  : unit -> string;
   id_wsize    : wsize;  (* ..... *)
 }.
-

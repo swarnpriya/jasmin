@@ -647,6 +647,7 @@ Notation mk_instr str_jas tin tout ain aout msb semi check nargs wsizei := {|
   id_semi     := semi;
   id_nargs    := nargs;
   id_check    := check;
+  id_tin_narr := refl_equal;
   id_str_jas  := str_jas;
   id_wsize    := wsizei;
 |}.

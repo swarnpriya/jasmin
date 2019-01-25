@@ -37,14 +37,14 @@ Definition nget (T:Type) (m:nmap T) (n:nat) := m n.
 Definition nset (T:Type) (m:nmap T) (n:nat) (t:T) :=
   fun x => if x == n then Some t else nget m x.
 Definition nempty (T:Type) := fun n:nat => @None T.
- 
-Definition var_of_implicit i := 
+
+Definition var_of_implicit i :=
   match i with
   | IArflag f => var_of_flag f
   | IAreg r   => var_of_register r
   end.
 
-Definition check_oreg o a := 
+Definition check_oreg o a :=
   match o, a with
   | None  , _       => true
   | Some r, Reg r'  => r == r'
@@ -56,25 +56,25 @@ Definition compile_arg ii (ade: (arg_desc * stype) * pexpr) (m: nmap asm_arg) : 
   let ad := ade.1 in
   let e := ade.2 in
   match ad.1 with
-  | ADImplicit i => 
-    Let _ := 
-      assert (eq_expr (Pvar (VarI (var_of_implicit i) xH)) e) 
+  | ADImplicit i =>
+    Let _ :=
+      assert (eq_expr (Pvar (VarI (var_of_implicit i) xH)) e)
              (ii, Cerr_assembler (AsmErr_string "compile_arg : bad implicit")) in
     ok m
-  | ADExplicit n o => 
+  | ADExplicit n o =>
     Let a := arg_of_pexpr ii ad.2 e in
-    Let _ := 
-      assert (check_oreg o a) 
+    Let _ :=
+      assert (check_oreg o a)
              (ii, Cerr_assembler (AsmErr_string "compile_arg : bad forced register")) in
     match nget m n with
     | None => ok (nset m n a)
-    | Some a' => 
+    | Some a' =>
       if a == a' then ok m
-      else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : not compatible asm_arg"))              
+      else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : not compatible asm_arg"))
     end
   end.
 
-Definition compile_args ii adts (es:pexprs) (m: nmap asm_arg) := 
+Definition compile_args ii adts (es:pexprs) (m: nmap asm_arg) :=
   foldM (compile_arg ii) m (zip adts es).
 
 Definition check_sopn_arg ii (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc * stype) :=
@@ -82,9 +82,9 @@ Definition check_sopn_arg ii (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc 
   | ADImplicit i => eq_expr x (Pvar (VarI (var_of_implicit i) xH))
   | ADExplicit n o =>
     match onth loargs n with
-    | Some a => 
+    | Some a =>
       if arg_of_pexpr ii adt.2 x is Ok a' then (a == a') && check_oreg o a
-      else false 
+      else false
     | None => false
     end
   end.
@@ -99,36 +99,110 @@ Definition check_sopn_arg ii (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc 
     eval_low gd lom a = ok v' ∧
     value_uincl v v'. *)
 
-Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) := 
-  let id := instr_desc op in 
+Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) :=
+  let id := instr_desc op in
   Let m := compile_args ii id.(id_in) inx (nempty _) in
   Let eoutx := mapM (pexpr_of_lval ii) outx in
   Let m := compile_args ii id.(id_out) eoutx m in
   match oseq.omap (nget m) (iota 0 id.(id_nargs)) with
-  | None => cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false nget")) 
+  | None => cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false nget"))
   | Some asm_args =>
     if id.(id_check) asm_args then ok asm_args
-    else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false check")) 
+    else cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false check"))
   end.
 
-Definition check_sopn_args ii (loargs : seq asm_arg) (xs : seq pexpr) (adt : seq (arg_desc * stype)) := 
+Definition check_sopn_args ii (loargs : seq asm_arg) (xs : seq pexpr) (adt : seq (arg_desc * stype)) :=
   all2 (check_sopn_arg ii loargs) xs adt.
 
-Definition check_sopn_dest ii (loargs : seq asm_arg) (outx : seq lval) (adt : seq (arg_desc * stype)) := 
-  match mapM (pexpr_of_lval ii) outx with 
+Definition check_sopn_dest ii (loargs : seq asm_arg) (outx : seq lval) (adt : seq (arg_desc * stype)) :=
+  match mapM (pexpr_of_lval ii) outx with
   | Ok eoutx => all2 (check_sopn_arg ii loargs) eoutx adt
   | _  => false
   end.
 
-(*
-let id := instr_desc op in 
-sem_sopn gd o m lvs args = ok m' ->
+Lemma id_semi_sopn_sem op :
+  let id := instr_desc op in
+  id_semi id = sopn_sem (Ox86 op).
+Proof. by []. Qed.
+
+(* Lemma app_sopn_asm_op: forall ii s h op m gd args loargs,
+let id := instr_desc op in
+sem_pexprs gd m args = ok h ->
+check_sopn_args ii loargs args (id_in id) ->
+id_check id loargs ->
+app_sopn (tin (get_instr (Ox86 op))) (sopn_sem (Ox86 op)) h = app_asm_op gd s loargs (sopn_sem (Ox86 op)).
+Proof.
+
+intros.
+rewrite /app_sopn.
+rewrite /app_asm_op.
+change id with (instr_desc op) in H0.
+change id with (instr_desc op) in H1.
+elim op => //= ; intros.
+destruct h => //=.
+ *)
+Lemma compile_x86_opn ii (loargs : seq asm_arg) gd op m s args lvs m' :
+let id := instr_desc op in
+sem_sopn gd (Ox86 op) m lvs args = ok m' ->
 check_sopn_args ii loargs args id.(id_in) ->
 check_sopn_dest ii loargs lvs id.(id_out) ->
+id.(id_check) loargs ->
 lom_eqv m s ->
-exists s', eval_instr_op id lorags s = ok s' /\ lom_eqv m' s'
-*)
+exists s', eval_instr_op gd id loargs s = ok s' /\ lom_eqv m' s'.
+Proof.
+move=> id.
+rewrite /sem_sopn.
+t_xrbindP => x h Hsem.
+rewrite /exec_sopn.
+t_xrbindP => y Hy Htupley Hm' Harg Hdest Hid Hlomeqv.
+rewrite /eval_instr_op.
+subst.
+rewrite Hid /=.
+change (id_semi id) with (sopn_sem (Ox86 op)).
 
+assert(app_asm_op gd s loargs (sopn_sem (Ox86 op)) = ok y).
+admit.
+
+rewrite H => //=.
+clear Hy H.
+move: Hdest.
+move: Hm'.
+move: y.
+move: Hlomeqv.
+clear Hsem.
+move: m.
+move: lvs.
+rewrite /get_instr.
+simpl.
+rewrite /id.
+move: (id_out (instr_desc op)).
+elim => /=; intros.
+case: lvs Hm' Hdest => //=.
+move => [] <- => ?.
+exists s. done.
+case: l H Hdest y Hm' => //=.
+intros.
+2:{
+intros.
+move: y.
+case: l.
+
+
+SearchAbout write_lvals.
+exists s ; split ; trivial.
+
+rewrite /
+
+induction id_out.
+have: (tout (get_instr (Ox86 op)) = id_out id).
+move: tout.
+
+induction lvs.
+
+rewrite /mem_write_res.
+SearchAbout mem_write_res.
+
+Admitted.
 
 
 
@@ -139,15 +213,15 @@ Proof. by case: ty. Qed.
 Lemma sem_t_xt ty : sem_t (xtype2stype ty) = sem_xt ty.
 Proof. by case: ty. Qed.
 
-Lemma sem_tuple_xtuple (tout : seq (arg_desc * xtype)) : 
+Lemma sem_tuple_xtuple (tout : seq (arg_desc * xtype)) :
   sem_tuple [seq xtype2stype i.2 | i <- tout] =
   sem_xtuple [seq i.2 | i <- tout].
 Proof.
   rewrite /sem_tuple /sem_xtuple.
   by elim: tout => // -[a ty] /= [ | aty tout] /= hrec;rewrite sem_ot_oxt // hrec.
 Qed.
-  
-Lemma sem_prod_xprod_T (tin : seq (arg_desc * xtype)) T : 
+
+Lemma sem_prod_xprod_T (tin : seq (arg_desc * xtype)) T :
   sem_prod [seq xtype2stype i.2 | i <- tin] T =
   sem_xprod [seq i.2 | i <- tin] T.
 Proof.
@@ -155,35 +229,37 @@ Proof.
   by elim: tin => // -[a ty] l /= ->;rewrite sem_t_xt.
 Qed.
 
-Lemma sem_prod_xprod (tin tout : seq (arg_desc * xtype)) : 
+Lemma sem_prod_xprod (tin tout : seq (arg_desc * xtype)) :
   sem_xprod [seq i.2 | i <- tin] (exec (sem_xtuple [seq i.2 | i <- tout])) =
   sem_prod [seq xtype2stype i.2 | i <- tin] (exec (sem_tuple [seq xtype2stype i.2 | i <- tout])).
 Proof.
   by rewrite sem_prod_xprod_T sem_tuple_xtuple.
 Qed.
  *)
-Definition Instr_of_instr (id:instr_desc_t) : Instruction := 
+
+
+(* Definition Instr_of_instr (id:instr_desc_t) : Instruction :=
   {|
      str  := id.(id_str_jas);
      tin  := [seq i.2 | i <- id.(id_in)];
      tout := [seq i.2 | i <- id.(id_out)];
      semi := id_semi id;
-(* eq_rect _ (λ A : Type, A) (id_semi id) _ 
+(* eq_rect _ (λ A : Type, A) (id_semi id) _
                     (sem_prod_xprod (id_in id) (id_out id));  *)
      tin_narr := refl_equal;
 (* noarr_xtype id.(id_in); *)
      wsizei := id.(id_wsize);
-  |}. 
+  |}.  *)
 
-Lemma get_instr_desc o : get_instr (Ox86 o) = Instr_of_instr (instr_desc o).
+(* Lemma get_instr_desc o : get_instr (Ox86 o) = Instr_of_instr (instr_desc o).
 Proof.
   rewrite /Instr_of_instr; case: o => /= *;f_equal.
   match goal with |- ?X = _ => move: X end; move: (sem_prod_xprod _ _);
   rewrite /sem_xtuple /sem_tuple /sem_prod /sem_xprod /=.
   match goal with |- forall (_ : ?X = _), _ => move: X end.
   move=> T h o.
-Print eq_ind.   
-  match h in (_ = T) -> 
+Print eq_ind.
+  match h in (_ = T) ->
   pattern T at 2 3 5.
 case h.
 destruct h.
@@ -196,7 +272,7 @@ Theorem assemble_x86_opnP gd ii out op args loargs s1 m1 s2 :
   assemble_x86_opn ii op out args = ok loargs →
   sem_sopn gd (Ox86 op) s1 out args = ok s2 →
   ∃ m2,
-    eval_instr_op gd (instr_desc op) loargs m1 = ok m2 
+    eval_instr_op gd (instr_desc op) loargs m1 = ok m2
     ∧ lom_eqv s2 m2.
 Proof.
   move=> hlom; rewrite /assemble_x86_opn.
@@ -208,12 +284,12 @@ Proof.
   t_xrbindP => vout vargs hvargs lout hsem <- hwrite.
   have : all2 (check_sopn_arg ii loargs) args id.(id_in).
   + admit.
-  
-  
 
 
 
 
+
+ *)
 
 (* -------------------------------------------------------------------- *)
 (* Generated mixed semantics                                            *)
@@ -239,23 +315,23 @@ Definition check_esize (s: option wsize) e :=
   end.
 *)
 
-Definition var_of_implicit i := 
+(* Definition var_of_implicit i :=
   match i with
   | IArflag f => var_of_flag f
   | IAreg r   => var_of_register r
   end.
-
+ *)
 Definition is_var_or_immediate (x:var) e :=
   match e with
   | Papp1 (Oword_of_int _) (Pconst _) => true
   | Pvar x' => x == x'
-  | _ => false 
+  | _ => false
   end.
 
 Definition mixed_sem_ad_in (xs : seq pexpr) (ad : arg_desc) : option pexpr :=
   match ad with
   | ADImplicit i => Some (Pvar (VarI (var_of_implicit i) xH))
-  | ADExplicit n None => onth xs n 
+  | ADExplicit n None => onth xs n
   | ADExplicit n (Some x) =>
     onth xs n >>= fun e => if is_var_or_immediate (var_of_register x) e then Some e else None
   end%O.
@@ -263,14 +339,14 @@ Definition mixed_sem_ad_in (xs : seq pexpr) (ad : arg_desc) : option pexpr :=
 Definition lval_of_pexpr e :=
   match e with
   | Pvar v => Some (Lvar v)
-  | Pload s x e => Some (Lmem s x e) 
+  | Pload s x e => Some (Lmem s x e)
   | _        => None
   end.
 
 Definition mixed_sem_ad_out (xs : seq pexpr) (ad : arg_desc) : option lval :=
   match ad with
   | ADImplicit i => Some (Lvar (VarI (var_of_implicit i) xH))
-  | ADExplicit n _ => onth xs n >>= lval_of_pexpr 
+  | ADExplicit n _ => onth xs n >>= lval_of_pexpr
   end%O.
 
 Definition mixed_sem gd m (o:asm_op) (xs : seq pexpr) :=
@@ -283,7 +359,7 @@ Definition mixed_sem gd m (o:asm_op) (xs : seq pexpr) :=
 
 (* -------------------------------------------------------------------- *)
 (* High level to mixed semantics                                        *)
-
+(* 
 Definition check_sopn_arg (loargs : seq pexpr) (x : pexpr) (ad : arg_desc) :=
   match ad with
   | ADImplicit i => eq_expr x (Pvar (VarI (var_of_implicit i) xH))
@@ -294,6 +370,7 @@ Definition check_sopn_arg (loargs : seq pexpr) (x : pexpr) (ad : arg_desc) :=
     | Some y => is_var_or_immediate (var_of_register y) x
     end
   end.
+ *)
 
 Definition is_lvar (x:var) lv :=
   match lv with
@@ -321,7 +398,7 @@ case: e => //=; eauto.
 case => // sz [] //; eauto.
 Qed.
 
-Lemma check_sopn_argP (loargs hiargs : seq pexpr) (ads : seq arg_desc) :
+(* Lemma check_sopn_argP ii (loargs hiargs : seq pexpr) (ads : seq arg_desc) :
      all2 (check_sopn_arg loargs) hiargs ads →
      ∃ hiargs',
        oseq.omap (mixed_sem_ad_in loargs) ads = Some hiargs'
@@ -340,7 +417,7 @@ by move=> y /is_varP Hy;eexists;split;[by eauto | ];rewrite /= Hy.
   exists  (nth e loargs n :: hiargs').
   rewrite (onth_nth_size e Hlt) /= Hall andbT;split;last by apply eq_expr_refl.
   by case: o Ho => [ y -> | ->].
-Qed.
+Qed. *)
 
 Lemma is_lvarP x e : is_lvar x e ->  eq_lval e {| v_var := x; v_info := xH |}.
 Proof. by case e => //= v /eqP ->. Qed.
@@ -360,14 +437,16 @@ Proof.
   by rewrite /= h.
 Qed.
 
-Definition check_sopn_args ii
-  (id: instr_desc) (outx : seq lval) (inx : seq pexpr) (loargs : seq pexpr) : ciexec unit :=
-  if all2 (check_sopn_res loargs) outx id.(id_out)
+(* Definition check_sopn_args ii
+  op (outx : seq lval) (inx : seq pexpr) (loargs : seq pexpr) : ciexec unit :=
+  let id := instr_desc op in
+  if all2 (check_sopn_res loargs) outx [seq i.1 | i <- id.(id_out)]
   then
-  if all2 (check_sopn_arg loargs) inx  id.(id_in )
+  if all2 (check_sopn_arg ii id loargs) inx  id.(id_in )
   then ok tt
   else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_arg"))
   else cierror ii (Cerr_assembler (AsmErr_string "check_sopn_res")).
+ *)
 
 Theorem check_sopnP ii gd o descr outx inx loargs m1 m2 :
   id_name descr = o →
@@ -948,7 +1027,7 @@ Qed.
 Lemma eval_oprd_of_pexpr ii gd sz s m e c a v:
   lom_eqv s m →
   oprd_of_pexpr ii e = ok c →
-  arg_of_oprd sz c = Some a -> 
+  arg_of_oprd sz c = Some a ->
   check_esize sz e ->
   sem_pexpr gd s e = ok v →
   exists2 v' : value, eval_low gd m a = ok v' & value_uincl v v'.
@@ -1059,10 +1138,10 @@ Proof.
   (* Explicit *)
   case/compile_low_argsP: hpes => hsz hpes.
   move => /= sz n o ho htys.
-  have : onth pes n = Some arg ∧ 
-         match o with 
+  have : onth pes n = Some arg ∧
+         match o with
          | Some x => eq_expr arg {| v_var := var_of_register x ; v_info := xH |} ∨ ∃ sz n, arg = Papp1 (Oword_of_int sz) (Pconst n)
-         | None => check_esize sz arg 
+         | None => check_esize sz arg
          end.
   + case: (o) ho => /= [ x | ] /obindI [] e [] ->;case: ifP => //.
     + by move=> /is_var_or_immediateP h [] ?; subst.
@@ -1212,7 +1291,7 @@ case: xmm_register_of_var (@xmm_register_of_varI (Var ty x)) => [ r | ].
   case: eqm => eqm eqr eqx eqf.
   split => //=.
   + by move => r' v h; apply: eqr; rewrite -h /get_var Fv.setP_neq.
-  + move => r' v; apply: on_vuP => //. 
+  + move => r' v; apply: on_vuP => //.
     move => w h <- {v}.
     rewrite ffunE; case: eqP; last first.
     * move => ne; apply: eqx; move: h.
