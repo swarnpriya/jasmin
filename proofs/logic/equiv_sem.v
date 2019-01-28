@@ -47,8 +47,8 @@ Definition sval_uincl (t:stype) : sem_t t -> ssem_t t -> Prop :=
       (forall i v, Array.get t1 i = ok v -> FArray.get t2 i = v)
   end.
 
-Definition seval_uincl (t:stype) (v1: exec (sem_t t)) (v2: ssem_t t) := 
-  match v1 with 
+Definition seval_uincl (t:stype) (v1: exec (sem_t t)) (v2: ssem_t t) :=
+  match v1 with
   | Ok  v1 => sval_uincl v1 v2
   | Error _ => True
   end.
@@ -126,7 +126,7 @@ Proof.
     move:H;  rewrite /of_val //.
     exists z; split => //=.
   case: (s =P s') => //= eq_ss';subst s'.
-  move => //= H2 H. rewrite /of_sval. 
+  move => //= H2 H. rewrite /of_sval.
   have H' := (of_varr H). subst t => //=.
   exists a'. split;last split => //=.
   rewrite eq_dec_refl; congr ok.
@@ -439,7 +439,7 @@ case: v1; case: v2; case: w1; case w2 => //=.
 + move => s a s2 a2 s3 n a3 s4 n2 a4. case:eqP => //= eq; case: eqP => //= eq'; subst => z wsz _ _.
   by case/eqP => ->.
 move => s w s' w' s'' w'' s''' w'''; case:eqP => //= eq; case: eqP => //= eq';subst; rewrite zero_extend_u.
-by move => eq zero1 _ _ eq';case/eqP:eq' => -> . 
+by move => eq zero1 _ _ eq';case/eqP:eq' => -> .
 Qed.
 
 Section SSEM_PEXPR_UINCL_R.
@@ -572,7 +572,7 @@ Proof.
   + case:ty => //=;move => s n s' a; case => //=.
   + case:ty => //=;move => s s' w; case => //=.
 Qed.
-    
+
 Lemma ssem_pexpr_uincl s ss e ty v1 v1':
   sestate_uincl s ss ->
   sem_pexpr gd s e = ok v1 ->
@@ -649,7 +649,7 @@ Lemma sset_vm_uincl vm vm' x z z' :
 Proof.
   move=> Hvm Hz y; case( x =P y) => [<- | /eqP Hneq];by rewrite ?Fv.setP_eq ?Fv.setP_neq.
 Qed.
- 
+
 Lemma sset_undef_vm_uincl vm vm' x z :
   svm_uincl vm vm' ->
   svm_uincl (vm.[x <- undef_error])%vmap (vm'.[x <- z])%vmap.
@@ -681,7 +681,7 @@ Proof.
     rewrite eq_dec_refl /=; set x := Var _ _.
     exists (vm1'.[x <- a])%vmap; split=> //.
     by apply/sset_vm_uincl => //= i w h; case: (Array.getP_empty h).
-Qed. 
+Qed.
 
 Lemma swrite_var_uincl s ss s' v1 v2 x :
   sestate_uincl s ss ->
@@ -748,7 +748,7 @@ Proof.
     have := ssem_pexpr_uincl_r Hs1 sem_s1.
     move => [vb ssem_p]; rewrite ssem_p => //=.
     move => /svalue_uincl_word -/(_ _ _ point_v').
-    case => sz2 sz2' wsz2 wsz2' trunc_wsz2' val_v' val_vb;subst.  
+    case => sz2 sz2' wsz2 wsz2' trunc_wsz2' val_v' val_vb;subst.
     have uincl_v_evms1 : svalue_uincl v (sget_var (sevm ss1) x)
       by apply: (@sget_var_uincl _ _ (sevm ss1) _ _ get_s1); apply svm_state_uincl.
     move:uincl_v_evms1 => /svalue_uincl_word -/(_ _ _ point_v).
@@ -929,7 +929,7 @@ Proof.
   move=> [vm2 [Hsc /Hf]] [vm3 [Hsf Hvm3]];exists vm3;split => //.
   by econstructor;eauto.
 Qed.
- 
+
 Local Lemma Hcall : sem_Ind_call p Pi_r Pfun.
 Proof.
   move=> s1 m2 s2 ii xs fn args vargs vs Hargs Hcall Hfd Hxs s Hs.
@@ -942,11 +942,11 @@ Proof.
   exists vm2';split=>//;econstructor;eauto.
   by rewrite (proj1 Hvm1) (proj1 Hs) in Hvres'1.
 Qed.
-  
-Lemma mapM2_truncate_val tys vs1' vs1 vs2' : 
+
+Lemma mapM2_truncate_val tys vs1' vs1 vs2' :
   mapM2 ErrType truncate_val tys vs1' = ok vs1 ->
   List.Forall2 svalue_uincl vs1' vs2' ->
-  exists vs2, mapM2 ErrType truncate_sval (sstypes_of_stypes tys) vs2' = ok vs2 /\ 
+  exists vs2, mapM2 ErrType truncate_sval (sstypes_of_stypes tys) vs2' = ok vs2 /\
     List.Forall2 svalue_uincl vs1 vs2.
 Proof.
   elim: tys vs1' vs1 vs2' => [ | t tys hrec] [|v1' vs1'] //=.

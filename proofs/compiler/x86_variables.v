@@ -144,21 +144,21 @@ Proof. by rewrite /rflag_of_string !rflags_stringsE; apply: inj_assoc. Qed.
 
 (* -------------------------------------------------------------------- *)
 
-Definition var_of_register r := 
-  {| vtype := sword64 ; vname := string_of_register r |}. 
+Definition var_of_register r :=
+  {| vtype := sword64 ; vname := string_of_register r |}.
 
 Definition var_of_xmm_register r :=
   {| vtype := sword256 ; vname := string_of_xmm_register r |}.
 
-Definition var_of_flag f := 
-  {| vtype := sbool; vname := string_of_rflag f |}. 
+Definition var_of_flag f :=
+  {| vtype := sbool; vname := string_of_rflag f |}.
 
 Lemma var_of_register_inj x y :
   var_of_register x = var_of_register y →
   x = y.
 Proof. by move=> [];apply inj_string_of_register. Qed.
 
-Lemma var_of_flag_inj x y : 
+Lemma var_of_flag_inj x y :
   var_of_flag x = var_of_flag y →
   x = y.
 Proof. by move=> [];apply inj_string_of_rflag. Qed.
@@ -167,7 +167,7 @@ Lemma var_of_register_var_of_flag r f :
   ¬ var_of_register r = var_of_flag f.
 Proof. by case: r;case: f. Qed.
 
-Definition register_of_var (v:var) : option register := 
+Definition register_of_var (v:var) : option register :=
   if v.(vtype) == sword64 then reg_of_string v.(vname)
   else None.
 
@@ -473,14 +473,14 @@ Definition assemble_word ii (sz:wsize) (e:pexpr) :=
     ok (Reg s)
   | Pglobal g =>
     ok (Glob g)
-  | Pload sz' v e => 
+  | Pload sz' v e =>
     Let s := reg_of_var ii v in
     Let w := addr_of_pexpr ii s e in
     ok (Adr w)
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for word"))
   end.
 
-Definition arg_of_pexpr ii (ty:stype) (e:pexpr) := 
+Definition arg_of_pexpr ii (ty:stype) (e:pexpr) :=
   match ty with
   | sbool => Let c := assemble_cond ii e in ok (Condt c)
   | sword sz => assemble_word ii sz e
@@ -502,8 +502,8 @@ Definition arg_of_pexpr ii (ty:stype) (e:pexpr) :=
   | Pglobal g =>
     ciok (Glob g)
   | Pload sz' v e => (* FIXME: can we recognize more expression for e ? *)
-(*    Let _ := 
-      if sz == sz' then ok tt 
+(*    Let _ :=
+      if sz == sz' then ok tt
       else cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: bad load cast")) in *)
      Let s := reg_of_var ii v in
      Let w := addr_of_pexpr ii s e in

@@ -37,16 +37,16 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Local Open Scope Z_scope. 
+Local Open Scope Z_scope.
 Module WArray.
 
-  Definition arr_size (ws:wsize) (s:positive)  := 
+  Definition arr_size (ws:wsize) (s:positive)  :=
     wsize_size ws * s.
 
-  Record array (s:positive)  := 
+  Record array (s:positive)  :=
     { arr_data : Mz.t u8 }.
 
-  Definition empty (s:positive) : array s := 
+  Definition empty (s:positive) : array s :=
     {| arr_data := Mz.empty _ |}.
 
   Local Notation pointer := [eqType of Z].
@@ -57,27 +57,27 @@ Module WArray.
   Section CM.
     Variable (s:positive).
 
-    Definition uget (m:array s) (i:pointer) := 
+    Definition uget (m:array s) (i:pointer) :=
       odflt 0%R (Mz.get m.(arr_data) i).
- 
-    Definition uset (m:array s) (i:pointer) (v:u8) : array s := 
+
+    Definition uset (m:array s) (i:pointer) (v:u8) : array s :=
       {| arr_data := Mz.set m.(arr_data) i v |}.
 
-    Definition in_range (p:pointer) (ws:wsize) := 
+    Definition in_range (p:pointer) (ws:wsize) :=
       ((0 <=? p) && (p + wsize_size ws <=? s))%Z.
 
-    Lemma in_rangeP p ws: 
+    Lemma in_rangeP p ws:
       reflect (0 <= p /\ p + wsize_size ws <= s)%Z (in_range p ws).
     Proof.
       rewrite /in_range; case: andP => h; constructor; move: h; rewrite !zify; Psatz.nia.
     Qed.
 
-    Definition validw (m:array s) (p:pointer) (ws:wsize) : exec unit := 
+    Definition validw (m:array s) (p:pointer) (ws:wsize) : exec unit :=
       assert (in_range p ws) ErrOob.
 
-    Definition validr (m:array s) (p:pointer) (ws:wsize) := 
+    Definition validr (m:array s) (p:pointer) (ws:wsize) :=
       Let _ := validw m p ws in
-      assert (all (fun i => Mz.get m.(arr_data) (p+i)%Z != None) (ziota 0 (wsize_size ws))) 
+      assert (all (fun i => Mz.get m.(arr_data) (p+i)%Z != None) (ziota 0 (wsize_size ws)))
              ErrAddrInvalid.
 
     Lemma add_sub p k: add p (sub k p) = k.
@@ -92,17 +92,17 @@ Module WArray.
     Lemma validw_uset m p v p' sw: validw (uset m p v) p' sw = validw m p' sw.
     Proof. done. Qed.
 
-    Lemma validw8 m2 m1 p sw i t: 
+    Lemma validw8 m2 m1 p sw i t:
       (0 <= i < wsize_size sw)%Z ->
       validw m1 p sw = ok t -> validw m2 (add p i) U8 = ok tt.
     Proof.
-      move=> hi;rewrite /validw /assert; case: in_rangeP => // h1 _. 
+      move=> hi;rewrite /validw /assert; case: in_rangeP => // h1 _.
       by case: in_rangeP => //; rewrite /wsize_size /add; Psatz.nia.
     Qed.
 
     Lemma validrP m p sw i t:
       validr m p sw = ok t ->
-      (0 <= i < wsize_size sw)%Z ->  
+      (0 <= i < wsize_size sw)%Z ->
       validr m (add p i) U8 = ok t.
     Proof.
       rewrite /validr /assert /=; t_xrbindP.
@@ -111,14 +111,14 @@ Module WArray.
     Qed.
 
     Lemma validw_validr m p sw i v t k:
-      validw m p sw = ok t -> 
+      validw m p sw = ok t ->
       (0 <= i < wsize_size sw)%Z ->
       validr (uset m (add p i) v) k U8 = if add p i == k then ok t else validr m k U8.
     Proof.
       case: t; rewrite /validr /= Z.add_0_r /validw /assert /add.
       case: in_rangeP => //= hw _ hi.
       case: in_rangeP; rewrite /= /wsize_size => h.
-      + by rewrite Mz.setP !andbT; case: (_ =P k). 
+      + by rewrite Mz.setP !andbT; case: (_ =P k).
       case: eqP => //; Psatz.nia.
     Qed.
 
@@ -126,16 +126,16 @@ Module WArray.
       uget (uset m z1 v) z2 = if z1 == z2 then v else uget m z2.
     Proof. by rewrite /uget /uset /= Mz.setP; case: eqP. Qed.
 
-    Global Instance array_CM : coreMem (array s) pointer := 
-      CoreMem add_sub sub_add add_0 validw_uset 
+    Global Instance array_CM : coreMem (array s) pointer :=
+      CoreMem add_sub sub_add add_0 validw_uset
         validrP validw_validr usetP.
- 
+
   End CM.
 
   Definition get len ws (a:array len) (p:Z) :=
     CoreMem.read a (p * wsize_size ws)%Z ws.
- 
-  Definition set {len ws} (a:array len) p (v:word ws) : exec (array len) :=   
+
+  Definition set {len ws} (a:array len) p (v:word ws) : exec (array len) :=
     CoreMem.write a (p * wsize_size ws)%Z v.
 
   Definition cast len len' (a:array len) : result error (array len') :=
@@ -144,7 +144,7 @@ Module WArray.
 
   Definition uincl {len1 len2} (a1 : array len1) (a2 : array len2) :=
     (len1 <= len2)%Z ∧
-    ∀ i v, (0 <= i < Zpos len1)%Z -> 
+    ∀ i v, (0 <= i < Zpos len1)%Z ->
        Mz.get a1.(arr_data) i = Some v → Mz.get a2.(arr_data) i = Some v.
 
   Lemma uincl_validw {len1 len2} (a1 : array len1) (a2 : array len2) ws i t :
@@ -157,7 +157,7 @@ Module WArray.
   Lemma uincl_validr {len1 len2} (a1 : array len1) (a2 : array len2) ws i t :
     uincl a1 a2 -> validr a1 i ws = ok t -> validr a2 i ws = ok tt.
   Proof.
-    move=> [h1 h2]; rewrite /validr /validw; t_xrbindP => t1. 
+    move=> [h1 h2]; rewrite /validr /validw; t_xrbindP => t1.
     case: in_rangeP => //= hi1 _ {t1} /assertP /allP h.
     case: in_rangeP => //= hi2; last by nia.
     case: allP => // -[] k hk; have := h _ hk.
@@ -178,7 +178,7 @@ Module WArray.
     case: Mz.get => //= v _ /(_ v _ erefl) -> //.
     by move: hr; rewrite /validr /validw; case: in_rangeP => //= ? _; nia.
   Qed.
- 
+
   Lemma uincl_set {ws len1 len2} (a1 a1': array len1) (a2: array len2) i (w:word ws) :
     uincl a1 a2 ->
     set a1 i w = ok a1' ->
@@ -206,30 +206,30 @@ Module WArray.
   Lemma uincl_refl len (a: array len) : uincl a a.
   Proof. by split => //;apply Z.le_refl. Qed.
 
-  Lemma uincl_trans {len1 len2 len3} 
+  Lemma uincl_trans {len1 len2 len3}
     (a2: array len2) (a1: array len1) (a3: array len3) :
-    uincl a1 a2 -> uincl a2 a3 -> uincl a1 a3. 
+    uincl a1 a2 -> uincl a2 a3 -> uincl a1 a3.
   Proof.
     move=> [l1 h1] [l2 h2]; split; first by lia.
     move=> ????;apply h2;first by lia.
     by apply h1.
   Qed.
- 
-  Lemma set_get8 len (m m':array len) p ws (v: word ws) k :    
+
+  Lemma set_get8 len (m m':array len) p ws (v: word ws) k :
     set m p v = ok m' ->
-    get U8 m' k= 
+    get U8 m' k=
       let i := (k - p * wsize_size ws)%Z in
        if ((0 <=? i) && (i <? wsize_size ws))%Z then ok (LE.wread8 v i)
        else get U8 m k.
-  Proof. 
+  Proof.
     move=> hs; have := CoreMem.write_read8 k hs.
-    by rewrite /get wsize8 !Z.mul_1_r.  
+    by rewrite /get wsize8 !Z.mul_1_r.
   Qed.
 
-  Lemma set_zget8 len (m m':array len) p ws (v: word ws) k :    
+  Lemma set_zget8 len (m m':array len) p ws (v: word ws) k :
     (0 <= k < len)%Z ->
     set m p v = ok m' ->
-    Mz.get m'.(arr_data) k= 
+    Mz.get m'.(arr_data) k=
       let i := (k - p * wsize_size ws)%Z in
        if ((0 <=? i) && (i <? wsize_size ws))%Z then Some (LE.wread8 v i)
        else Mz.get m.(arr_data) k.
@@ -267,7 +267,7 @@ Module WArray.
   Qed.
 
   Lemma set_validr_neq len (m m':array len) p1 p2 ws (v: word ws) :
-    p1 != p2 -> 
+    p1 != p2 ->
     set m p1 v = ok m' ->
     validr m' (p2 * wsize_size ws)%Z ws = validr m (p2 * wsize_size ws)%Z ws.
   Proof.
@@ -281,7 +281,7 @@ Module WArray.
 
   Lemma setP_neq len (m m':array len) p1 p2 ws (v: word ws) :
     p1 != p2 ->
-    set m p1 v = ok m' -> 
+    set m p1 v = ok m' ->
     get ws m' p2 = get ws m p2.
   Proof.
     move=> hp h1;have := CoreMem.writeP_neq h1.
@@ -290,20 +290,20 @@ Module WArray.
   Qed.
 
   Lemma setP len (m m':array len) p1 p2 ws (v: word ws) :
-    set m p1 v = ok m' -> 
+    set m p1 v = ok m' ->
     get ws m' p2 = if p1 == p2 then ok v else get ws m p2.
   Proof. by case: eqP => [<- | /eqP];[ apply setP_eq | apply setP_neq]. Qed.
 
-  Definition filter (m : Mz.t u8) p := 
+  Definition filter (m : Mz.t u8) p :=
     Mz.fold (fun k e m => if (k <? p)%Z then Mz.set m k e else m) m (Mz.empty _).
 
   Definition inject len len' (a:array len) : array len' :=
     if (len <? len')%Z then {| arr_data := filter a.(arr_data) len |}
     else {| arr_data := a.(arr_data) |}.
 
-  Lemma zget_inject len (a:array len) (p:positive) i: 
+  Lemma zget_inject len (a:array len) (p:positive) i:
     (0 <= i < p)%Z ->
-    Mz.get (WArray.arr_data (WArray.inject p a)) i = 
+    Mz.get (WArray.arr_data (WArray.inject p a)) i =
     if (i <? len)%Z then Mz.get (WArray.arr_data a) i else None.
   Proof.
     rewrite /inject; case: a => a /=.
@@ -314,11 +314,11 @@ Module WArray.
      Mz.get (foldl
         (λ (a0 : Mz.t u8) (kv : Mz.K.t * u8),
           if (kv.1 <? len)%Z then Mz.set a0 kv.1 kv.2 else a0) m els) i =
-      if (i \in map fst els) && (i <? len)%Z then Mz.get a i 
+      if (i \in map fst els) && (i <? len)%Z then Mz.get a i
       else Mz.get m i.
     + elim => //= -[i1 v1] els hrec m hin; rewrite hrec; last by move=> ? h;apply hin;auto.
       rewrite /= in_cons orbC;case: andP => [[] -> -> //| hn].
-      rewrite orbC; case: eqP => /=. 
+      rewrite orbC; case: eqP => /=.
       + move=> ->;case: ifP => // ?; rewrite Mz.setP_eq.
         by rewrite (hin (i1,v1));auto.
       move=> /eqP /negbTE hne; move /andP/negbTE: hn => ->.
@@ -330,14 +330,14 @@ Module WArray.
   Qed.
 
   Lemma get_bound ws len (t:array len) i w :
-    get ws t i = ok w -> 
+    get ws t i = ok w ->
     (0 <= i * wsize_size ws /\ (i + 1) * wsize_size ws <= len)%Z.
   Proof.
     rewrite /get /CoreMem.read /= /validr /validw; t_xrbindP => ?? /assertP /in_rangeP; nia.
-  Qed.     
+  Qed.
 
   Lemma set_bound ws len (a t:array len) i (w:word ws) :
-    set a i w = ok t -> 
+    set a i w = ok t ->
     (0 <= i * wsize_size ws /\ (i+1) * wsize_size ws <= len)%Z.
   Proof.
     rewrite /set /CoreMem.write /= /validw; t_xrbindP => ? /assertP /in_rangeP; nia.
@@ -351,7 +351,7 @@ Module WArray.
   Qed.
 
   Lemma get_get8 ws len (t:WArray.array len) i w k :
-    get ws t i = ok w -> 
+    get ws t i = ok w ->
     (0 <= k < wsize_size ws)%Z ->
     exists v, get U8 t (i * wsize_size ws + k) = ok v.
   Proof.
@@ -364,7 +364,7 @@ Module WArray.
     by rewrite in_ziota !zify.
   Qed.
 
-  Lemma get0 (n:positive) off : (0 <= off ∧ off < n)%Z -> 
+  Lemma get0 (n:positive) off : (0 <= off ∧ off < n)%Z ->
     get U8 (empty n) off = Error ErrAddrInvalid.
   Proof.
     rewrite /get /CoreMem.read /= /validr /validw /= /in_range wsize8 Z.mul_1_r.

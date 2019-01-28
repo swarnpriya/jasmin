@@ -99,11 +99,11 @@ Module MemoryI : MemoryT.
 
   Definition is_zalloc (m:Mz.t bool) (p:Z) := odflt false (Mz.get m p).
 
-  Definition frames_size cur_frame (frames: seq Z) := 
+  Definition frames_size cur_frame (frames: seq Z) :=
     foldr Z.add 0%Z (cur_frame :: frames).
 
-  Definition valid_frames (stk_ptr: pointer) cur_frame (frames: seq Z) := 
-    all (fun p => 0 <=? p)%Z (cur_frame :: frames) && 
+  Definition valid_frames (stk_ptr: pointer) cur_frame (frames: seq Z) :=
+    all (fun p => 0 <=? p)%Z (cur_frame :: frames) &&
       (wunsigned stk_ptr + frames_size cur_frame frames <? (wbase U64))%Z.
 
   Record mem_ := {
@@ -111,21 +111,21 @@ Module MemoryI : MemoryT.
     alloc     : Mz.t bool;
     stk_low   : pointer;
     stk_ptr   : pointer;
-    cur_frame : Z;       (* size of the current frame *)     
+    cur_frame : Z;       (* size of the current frame *)
     frames    : seq Z;        (* size of the frame on the stack *)
     framesP   : valid_frames stk_ptr cur_frame frames;
     stk_ptrP  : 0 <= wunsigned stk_low <= wunsigned stk_ptr;
-    stk_okP   : forall x, wunsigned stk_low <= x < wunsigned stk_ptr + frames_size cur_frame frames -> 
+    stk_okP   : forall x, wunsigned stk_low <= x < wunsigned stk_ptr + frames_size cur_frame frames ->
                    is_zalloc alloc x = (wunsigned stk_ptr <=? x);
   }.
- 
+
   Definition mem := mem_.
 
-  Definition is_alloc (m:mem) (p:pointer) (ws: wsize) := 
+  Definition is_alloc (m:mem) (p:pointer) (ws: wsize) :=
     all (fun i => is_zalloc m.(alloc) (wunsigned (p + wrepr U64 i))) (ziota 0 (wsize_size ws)).
 
-  Lemma is_allocP m p ws : 
-    reflect (forall i, 0 <= i < wsize_size ws -> 
+  Lemma is_allocP m p ws :
+    reflect (forall i, 0 <= i < wsize_size ws ->
                is_zalloc m.(alloc) (wunsigned (p + wrepr U64 i)))
            (is_alloc m p ws).
   Proof.
@@ -133,16 +133,16 @@ Module MemoryI : MemoryT.
     by split => h i hi; apply h; move: hi; rewrite in_ziota !zify Z.add_0_l.
   Qed.
 
-  Definition valid_pointer (m:mem) (p:pointer) (ws: wsize) := 
+  Definition valid_pointer (m:mem) (p:pointer) (ws: wsize) :=
     is_align p ws && is_alloc m p ws.
- 
+
   Definition add (p:pointer) (o:Z) := (p + wrepr U64  o)%R.
 
   Definition sub (p1 p2:pointer)  := wunsigned p1 - wunsigned p2.
 
   Definition uget (m:mem) (p:pointer) := odflt 0%R (Mz.get m.(data) (wunsigned p)).
 
-  Definition uset (m:mem) (p:pointer) (w:u8) := 
+  Definition uset (m:mem) (p:pointer) (w:u8) :=
     {| data      := Mz.set m.(data) (wunsigned p) w ;
        alloc     := m.(alloc);
        stk_low   := m.(stk_low);
@@ -152,15 +152,15 @@ Module MemoryI : MemoryT.
        framesP   := m.(framesP);
        stk_ptrP  := m.(stk_ptrP);
        stk_okP   := m.(@stk_okP);
-    |}.    
-  
+    |}.
+
   Definition valid m p ws := assert (valid_pointer m p ws) ErrAddrInvalid.
 
   Lemma add_sub p k: add p (sub k p) = k.
   Proof. rewrite /add /sub wrepr_sub !wrepr_unsigned; ssrring.ssring. Qed.
 
   Lemma sub_add m p s i t: valid m p s = ok t -> 0 <= i < wsize_size s -> sub (add p i) p = i.
-  Proof. 
+  Proof.
     rewrite /valid => /assertP; rewrite /valid_pointer => /andP [].
     move=> /is_align_no_overflow; rewrite /no_overflow !zify => ha _ hi.
     have ? := wunsigned_range p; rewrite /sub /add wunsigned_add; Psatz.lia.
@@ -172,9 +172,9 @@ Module MemoryI : MemoryT.
   Lemma validw_uset m p v p' s : valid (uset m p v) p' s = valid m p' s.
   Proof. done. Qed.
 
-  Lemma validrP m p s i t: 
+  Lemma validrP m p s i t:
     valid m p s = ok t ->
-    0 <= i < wsize_size s ->  
+    0 <= i < wsize_size s ->
     valid m (add p i) U8 = ok t.
   Proof.
     rewrite /valid /valid_pointer is_align8 /= andbC.
@@ -182,7 +182,7 @@ Module MemoryI : MemoryT.
   Qed.
 
   Lemma validw_validr m p s i v t k:
-    valid m p s = ok t -> 
+    valid m p s = ok t ->
     0 <= i < wsize_size s ->
     valid (uset m (add p i) v) k U8 = if add p i == k then ok t else valid m k U8.
   Proof.
@@ -196,20 +196,20 @@ Module MemoryI : MemoryT.
   Proof.
     by rewrite /uget /uset /= Mz.setP (eqtype.inj_eq (@wunsigned_inj _)); case: eqP.
   Qed.
- 
-  Instance CM : coreMem mem pointer := 
+
+  Instance CM : coreMem mem pointer :=
     CoreMem add_sub sub_add add_0 validw_uset validrP validw_validr setP.
-  
-  Definition read_mem (m: mem) (ptr: pointer) (ws: wsize) : exec (word ws) := 
+
+  Definition read_mem (m: mem) (ptr: pointer) (ws: wsize) : exec (word ws) :=
     CoreMem.read m ptr ws.
 
   Definition bounded (z1 z2 z3: Z) := (z1 <=? z2) && (z2 <? z3).
 
-  Definition write_mem (m: mem) (ptr:pointer) (ws:wsize) (v:word ws) := 
+  Definition write_mem (m: mem) (ptr:pointer) (ws:wsize) (v:word ws) :=
     CoreMem.write m ptr v.
-  
+
   Lemma is_align_valid_pointer m p ws :
-    is_align p ws -> 
+    is_align p ws ->
     (forall k, 0 <= k < wsize_size ws -> valid_pointer m (p + wrepr U64 k) U8) ->
     valid_pointer m p ws.
   Proof.
@@ -220,7 +220,7 @@ Module MemoryI : MemoryT.
   Lemma addP p k: add p k = (p + wrepr U64 k)%R.
   Proof. done. Qed.
 
-  Lemma readP m p s : read_mem m p s = CoreMem.read m p s. 
+  Lemma readP m p s : read_mem m p s = CoreMem.read m p s.
   Proof. done. Qed.
 
   Lemma writeP m p s (v:word s): write_mem m p v = CoreMem.write m p v.
@@ -228,31 +228,31 @@ Module MemoryI : MemoryT.
 
   Definition top_stack (m:mem) := m.(stk_ptr).
 
-  Fixpoint stack_aux (p:Z) (l:seq Z) : seq (Z * Z) := 
+  Fixpoint stack_aux (p:Z) (l:seq Z) : seq (Z * Z) :=
     match l with
     | [::] => [::]
     | z::l => (p,z) :: stack_aux (p+z) l
     end.
 
-  Definition stack (m:mem) := 
+  Definition stack (m:mem) :=
     stack_aux (wunsigned m.(stk_ptr)) (m.(cur_frame) :: m.(frames)).
 
-  Definition get_frame (m:mem) (p:pointer) := 
+  Definition get_frame (m:mem) (p:pointer) :=
     let stack := stack m in
     let i := find (fun pz => pz.1 == wunsigned p) stack in
     ohead (drop i stack).
 
-  Definition caller (m:mem) (p:pointer) := 
+  Definition caller (m:mem) (p:pointer) :=
     omap (fun pz => wrepr U64 pz.1) (get_frame m p).
 
-  Definition frame_size (m:mem) (p:pointer) := 
+  Definition frame_size (m:mem) (p:pointer) :=
     omap fst (get_frame m p).
 
-  Definition set_alloc b (m:Mz.t bool) (ptr sz:Z) := 
+  Definition set_alloc b (m:Mz.t bool) (ptr sz:Z) :=
     foldl (fun m k => Mz.set m k b) m (ziota ptr sz).
 
   Lemma set_allocP b m p sz x :
-    is_zalloc (set_alloc b m p sz) x = 
+    is_zalloc (set_alloc b m p sz) x =
       if (p <=? x) && (x <? p + sz) then b else is_zalloc m x.
   Proof.
     rewrite /set_alloc -in_ziota; elim: ziota m => //= i l hrec m.
@@ -262,14 +262,14 @@ Module MemoryI : MemoryT.
 
   Lemma decr_stk (low ptr:pointer) sz:
     bounded (wunsigned low) ((wunsigned ptr) - sz)%Z (wunsigned ptr) ->
-    wunsigned (ptr - wrepr U64 sz)%R = wunsigned ptr - sz. 
+    wunsigned (ptr - wrepr U64 sz)%R = wunsigned ptr - sz.
   Proof.
     rewrite /bounded => /andP [] /ZleP ? /ZltP ?.
     rewrite wunsigned_sub //.
-    by have := wunsigned_range ptr; have := wunsigned_range low; Psatz.lia. 
+    by have := wunsigned_range ptr; have := wunsigned_range low; Psatz.lia.
   Qed.
 
-  Lemma framesP_alloc m sz: 
+  Lemma framesP_alloc m sz:
     bounded (wunsigned m.(stk_low)) ((wunsigned m.(stk_ptr)) - sz)%Z (wunsigned m.(stk_ptr)) ->
     valid_frames (m.(stk_ptr) - wrepr U64 sz)%R sz (m.(cur_frame) :: m.(frames)).
   Proof.
@@ -281,32 +281,32 @@ Module MemoryI : MemoryT.
     rewrite /frames_size /= ?zify; first Psatz.lia.
   Qed.
 
-  Lemma stk_ptrP_alloc (m:mem) sz: 
+  Lemma stk_ptrP_alloc (m:mem) sz:
     bounded (wunsigned m.(stk_low)) (wunsigned m.(stk_ptr) - sz)%Z (wunsigned m.(stk_ptr)) ->
     0 <= (wunsigned m.(stk_low)) <= (wunsigned (m.(stk_ptr) - wrepr U64 sz)).
-  Proof. 
+  Proof.
     move=> h;rewrite (decr_stk h).
-    by move/andP: h => [/ZleP ? /ZltP ?]; case : m.(stk_ptrP);auto. 
+    by move/andP: h => [/ZleP ? /ZltP ?]; case : m.(stk_ptrP);auto.
   Qed.
 
-  Lemma stk_okP_alloc (m:mem) sz: 
+  Lemma stk_okP_alloc (m:mem) sz:
     bounded (wunsigned m.(stk_low)) (wunsigned m.(stk_ptr) - sz)%Z (wunsigned m.(stk_ptr)) ->
     let newptr := (m.(stk_ptr) - wrepr U64 sz)%R in
-    forall x, 
-      wunsigned m.(stk_low) <= x < 
-         wunsigned newptr + frames_size sz (m.(cur_frame)::m.(frames)) -> 
+    forall x,
+      wunsigned m.(stk_low) <= x <
+         wunsigned newptr + frames_size sz (m.(cur_frame)::m.(frames)) ->
       is_zalloc (set_alloc true m.(alloc) (wunsigned newptr) sz) x = (wunsigned newptr <=? x).
-  Proof. 
+  Proof.
     move=> h;rewrite /= (decr_stk h) /frames_size /= => x ?.
     rewrite set_allocP; case: ifPn; rewrite !zify => ?.
     + by symmetry; apply/ZleP; Psatz.lia.
     rewrite m.(@stk_okP); last by rewrite /frames_size /=; Psatz.lia.
     move: h;rewrite /bounded !zify.
-    case: ZleP;case: ZleP => //??; Psatz.lia. 
+    case: ZleP;case: ZleP => //??; Psatz.lia.
   Qed.
 
   Definition alloc_stack (m:mem) (sz:Z) : exec mem :=
-    let t := 
+    let t :=
      bounded (wunsigned m.(stk_low)) (wunsigned m.(stk_ptr) - sz)%Z (wunsigned m.(stk_ptr)) in
     let newptr := (m.(stk_ptr) - wrepr U64 sz)%R in
     match Sumbool.sumbool_of_bool t with
@@ -317,9 +317,9 @@ Module MemoryI : MemoryT.
            alloc     := set_alloc true m.(alloc) (wunsigned newptr) sz;
            stk_low   := m.(stk_low);
            stk_ptr   := newptr;
-           cur_frame := sz; 
+           cur_frame := sz;
            frames    := m.(cur_frame) :: m.(frames);
-           framesP   := framesP_alloc h; 
+           framesP   := framesP_alloc h;
            stk_ptrP  := stk_ptrP_alloc h;
            stk_okP   := stk_okP_alloc h;
         |}
@@ -328,46 +328,46 @@ Module MemoryI : MemoryT.
   Lemma frames_size_pos m : 0 <= foldr Z.add 0 (frames m).
   Proof.
     have /andP [/= /andP [] /ZleP h1 h2 _]:= m.(framesP); rewrite /frames_size /=.
-    by elim : (frames m) h2 => /= [_ | i l hrec /andP [] /ZleP ? /hrec]; Psatz.lia.  
+    by elim : (frames m) h2 => /= [_ | i l hrec /andP [] /ZleP ? /hrec]; Psatz.lia.
   Qed.
 
   Lemma incr_stk (m:mem) :
-    wunsigned (stk_ptr m + wrepr U64 (cur_frame m))%R = 
-     wunsigned (stk_ptr m) + cur_frame m. 
+    wunsigned (stk_ptr m + wrepr U64 (cur_frame m))%R =
+     wunsigned (stk_ptr m) + cur_frame m.
   Proof.
     have := m.(framesP); have := @frames_size_pos m.
     rewrite /valid_frames /frames_size /= => ? /andP [] /andP [] /ZleP ? _ /ZltP ?.
     have ? := wunsigned_range (stk_ptr m).
-    by rewrite wunsigned_add; Psatz.lia. 
+    by rewrite wunsigned_add; Psatz.lia.
   Qed.
 
-  Lemma framesP_free m sz fr : 
-    m.(frames) = sz :: fr ->  
+  Lemma framesP_free m sz fr :
+    m.(frames) = sz :: fr ->
     valid_frames (m.(stk_ptr) + wrepr U64 m.(cur_frame))%R sz fr.
   Proof.
     move=> heq;have := m.(framesP); rewrite /valid_frames incr_stk heq /frames_size /=.
     move=> /andP [] /and3P [] /ZleP h1 h2 ->.
-    by rewrite h2 => /ZltP /= ?; apply /ZltP; move /ZleP: h2 => h2; Psatz.lia. 
+    by rewrite h2 => /ZltP /= ?; apply /ZltP; move /ZleP: h2 => h2; Psatz.lia.
   Qed.
 
-  Lemma stk_ptrP_free (m:mem): 
+  Lemma stk_ptrP_free (m:mem):
      0 <= wunsigned m.(stk_low) <= wunsigned (m.(stk_ptr) + wrepr U64 m.(cur_frame)).
-  Proof. 
+  Proof.
     rewrite incr_stk.
     have := m.(framesP); have:= m.(stk_ptrP).
-    by rewrite /valid_frames /= !zify /frames_size /= => *; Psatz.lia. 
+    by rewrite /valid_frames /= !zify /frames_size /= => *; Psatz.lia.
   Qed.
 
-  Lemma stk_okP_free (m:mem) sz fr: 
-    m.(frames) = sz :: fr ->  
+  Lemma stk_okP_free (m:mem) sz fr:
+    m.(frames) = sz :: fr ->
     let newptr := (m.(stk_ptr) + wrepr U64 m.(cur_frame))%R in
-    forall x, 
-      wunsigned m.(stk_low) <= x < wunsigned newptr + frames_size sz fr -> 
+    forall x,
+      wunsigned m.(stk_low) <= x < wunsigned newptr + frames_size sz fr ->
       is_zalloc (set_alloc false m.(alloc) (wunsigned m.(stk_ptr)) m.(cur_frame)) x =
               (wunsigned newptr <=? x).
-  Proof. 
+  Proof.
     move=> h /=; rewrite incr_stk => /= x hx.
-    rewrite set_allocP m.(@stk_okP). 
+    rewrite set_allocP m.(@stk_okP).
     + have /andP /= [/andP [/ZleP ??] _ ] := m.(framesP).
       case: ifPn;rewrite !zify => h1.
       + symmetry;apply /negP => /ZleP; Psatz.lia.
@@ -378,25 +378,25 @@ Module MemoryI : MemoryT.
   Definition free_stack (m:mem) (sz:Z) :=
     match m.(frames) as f return m.(frames) = f -> mem with
     | [::] => fun _ => m
-    | sz :: fr => 
+    | sz :: fr =>
       fun (h:m.(frames) = sz::fr) =>
         {| data      := m.(data);
            alloc     := set_alloc false m.(alloc) (wunsigned m.(stk_ptr)) m.(cur_frame);
            stk_low   := m.(stk_low);
            stk_ptr   :=(m.(stk_ptr) + wrepr U64 m.(cur_frame))%R;
-           cur_frame := sz; 
+           cur_frame := sz;
            frames    := fr;
-           framesP   := framesP_free h; 
+           framesP   := framesP_free h;
            stk_ptrP  := stk_ptrP_free m;
            stk_okP   := stk_okP_free h;
         |}
     end (erefl _).
 
-  Definition init_alloc (s: seq (pointer * Z)) := 
+  Definition init_alloc (s: seq (pointer * Z)) :=
     foldl (λ (a : Mz.t bool) (pz : u64 * Z), set_alloc true a (wunsigned pz.1) pz.2)
          (Mz.empty bool) s.
 
-  Lemma stk_okP_init_alloc s x : 
+  Lemma stk_okP_init_alloc s x :
     0 <= x < 0 + frames_size 0 [::] → is_zalloc (init_alloc s) x = (0 <=? x).
   Proof. by rewrite /frames_size /=; Psatz.lia. Qed.
 
@@ -415,7 +415,7 @@ Module MemoryI : MemoryT.
   Proof. rewrite /valid;case: valid_pointer => //=; apply idP. Qed.
 
   Lemma readV (m:mem) p s: reflect (exists v, read_mem m p s = ok v) (valid_pointer m p s).
-  Proof. 
+  Proof.
     rewrite /read_mem /CoreMem.read /= /valid.
     by (case: valid_pointer => /=; constructor) => [ | []//]; eauto.
   Qed.
@@ -429,24 +429,24 @@ Module MemoryI : MemoryT.
 
   Lemma read_mem_error m p s e: read_mem m p s = Error e -> e = ErrAddrInvalid.
   Proof.
-    by rewrite /read_mem /CoreMem.read /= /valid; case: valid_pointer => [|[<-]]. 
+    by rewrite /read_mem /CoreMem.read /= /valid; case: valid_pointer => [|[<-]].
   Qed.
 
   Lemma valid_align m p s: valid_pointer m p s -> is_align p s.
   Proof. by move=> /andP []. Qed.
 
   Instance M : memory mem :=
-    Memory read_mem write_mem valid_pointer 
+    Memory read_mem write_mem valid_pointer
       top_stack caller frame_size alloc_stack free_stack init_mem.
 
-  Lemma write_memE m m' p s (v:word s): 
+  Lemma write_memE m m' p s (v:word s):
     write_mem m p v = ok m' ->
     validw m p s = ok tt /\ m' = CoreMem.uwrite m p v.
   Proof.
     by rewrite /write_mem /CoreMem.write /= /valid /assert; case:ifP => //= _ [<-].
   Qed.
 
-  Lemma alloc_uwrite m p s (v:word s): 
+  Lemma alloc_uwrite m p s (v:word s):
     alloc (CoreMem.uwrite m p v) = alloc m.
   Proof. by rewrite /CoreMem.uwrite; elim: ziota m => //= ?? hrec ?;rewrite hrec. Qed.
 
@@ -461,16 +461,16 @@ Module MemoryI : MemoryT.
 
   Lemma write_read8 m m' p ws (v: word ws) k :
     write_mem m p v = ok m' ->
-    read_mem m' k U8 = 
+    read_mem m' k U8 =
       let i := wunsigned k - wunsigned p in
       if (0 <=? i) && (i <? wsize_size ws) then ok (LE.wread8 v i)
       else read_mem m k U8.
   Proof. apply: CoreMem.write_read8. Qed.
-   
+
   Lemma writeP_eq m m' p s (v :word s):
     write_mem m p v = ok m' ->
     read_mem m' p s = ok v.
-  Proof. 
+  Proof.
     move=> hw; rewrite /read_mem /CoreMem.read /= /valid.
     rewrite (write_valid _ _ hw).
     (case: (writeV m p v); rewrite hw) => [[m1 _] /= | []]; last by eauto.
@@ -485,7 +485,7 @@ Module MemoryI : MemoryT.
     rewrite /read_mem /CoreMem.read /= /valid => hw [ /ZleP hno /ZleP hno' hd].
     rewrite (write_valid p' s' hw); case:valid_pointer => //=.
     rewrite (CoreMem.writeP_neq hw) // => i i' hi hi'.
-    rewrite /= /add => heq. 
+    rewrite /= /add => heq.
     have : wunsigned (p + wrepr U64 i)%R = wunsigned (p' + wrepr U64 i')%R by rewrite heq.
     have hp := wunsigned_range p; have hp' := wunsigned_range p'.
     rewrite !wunsigned_add; Psatz.lia.
@@ -512,7 +512,7 @@ Module MemoryI : MemoryT.
     rewrite (decr_stk h); have := wunsigned_range (stk_ptr m); Psatz.lia.
   Qed.
 
-  Lemma is_zalloc_set b m n sz p: is_zalloc (set_alloc b m n sz) p = 
+  Lemma is_zalloc_set b m n sz p: is_zalloc (set_alloc b m n sz) p =
     if (n <=? p) && (p <? n + sz) then b else is_zalloc m p.
   Proof.
     rewrite /is_zalloc /set_alloc -in_ziota.
@@ -551,7 +551,7 @@ Module MemoryI : MemoryT.
   Proof.
   Admitted.
 
-  Lemma write_mem_stable m m' p s (v:word s) : 
+  Lemma write_mem_stable m m' p s (v:word s) :
     write_mem m p v = ok m' -> stack_stable m m'.
   Proof.
   Admitted.

@@ -64,7 +64,7 @@ Record Instruction := mkInstruction {
   tout : list stype;
   semi : sem_prod tin (exec (sem_tuple tout));
   tin_narr : all is_not_sarr tin;
-  wsizei : wsize; 
+  wsizei : wsize;
 }.
 
 (*
@@ -90,7 +90,7 @@ Definition wsize_of_sopn (op: sopn) : wsize :=
   | Ox86_IMULtimm x
   | Ox86_DIV x
   | Ox86_IDIV x
-  | Ox86_CQO x 
+  | Ox86_CQO x
   | Ox86_ADC x
   | Ox86_SBB x
   | Ox86_NEG x
@@ -176,10 +176,10 @@ Definition w256x2w8_ty      := [:: sword256; sword256; sword8].
 (* ----------------------------------------------------------------------------- *)
 
 Notation mk_instr str tin tout semi wsizei:=
-  {| str := str; 
-     tin := tin; 
-     tout := tout; 
-     semi := semi; 
+  {| str := str;
+     tin := tin;
+     tout := tout;
+     semi := semi;
      tin_narr := refl_equal;
      wsizei := wsizei;
   |}.
@@ -189,7 +189,7 @@ Definition mk_instr_w2_w2 name semi sz :=
   mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz) (semi sz) sz.
 
 Definition mk_instr_w2b_bw name semi sz :=
-  mk_instr (pp_sz name sz) [::sword sz; sword sz; sbool] (sbool :: (w_ty sz)) 
+  mk_instr (pp_sz name sz) [::sword sz; sword sz; sbool] (sbool :: (w_ty sz))
    (fun x y c => let p := semi sz x y c in ok (Some p.1, p.2)) sz.
 
 Definition mk_instr__b5w name semi sz :=

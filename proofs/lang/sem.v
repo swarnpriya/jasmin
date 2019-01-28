@@ -65,7 +65,7 @@ Definition to_int v :=
   | _           => type_error
   end.
 
-Definition truncate_word (s s':wsize) (w:word s') : exec (word s) := 
+Definition truncate_word (s s':wsize) (w:word s') : exec (word s) :=
    if (s <= s')%CMP then ok (zero_extend s w) else type_error.
 
 Definition to_word (s: wsize) (v: value) : exec (word s) :=
@@ -123,7 +123,7 @@ Definition truncate_val (ty: stype) (v: value) : exec value :=
 Lemma type_of_to_val t (s: sem_t t) : type_of_val (to_val s) = t.
 Proof. by case: t s. Qed.
 
-Definition oto_val t : sem_ot t -> value := 
+Definition oto_val t : sem_ot t -> value :=
   match t return sem_ot t -> value with
   | sbool => fun ob => if ob is Some b then Vbool b else Vundef sbool
   | x     => @to_val x
@@ -217,7 +217,7 @@ Definition get_var (m:vmap) x :=
 Definition set_var (m:vmap) x v : exec vmap :=
   on_vu (fun v => m.[x<-ok v]%vmap)
         (if is_sbool x.(vtype) then ok m.[x<-undef_addr x.(vtype)]%vmap
-         else type_error) 
+         else type_error)
         (of_val (vtype x) v).
 
 Lemma set_varP (m m':vmap) x v P :
@@ -245,13 +245,13 @@ Definition sem_vadd (ve:velem) {ws:wsize} := (lift2_vec ve +%R ws).
 Definition sem_vsub (ve:velem) {ws:wsize} := (lift2_vec ve (fun x y => x - y)%R ws).
 Definition sem_vmul (ve:velem) {ws:wsize} := (lift2_vec ve *%R ws).
 
-Definition sem_vshr (ve:velem) {ws:wsize} (v : word ws) (i:u8) :=  
+Definition sem_vshr (ve:velem) {ws:wsize} (v : word ws) (i:u8) :=
   lift1_vec ve (fun x => wshr x (wunsigned i)) ws v.
 
-Definition sem_vsar (ve:velem) {ws:wsize} (v : word ws) (i:u8) :=  
+Definition sem_vsar (ve:velem) {ws:wsize} (v : word ws) (i:u8) :=
   lift1_vec ve (fun x => wsar x (wunsigned i)) ws v.
 
-Definition sem_vshl (ve:velem) {ws:wsize} (v : word ws) (i:u8) :=  
+Definition sem_vshl (ve:velem) {ws:wsize} (v : word ws) (i:u8) :=
   lift1_vec ve (fun x => wshl x (wunsigned i)) ws v.
 
 Definition sem_sop1_typed (o: sop1) :
@@ -282,7 +282,7 @@ Lemma sem_sop1I y x f:
     y = to_val (sem_sop1_typed f w).
 Proof. by rewrite /sem_sop1; t_xrbindP => w ok_w <-; eauto. Qed.
 
-Definition signed {A:Type} (fu fs:A) s := 
+Definition signed {A:Type} (fu fs:A) s :=
   match s with
   | Unsigned => fu
   | Signed => fs
@@ -292,7 +292,7 @@ Definition mk_sem_divmod sz o (w1 w2: word sz) : exec (word sz) :=
   if ((w2 == 0) || ((wsigned w1 == wmin_signed sz) && (w2 == -1)))%R then type_error
   else ok (o w1 w2).
 
-Definition mk_sem_sop2 (t1 t2 t3: Type) (o:t1 -> t2 -> t3) v1 v2 : exec t3 := 
+Definition mk_sem_sop2 (t1 t2 t3: Type) (o:t1 -> t2 -> t3) v1 v2 : exec t3 :=
   ok (o v1 v2).
 
 Definition sem_sop2_typed (o: sop2) :
@@ -354,7 +354,7 @@ Definition sem_sop2 (o: sop2) (v1 v2: value) : exec value :=
 
 Lemma sem_sop2I v v1 v2 f:
   sem_sop2 f v1 v2 = ok v →
-  ∃ (w1 : sem_t (type_of_op2 f).1.1) (w2 : sem_t (type_of_op2 f).1.2) 
+  ∃ (w1 : sem_t (type_of_op2 f).1.1) (w2 : sem_t (type_of_op2 f).1.2)
     (w3: sem_t (type_of_op2 f).2),
     [/\ of_val _ v1 = ok w1,
         of_val _ v2 = ok w2,
@@ -547,11 +547,11 @@ Proof. case: v => // [ sz' w | [] // ] _; exact: wsize_le_U8. Qed.
 Fixpoint list_ltuple (ts:list stype) : sem_tuple ts -> values :=
   match ts return sem_tuple ts -> values with
   | [::] => fun (u:unit) => [::]
-  | t :: ts => 
+  | t :: ts =>
     let rec := @list_ltuple ts in
     match ts return (sem_tuple ts -> values) -> sem_tuple (t::ts) -> values with
     | [::] => fun _ x => [:: oto_val x]
-    | t1 :: ts' => 
+    | t1 :: ts' =>
       fun rec (p : sem_ot t * sem_tuple (t1 :: ts')) =>
        oto_val p.1 :: rec p.2
     end rec
@@ -816,7 +816,7 @@ Section SEM_IND.
     | @Eif_false s1 s2 e1 c1 c2 e2 s0 =>
       @Hif_false s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c2 s2 s0)
     | @Ewhile_true s1 s2 s3 s4 c e1 c' h1 h2 h3 h4 =>
-      @Hwhile_true s1 s2 s3 s4 c e1 c' h1 (@sem_Ind s1 c s2 h1) h2 h3 (@sem_Ind s2 c' s3 h3) 
+      @Hwhile_true s1 s2 s3 s4 c e1 c' h1 (@sem_Ind s1 c s2 h1) h2 h3 (@sem_Ind s2 c' s3 h3)
           h4 (@sem_i_Ind s3 (Cwhile c e1 c') s4 h4)
     | @Ewhile_false s1 s2 c e1 c' s0 e2 =>
       @Hwhile_false s1 s2 c e1 c' s0 (@sem_Ind s1 c s2 s0) e2

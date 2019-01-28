@@ -1066,7 +1066,7 @@ Definition VPSUB_desc ve sz := make_instr_desc
     (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
-Lemma VPMULL_gsc ve sz: 
+Lemma VPMULL_gsc ve sz:
    gen_sem_correct [:: TYrm128 ; TYrm128 ; TYrm128 ] (Ox86_VPMULL ve sz)
                    [:: E sz 0 ] [:: E sz 1 ; E sz 2 ] [::] (VPMULL ve sz).
 Proof.
@@ -1474,9 +1474,9 @@ Definition assemble_sopn (ii: instr_info) (out: lvals) (op: sopn) (args: pexprs)
   Let loargs := compile_low_args ii (id_tys d) hiargs in
   typed_apply_gargs ii loargs (id_instr d).
 
-Lemma type_apply_gargP ty T ii ga (iasm:interp_ty ty → T) ins: 
+Lemma type_apply_gargP ty T ii ga (iasm:interp_ty ty → T) ins:
    typed_apply_garg ii ga iasm = ok ins ->
-   ∃ x' : interp_ty ty, ga = mk_garg x' ∧ ins = iasm x'. 
+   ∃ x' : interp_ty ty, ga = mk_garg x' ∧ ins = iasm x'.
 Proof.
   case: ty iasm => //=; case: ga => //.
   + by move => c i' [<-]; eauto.
@@ -1502,10 +1502,10 @@ Lemma assemble_sopn_is_sopn ii out op args i :
   is_sopn i.
 Proof.
   rewrite /assemble_sopn.
-  t_xrbindP => id _ iargs _ gargs _. 
+  t_xrbindP => id _ iargs _ gargs _.
   have := id_gen_sem id; move: [::].
   elim: (id_tys id) (id_in id) (id_out id) (id_instr id) gargs =>
-     [ | ty tys ih] /= iin iout iasm [ | ga gargs] //= gargs'. 
+     [ | ty tys ih] /= iin iout iasm [ | ga gargs] //= gargs'.
   + by move=> [? ?] [<-].
   move=> hgen;t_xrbindP => ins Ha.
   apply (ih iin iout ins gargs (gargs' ++ [::ga])).

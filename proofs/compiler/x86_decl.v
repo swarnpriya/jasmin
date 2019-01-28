@@ -29,9 +29,9 @@ From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
 Require oseq.
 Require Import ZArith
-utils 
+utils
 strings wsize
-memory_model 
+memory_model
 (* word *)
 global
 oseq
@@ -149,7 +149,7 @@ Proof.
   by apply: internal_register_dec_lb.
 Qed.
 
-Definition reg_eqMixin := Equality.Mixin reg_eq_axiom. 
+Definition reg_eqMixin := Equality.Mixin reg_eq_axiom.
 Canonical reg_eqType := EqType register reg_eqMixin.
 
 Lemma xreg_eq_axiom : Equality.axiom xmm_register_beq.
@@ -159,7 +159,7 @@ Proof.
   by apply: internal_xmm_register_dec_lb.
 Qed.
 
-Definition xreg_eqMixin := Equality.Mixin xreg_eq_axiom. 
+Definition xreg_eqMixin := Equality.Mixin xreg_eq_axiom.
 Canonical xreg_eqType := EqType _ xreg_eqMixin.
 
 Lemma rflag_eq_axiom : Equality.axiom rflag_beq.
@@ -169,7 +169,7 @@ Proof.
   by apply: internal_rflag_dec_lb.
 Qed.
 
-Definition rflag_eqMixin := Equality.Mixin rflag_eq_axiom. 
+Definition rflag_eqMixin := Equality.Mixin rflag_eq_axiom.
 Canonical rflag_eqType := EqType rflag rflag_eqMixin.
 
 Lemma scale_eq_axiom : Equality.axiom scale_beq.
@@ -179,7 +179,7 @@ Proof.
   by apply: internal_scale_dec_lb.
 Qed.
 
-Definition scale_eqMixin := Equality.Mixin scale_eq_axiom. 
+Definition scale_eqMixin := Equality.Mixin scale_eq_axiom.
 Canonical scale_eqType := EqType scale scale_eqMixin.
 
 Definition address_beq (addr1: address) addr2 :=
@@ -205,7 +205,7 @@ Proof.
   by apply: internal_condt_dec_lb.
 Qed.
 
-Definition condt_eqMixin := Equality.Mixin condt_eq_axiom. 
+Definition condt_eqMixin := Equality.Mixin condt_eq_axiom.
 Canonical condt_eqType := EqType condt condt_eqMixin.
 
 (* -------------------------------------------------------------------- *)
@@ -323,7 +323,7 @@ Canonical rflagv_eqType := EqType _ rflagv_eqMixin.
 
 (* -------------------------------------------------------------------- *)
 
-Variant asm_arg : Type := 
+Variant asm_arg : Type :=
   | Condt  `(condt)
   | Imm    `(ws:wsize) `(word ws)
   | Glob   `(global)
@@ -333,7 +333,7 @@ Variant asm_arg : Type :=
 
 Notation asm_args := (seq asm_arg).
 
-Variant implicite_arg : Type := 
+Variant implicite_arg : Type :=
   | IArflag of rflag
   | IAreg   of register.
 
@@ -343,7 +343,7 @@ Variant arg_desc :=
 
 Definition E n := ADExplicit n None.
 
-Definition asm_arg_beq (a1 a2:asm_arg) := 
+Definition asm_arg_beq (a1 a2:asm_arg) :=
   match a1, a2 with
   | Condt t1, Condt t2 => t1 == t2
   | Imm sz1 w1, Imm sz2 w2 => (sz1 == sz2) && (wunsigned w1 == wunsigned w2)
@@ -366,7 +366,7 @@ Proof.
   by move=> /Imm_inj [? ];subst => /= ->;rewrite !eqxx.
 Qed.
 
-Definition asm_arg_eqMixin := Equality.Mixin asm_arg_eq_axiom. 
+Definition asm_arg_eqMixin := Equality.Mixin asm_arg_eq_axiom.
 Canonical asm_arg_eqType := EqType asm_arg asm_arg_eqMixin.
 
 (* -------------------------------------------------------------------- *)
@@ -383,15 +383,15 @@ Proof.
   by apply: internal_msb_flag_dec_lb.
 Qed.
 
-Definition msb_flag_eqMixin := Equality.Mixin msb_flag_eq_axiom. 
+Definition msb_flag_eqMixin := Equality.Mixin msb_flag_eq_axiom.
 Canonical msb_flag_eqType := EqType msb_flag msb_flag_eqMixin.
 
 (* -------------------------------------------------------------------- *)
 
-(* Variant xtype := 
+(* Variant xtype :=
   | xword `(wsize)
   | xbool.
- *) 
+ *)
 (* Definition sem_xt (t : xtype) : Type :=
   match t with
   | xbool    => bool
@@ -409,7 +409,7 @@ Definition sem_xtuple ts := ltuple (map sem_oxt ts).
 
 Record instr_desc_t := mk_instr_desc {
   (* Info for x86 sem *)
-  id_msb_flag : msb_flag; 
+  id_msb_flag : msb_flag;
   id_in       : seq (arg_desc * stype);
   id_out      : seq (arg_desc * stype);
   id_semi     : sem_prod (map snd id_in) (exec (sem_tuple (map snd id_out)));

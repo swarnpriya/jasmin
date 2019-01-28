@@ -39,7 +39,7 @@ Local Open Scope svmap_scope.
 (* -------------------------------------------------------------------- *)
 Derive Inversion_clear sfor_nilI with
   (forall p x P c Q, ssem_for p x [::] P c Q) Sort Prop.
-  
+
 Derive Inversion_clear sfor_consI with
   (forall p x z zs P c Q, ssem_for p x (z :: zs) P c Q) Sort Prop.
 
@@ -146,7 +146,7 @@ End SsemInd.
 (* --------------------------------------------------------------------- *)
 Lemma surj_SEstate s : {| semem := semem s; sevm := sevm s |} = s.
 Proof. by case: s. Qed.
-  
+
 Definition svmap_eq_except (s : Sv.t) (vm1 vm2 : svmap) :=
   forall x, ~Sv.In x s -> vm1.[x]%vmap = vm2.[x]%vmap.
 

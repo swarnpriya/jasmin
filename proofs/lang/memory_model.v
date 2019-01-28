@@ -65,7 +65,7 @@ Module LE.
     nth (wrepr U8 0) (encode v) (Z.to_nat k).
 
   Lemma encode8E (w: u8): encode w = [:: w].
-  Proof. 
+  Proof.
     have {2}<-:= decodeK w.
     rewrite /encode /decode /make_vec /split_vec divnn modnn /= mul0n.
     by rewrite Z.lor_0_r /wrepr word.ureprK.
@@ -84,19 +84,19 @@ Class coreMem (core_mem:Type) (pointer:eqType) := CoreMem {
   validw : core_mem -> pointer -> wsize -> exec unit;
 
   add_sub : forall p k, add p (sub k p) = k;
-  sub_add : forall m p s i t, 
-    validw m p s = ok t -> 0 <= i < wsize_size s -> sub (add p i) p = i; 
+  sub_add : forall m p s i t,
+    validw m p s = ok t -> 0 <= i < wsize_size s -> sub (add p i) p = i;
   add_0   : forall p, add p 0 = p;
 
   validw_uset m p v p' s: validw (uset m p v) p' s = validw m p' s;
 
-  validrP : forall m p s i t, 
+  validrP : forall m p s i t,
     validr m p s = ok t ->
-    0 <= i < wsize_size s ->  
+    0 <= i < wsize_size s ->
     validr m (add p i) U8 = ok t;
 
-  validw_validr : forall m p s i v t k, 
-    validw m p s = ok t -> 
+  validw_validr : forall m p s i v t k,
+    validw m p s = ok t ->
     0 <= i < wsize_size s ->
     validr (uset m (add p i) v) k U8 = if add p i == k then ok t else validr m k U8;
 
@@ -106,11 +106,11 @@ Class coreMem (core_mem:Type) (pointer:eqType) := CoreMem {
 }.
 
 Module CoreMem.
-Section CoreMem.                            
+Section CoreMem.
 
   Context {core_mem:Type} {pointer:eqType} {CM:coreMem core_mem pointer}.
 
-  Definition uread (m: core_mem) (ptr: pointer) n := 
+  Definition uread (m: core_mem) (ptr: pointer) n :=
     map (fun o => uget m (add ptr o)) (ziota 0 n).
 
   Definition read (m: core_mem) (ptr: pointer) (sz: wsize) : exec (word sz) :=
@@ -123,10 +123,10 @@ Section CoreMem.
   Definition write (m: core_mem) (ptr: pointer) (sz: wsize) (w: word sz) : exec core_mem :=
     Let _ := validw m ptr sz in
     ok (uwrite m ptr w).
- 
-  Lemma sub_add_ziota m t p s i: 
+
+  Lemma sub_add_ziota m t p s i:
    validw m p s = ok t -> i \in ziota 0 (wsize_size s) -> sub (add p i) p = i.
-  Proof. by move=> hw; rewrite in_ziota !zify; apply: (sub_add hw). Qed. 
+  Proof. by move=> hw; rewrite in_ziota !zify; apply: (sub_add hw). Qed.
 
   Lemma readV m p s: is_ok (read m p s) = is_ok (validr m p s).
   Proof. by rewrite /read; case: validr. Qed.
@@ -144,7 +144,7 @@ Section CoreMem.
 
   Lemma uwrite_uget m p ws (v:word ws) k t:
     validw m p ws = ok t ->
-    uget (uwrite m p v) k = 
+    uget (uwrite m p v) k =
        let i := sub k p in
        if (0 <=? i) && (i <? wsize_size ws) then (LE.wread8 v i)
        else uget m k.
@@ -154,13 +154,13 @@ Section CoreMem.
     rewrite hrec; last by move=> ? hin;apply hsub; rewrite in_cons hin orbT.
     rewrite setP in_cons orbC; case: ifPn => //= _.
     case: eqP => [<- | hne].
-    + by rewrite hsub ?mem_head ?eq_refl.    
+    + by rewrite hsub ?mem_head ?eq_refl.
     by case: eqP => // ?;subst i; elim hne; rewrite add_sub.
-  Qed. 
+  Qed.
 
-  Lemma write_uget m m' p ws (v: word ws) k :    
+  Lemma write_uget m m' p ws (v: word ws) k :
     write m p v = ok m' ->
-    uget m' k = 
+    uget m' k =
       let i := sub k p in
        if (0 <=? i) && (i <? wsize_size ws) then (LE.wread8 v i)
        else uget m k.
@@ -190,9 +190,9 @@ Section CoreMem.
   Lemma uread8_get m p : LE.decode U8 (uread m p (wsize_size U8)) = uget m p.
   Proof. by rewrite /uread /= -LE.encode8E LE.decodeK add_0. Qed.
 
-  Lemma write_read8 m m' p ws (v: word ws) k :    
+  Lemma write_read8 m m' p ws (v: word ws) k :
     write m p v = ok m' ->
-    read m' k U8 = 
+    read m' k U8 =
       let i := sub k p in
        if (0 <=? i) && (i <? wsize_size ws) then ok (LE.wread8 v i)
        else read m k U8.
@@ -200,13 +200,13 @@ Section CoreMem.
     rewrite /write; t_xrbindP => ? hv <-.
     by rewrite /read (uwrite_validr8 v k hv) /= !uread8_get (uwrite_uget _ _ hv) /=; case:ifP.
   Qed.
-  
+
   Delimit Scope nat_scope with N_.
 
-  Lemma rangeP x1 x2 x3 : reflect (x1 <= x2 < x3) ((x1 <=? x2) && (x2 <? x3)). 
+  Lemma rangeP x1 x2 x3 : reflect (x1 <= x2 < x3) ((x1 <=? x2) && (x2 <? x3)).
   Proof. by case: andP => h;constructor; move: h;rewrite !zify. Qed.
 
-  Lemma Z_of_nat_range i s: (i < Z.to_nat (wsize_size s))%N_ -> 
+  Lemma Z_of_nat_range i s: (i < Z.to_nat (wsize_size s))%N_ ->
      0 <= Z.of_nat i < wsize_size s.
   Proof.
     move=> hi; split;first by Psatz.lia.
@@ -227,19 +227,19 @@ Section CoreMem.
     by rewrite (sub_add hv h1) h2 /LE.wread8 Nat2Z.id.
   Qed.
 
-  Definition disjoint_range p s p' s' := 
+  Definition disjoint_range p s p' s' :=
     forall i i', 0 <= i < wsize_size s -> 0 <= i' < wsize_size s' ->
        add p i <> add p' i'.
- 
-  Lemma ureadP m1 m2 p1 p2 s: 
+
+  Lemma ureadP m1 m2 p1 p2 s:
     reflect (forall i, 0 <= i < wsize_size s -> uget m1 (add p1 i) = uget m2 (add p2 i))
             (uread m1 p1 (wsize_size s) == uread m2 p2 (wsize_size s)).
   Proof.
-    apply: (@equivP 
-      (forall i, i \in ziota 0 (wsize_size s) -> 
+    apply: (@equivP
+      (forall i, i \in ziota 0 (wsize_size s) ->
         uget m1 (add p1 i) = uget m2 (add p2 i))); last first.
     + by split=> h i hi;apply h; move: hi; rewrite in_ziota !zify.
-    rewrite /uread;elim: ziota => /=.   
+    rewrite /uread;elim: ziota => /=.
     + by rewrite eq_refl; constructor.
     move=> i l hrec;rewrite eqseq_cons; case: eqP => /= heq.
     + case:hrec => hin; constructor.
@@ -247,12 +247,12 @@ Section CoreMem.
       by move=> hi; apply hin => k hk; apply hi; rewrite in_cons hk orbT.
     constructor => hin; apply heq; apply hin; apply mem_head.
   Qed.
-    
-  Lemma uread_decode m1 m2 p1 p2 s: 
+
+  Lemma uread_decode m1 m2 p1 p2 s:
     reflect (forall i, 0 <= i < wsize_size s -> uget m1 (add p1 i) = uget m2 (add p2 i))
             (LE.decode s (uread m1 p1 (wsize_size s)) == LE.decode s (uread m2 p2 (wsize_size s))).
   Proof.
-    have -> : (LE.decode s (uread m1 p1 (wsize_size s)) == LE.decode s (uread m2 p2 (wsize_size s))) = 
+    have -> : (LE.decode s (uread m1 p1 (wsize_size s)) == LE.decode s (uread m2 p2 (wsize_size s))) =
               (uread m1 p1 (wsize_size s) == uread m2 p2 (wsize_size s)); last by apply ureadP.
     apply Bool.eq_true_iff_eq; split => [/eqP | /eqP ->]; last by rewrite eq_refl.
     move=> /LE.decode_inj; rewrite !size_map size_iota => /(_ erefl erefl) ->; apply eq_refl.
@@ -268,8 +268,8 @@ Section CoreMem.
     rewrite !zify => ?; elim: (hd (sub (add p' i) p) i) => //.
     by rewrite add_sub.
   Qed.
-    
-End CoreMem.   
+
+End CoreMem.
 End CoreMem.
 
 (* ** Memory
@@ -396,7 +396,7 @@ Parameter writeP : forall m p s (v:word s), write_mem m p s v = CoreMem.write m 
 
 Parameter write_read8 : forall m m' p ws (v: word ws) k,
   write_mem m p ws v = ok m' ->
-  read_mem m' k U8 = 
+  read_mem m' k U8 =
     let i := wunsigned k - wunsigned p in
     if (0 <=? i) && (i <? wsize_size ws) then ok (LE.wread8 v i)
     else read_mem m k U8.
@@ -417,7 +417,7 @@ Parameter write_valid : forall m m' p s (v :word s) p' s',
 Parameter valid_align : forall m p s, valid_pointer m p s -> is_align p s.
 
 Parameter is_align_valid_pointer : forall m p ws,
-   is_align p ws -> 
+   is_align p ws ->
    (forall k, 0 <= k < wsize_size ws -> valid_pointer m (p + wrepr U64 k) U8) ->
    valid_pointer m p ws.
 

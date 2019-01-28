@@ -256,7 +256,7 @@ have eqm1 : lom_eqv {| emem := m1' ; evm := vm1 |} xr1.
     by apply/eqP => -[] /inj_string_of_register ?; apply: ne.
   - by move => r v; rewrite /vm1 /= /get_var /vmap0 Fv.setP_neq // Fv.get0.
   move => f v /=; rewrite /vm1 /rflagmap0 ffunE /=.
-  by rewrite /var_of_flag /get_var /= Fv.setP_neq // /vmap0 Fv.get0. 
+  by rewrite /var_of_flag /get_var /= Fv.setP_neq // /vmap0 Fv.get0.
 have h1 : get_reg_values xr1 args = get_reg_values s1 args.
 + rewrite /get_reg_values /get_reg_value /xr1 /=.
   apply: map_ext => // r /xseq.InP hr; f_equal.

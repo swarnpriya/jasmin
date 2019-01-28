@@ -185,7 +185,7 @@ Definition op2_type (op: sop2) : sstype * sstype :=
   match op with
   | (Oand | Oor ) => (ssbool, ssbool)
   | (Oadd ty| Omul ty| Osub ty | Oland ty | Olor ty | Olxor ty) =>
-    match ty with 
+    match ty with
     | Op_int => (ssint, ssint)
     | Op_w   => (ssword, ssword)
     end
@@ -633,7 +633,7 @@ Definition default_texpr (ty: sstype) : texpr ty :=
   | ssbool => Tbool true
   | ssint  => Tconst 42
   | ssword => Tcast (Tconst 999)
-  | ssarr  => Tapp1 Oarr_init (Tconst 666)  
+  | ssarr  => Tapp1 Oarr_init (Tconst 666)
   end.
 
 Definition texpr_of_pexpr (ty: sstype) (pe: pexpr) : texpr ty :=

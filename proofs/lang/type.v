@@ -64,10 +64,10 @@ Notation sword128 := (sword U128).
 Notation sword256 := (sword U256).
 
 (* -------------------------------------------------------------------- *)
-Scheme Equality for stype. 
+Scheme Equality for stype.
 
-Lemma stype_axiom : Equality.axiom stype_beq. 
-Proof. 
+Lemma stype_axiom : Equality.axiom stype_beq.
+Proof.
   move=> x y;apply:(iffP idP).
   + by apply: internal_stype_dec_bl.
   by apply: internal_stype_dec_lb.
@@ -77,12 +77,12 @@ Definition stype_eqMixin     := Equality.Mixin stype_axiom.
 Canonical  stype_eqType      := Eval hnf in EqType stype stype_eqMixin.
 
 
-(* ** Comparison 
+(* ** Comparison
  * -------------------------------------------------------------------- *)
 
 Definition stype_cmp t t' :=
   match t, t' with
-  | sbool   , sbool         => Eq 
+  | sbool   , sbool         => Eq
   | sbool   , _             => Lt
 
   | sint    , sbool         => Gt
@@ -97,15 +97,15 @@ Definition stype_cmp t t' :=
   | sarr _  , _             => Gt
   end.
 
-Instance stypeO : Cmp stype_cmp. 
+Instance stypeO : Cmp stype_cmp.
 Proof.
   constructor.
   + by case => [||n|w] [||n'|w'] //=; apply cmp_sym.
   + by move=> y x; case: x y=> [||n|w] [||n'|w'] [||n''|w''] c//=;
        try (by apply ctrans_Eq);eauto using ctrans_Lt, ctrans_Gt; apply cmp_ctrans.
   case=> [||n|w] [||n'|w'] //= h.
-  + by rewrite (@cmp_eq _ _ positiveO _ _ h). 
-  by rewrite (@cmp_eq _ _ wsizeO _ _ h). 
+  + by rewrite (@cmp_eq _ _ positiveO _ _ h).
+  by rewrite (@cmp_eq _ _ wsizeO _ _ h).
 Qed.
 
 Module CmpStype.
@@ -115,13 +115,13 @@ Module CmpStype.
   Definition cmp : t -> t -> comparison := stype_cmp.
 
   Definition cmpO : Cmp cmp := stypeO.
-  
+
 End CmpStype.
 
 Module CEDecStype.
 
   Definition t := [eqType of stype].
-  
+
   Fixpoint pos_dec (p1 p2:positive) : {p1 = p2} + {True} :=
     match p1 as p1' return {p1' = p2} + {True} with
     | xH =>
@@ -129,11 +129,11 @@ Module CEDecStype.
       | xH => left (erefl xH)
       | _  => right I
       end
-    | xO p1' => 
+    | xO p1' =>
       match p2 as p2' return {xO p1' = p2'} + {True} with
-      | xO p2' => 
+      | xO p2' =>
         match pos_dec p1' p2' with
-        | left eq => 
+        | left eq =>
           left (eq_rect p1' (fun p => xO p1' = xO p) (erefl (xO p1')) p2' eq)
         | _ => right I
         end
@@ -141,9 +141,9 @@ Module CEDecStype.
       end
     | xI p1' =>
       match p2 as p2' return {xI p1' = p2'} + {True} with
-      | xI p2' => 
+      | xI p2' =>
         match pos_dec p1' p2' with
-        | left eq => 
+        | left eq =>
           left (eq_rect p1' (fun p => xI p1' = xI p) (erefl (xI p1')) p2' eq)
         | _ => right I
         end
@@ -152,7 +152,7 @@ Module CEDecStype.
     end.
 
   Definition eq_dec (t1 t2:t) : {t1 = t2} + {True} :=
-    match t1 as t return {t = t2} + {True} with 
+    match t1 as t return {t = t2} + {True} with
     | sbool =>
       match t2 as t0 return {sbool = t0} + {True} with
       | sbool => left (erefl sbool)
@@ -174,7 +174,7 @@ Module CEDecStype.
       end
     | sword w1 =>
       match t2 as t0 return {sword w1 = t0} + {True} with
-      | sword w2 => 
+      | sword w2 =>
         match wsize_eq_dec w1 w2 with
         | left eqw => left (f_equal sword eqw)
         | right _ => right I
@@ -186,11 +186,11 @@ Module CEDecStype.
   Lemma pos_dec_r n1 n2 tt: pos_dec n1 n2 = right tt -> n1 != n2.
   Proof.
     case: tt.
-    elim: n1 n2 => [n1 Hrec|n1 Hrec|] [n2|n2|] //=. 
+    elim: n1 n2 => [n1 Hrec|n1 Hrec|] [n2|n2|] //=.
     + by case: pos_dec (Hrec n2) => //= -[] /(_ (erefl _)).
     by case: pos_dec (Hrec n2) => //= -[] /(_ (erefl _)).
   Qed.
- 
+
   Lemma eq_dec_r t1 t2 tt: eq_dec t1 t2 = right tt -> t1 != t2.
   Proof.
     case: tt;case:t1 t2=> [||n|w] [||n'|w'] //=.
@@ -220,24 +220,24 @@ Definition is_sbool t := t == sbool.
 Lemma is_sboolP t : reflect (t=sbool) (is_sbool t).
 Proof. by rewrite /is_sbool;case:eqP => ?;constructor. Qed.
 
-Definition is_sword t := 
+Definition is_sword t :=
   match t with
   | sword _ => true
   | _       => false
   end.
 
-Definition is_sarr t := 
+Definition is_sarr t :=
   match t with
   | sarr _ => true
   | _      => false
   end.
 
 (* -------------------------------------------------------------------- *)
-Definition compat_type t1 t2 := 
+Definition compat_type t1 t2 :=
   match t1 with
   | sint    => t2 == sint
   | sbool   => t2 == sbool
-  | sword _ => is_sword t2 
+  | sword _ => is_sword t2
   | sarr _  => is_sarr t2
   end.
 
@@ -249,7 +249,7 @@ Proof. by case: t => [||n|wz]. Qed.
 Hint Resolve compat_type_refl.
 
 Lemma compat_type_trans t2 t1 t3 : compat_type t1 t2 -> compat_type t2 t3 -> compat_type t1 t3.
-Proof. 
+Proof.
   case: t1 => /=.
   + by move => /eqP -> /eqP ->.
   + by move => /eqP -> /eqP ->.

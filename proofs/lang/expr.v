@@ -94,9 +94,9 @@ Variant sop2 :=
 | Ovadd of velem & wsize (* VPADD   *)
 | Ovsub of velem & wsize (* VPSUB   *)
 | Ovmul of velem & wsize (* VPMULLW *)
-| Ovlsr of velem & wsize 
-| Ovlsl of velem & wsize 
-| Ovasr of velem & wsize 
+| Ovlsr of velem & wsize
+| Ovlsl of velem & wsize
+| Ovasr of velem & wsize
 .
 
 (* N-ary operators *)
@@ -112,7 +112,7 @@ Variant sopn : Set :=
 
 (* Low level x86 operations *)
 | Oset0     of wsize  (* set register + flags to 0 (implemented using XOR x x) *)
-| Ox86MOVZX32 
+| Ox86MOVZX32
 | Ox86      of asm_op  (* x86 instruction *)
 .
 
@@ -172,12 +172,12 @@ Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 Definition Omulu_instr     := mk_instr_w2_w2 "Omulu" (fun sz x y => ok (@wumul sz x y)).
 Definition Oaddcarry_instr := mk_instr_w2b_bw "Oaddcarry" waddcarry.
 Definition Osubcarry_instr := mk_instr_w2b_bw "Osubcarry" wsubcarry.
-Definition Oset0_instr     := 
+Definition Oset0_instr     :=
   mk_instr__b5w "Oset0" (fun sz => let vf := Some false in
-                 ok (::vf, vf, vf, vf, Some true & (0%R: word sz))).                  
+                 ok (::vf, vf, vf, vf, Some true & (0%R: word sz))).
 Definition Ox86MOVZX32_instr := sem_type.mk_instr (pp_s "Ox86_MOVZX32") [:: sword32] [:: sword64] (λ x : u32, ok (zero_extend U64 x)) U32.
 
-(* Definition xtype2stype (ty:xtype) := 
+(* Definition xtype2stype (ty:xtype) :=
   match ty with
   | xword sz => sword sz
   | xbool    => sbool
@@ -186,9 +186,9 @@ Definition Ox86MOVZX32_instr := sem_type.mk_instr (pp_s "Ox86_MOVZX32") [:: swor
 (* Lemma noarr_xtype (tin : seq (arg_desc * xtype)) : all is_not_sarr [seq xtype2stype i | i <- [seq i.2 | i <- tin]].
 Proof. elim: tin => [ | [ a [sz | ]] tin hrec] //=. Qed. *)
 
-Definition get_instr o := 
+Definition get_instr o :=
   match o with
-  | Omulu     sz => Omulu_instr sz 
+  | Omulu     sz => Omulu_instr sz
   | Oaddcarry sz => Oaddcarry_instr sz
   | Osubcarry sz => Osubcarry_instr sz
   | Oset0     sz => Oset0_instr sz
@@ -199,10 +199,10 @@ Definition get_instr o :=
         str  := id.(id_str_jas);
         tin  := [seq i.2 | i <- id.(id_in)];
         tout := [seq i.2 | i <- id.(id_out)];
-        semi := id.(id_semi); 
+        semi := id.(id_semi);
         tin_narr := id.(id_tin_narr);
         wsizei := id.(id_wsize);
-      |} 
+      |}
   end.
 
 Definition string_of_sopn o : string := str (get_instr o) tt.
@@ -243,7 +243,7 @@ Definition type_of_op2 (o: sop2) : stype * stype * stype :=
   | Oland s | Olor s | Olxor s | Ovadd _ s | Ovsub _ s | Ovmul _ s
     => let t := sword s in (t, t, t)
   | Olsr s | Olsl s | Oasr s
-  | Ovlsr _ s | Ovlsl _ s | Ovasr _ s 
+  | Ovlsr _ s | Ovlsl _ s | Ovasr _ s
     => let t := sword s in (t, sword8, t)
   | Oeq Op_int | Oneq Op_int
   | Olt Cmp_int | Ole Cmp_int
@@ -692,9 +692,9 @@ Definition signature_of_fundef (fd: fundef) : function_signature :=
 Definition fun_decl := (funname * fundef)%type.
 Notation fun_decls  := (seq fun_decl).
 
-Record prog := { 
+Record prog := {
   p_globs : glob_decls;
-  p_funcs : fun_decls; 
+  p_funcs : fun_decls;
 }.
 
 Definition instr_d (i:instr) :=
@@ -782,7 +782,7 @@ Definition fundef_beq fd1 fd2 :=
 Lemma fundef_eq_axiom : Equality.axiom fundef_beq.
 Proof.
   move=> [i1 tin1 p1 c1 tout1 r1] [i2 tin2 p2 c2 tout2 r2] /=.
-  apply (@equivP ((i1 == i2) && (tin1 == tin2) && (p1 == p2) && 
+  apply (@equivP ((i1 == i2) && (tin1 == tin2) && (p1 == p2) &&
            (c1 == c2) && (tout1 == tout2) &&(r1 == r2)));first by apply idP.
   by split=> [/andP[]/andP[]/andP[]/andP[]/andP[] | []] /eqP->/eqP->/eqP->/eqP->/eqP->/eqP->.
 Qed.
@@ -1099,9 +1099,9 @@ Proof.
   elim: es Hes s.
   + by move => _ /= s; SvD.fsetdec.
   move => e es ih Hes s /=.
-  rewrite /read_es /= -/read_e ih. 
-  + rewrite Hes. 
-    + rewrite ih. 
+  rewrite /read_es /= -/read_e ih.
+  + rewrite Hes.
+    + rewrite ih.
       + by SvD.fsetdec.
       move => e' he' s'; apply: Hes.
       by rewrite in_cons he' orbT.
@@ -1275,7 +1275,7 @@ Fixpoint eq_expr e e' :=
   | Papp1  o e    , Papp1  o' e'      => (o == o') && eq_expr e e'
   | Papp2  o e1 e2, Papp2  o' e1' e2' => (o == o') && eq_expr e1 e1' && eq_expr e2 e2'
   | PappN o es, PappN o' es' => (o == o') && (all2 eq_expr es es')
-  | Pif t e e1 e2, Pif t' e' e1' e2' => 
+  | Pif t e e1 e2, Pif t' e' e1' e2' =>
     (t == t') && eq_expr e e' && eq_expr e1 e1' && eq_expr e2 e2'
   | _             , _                 => false
   end.

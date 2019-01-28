@@ -38,9 +38,9 @@ Unset Printing Implicit Defensive.
 
 (* -------------------------------------------------------------- *)
 Variant wsize :=
-  | U8 
+  | U8
   | U16
-  | U32 
+  | U32
   | U64
   | U128
   | U256.
@@ -60,15 +60,15 @@ Coercion wsize_of_velem (ve: velem) : wsize :=
 Variant pelem :=
 | PE1 | PE2 | PE4 | PE8 | PE16 | PE32 | PE64 | PE128.
 
-Variant signedness := 
+Variant signedness :=
   | Signed
   | Unsigned.
 
 (* -------------------------------------------------------------------- *)
-Scheme Equality for wsize. 
+Scheme Equality for wsize.
 
-Lemma wsize_axiom : Equality.axiom wsize_beq. 
-Proof. 
+Lemma wsize_axiom : Equality.axiom wsize_beq.
+Proof.
   move=> x y;apply:(iffP idP).
   + by apply: internal_wsize_dec_bl.
   by apply: internal_wsize_dec_lb.
@@ -130,9 +130,9 @@ Qed.
 Definition velem_eqMixin     := Equality.Mixin velem_axiom.
 Canonical  velem_eqType      := Eval hnf in EqType velem velem_eqMixin.
 
-(* ** Comparison 
+(* ** Comparison
  * -------------------------------------------------------------------- *)
-Definition wsize_cmp s s' := 
+Definition wsize_cmp s s' :=
   match s, s' with
   | U8, U8 => Eq
   | U8, (U16 | U32 | U64 | U128 | U256)  => Lt

@@ -64,7 +64,7 @@ Definition get_global_Z (gd: glob_decls) (g: global) : option Z :=
   assoc gd g.
 
 Definition get_global_word gd g : exec (word (size_of_global g)) :=
-  if get_global_Z gd g is Some z then 
+  if get_global_Z gd g is Some z then
     ok (wrepr (size_of_global g) z)
   else type_error.
 

@@ -1722,7 +1722,7 @@ Lemma vuincl_exec_opn_eq o vs vs' v :
   List.Forall2 value_uincl vs vs' -> exec_sopn o vs = ok v ->
   exec_sopn o vs' = ok v.
 Proof.
-rewrite /exec_sopn /sopn_sem => h1; t_xrbindP => vs1 h2 h3. 
+rewrite /exec_sopn /sopn_sem => h1; t_xrbindP => vs1 h2 h3.
 by have -> /= := vuincl_sopn (tin_narr _) h1 h2;rewrite h3.
 Qed.
 

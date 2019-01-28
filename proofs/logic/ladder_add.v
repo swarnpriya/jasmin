@@ -21,9 +21,9 @@ Definition program := [::
     For i from 0 to 4 do {
       y.[i] ::= ya.[i];
       If (i == 0) then {::
-         [p cf, x.[0]] := ++(x.[0], y.[0], false) 
+         [p cf, x.[0]] := ++(x.[0], y.[0], false)
       } else {::
-         [p cf, x.[i]] := ++(x.[i], y.[i], cf) 
+         [p cf, x.[i]] := ++(x.[i], y.[i], cf)
       }
     };
     add0 ::= 0;
@@ -31,12 +31,12 @@ Definition program := [::
      add1 := (~~ add1) ? add0 : cf;
     For i from 0 to 4 do {::
       If (i == 0) then {::
-         [p cf, x.[0]] := ++(x.[0], add1, false) 
+         [p cf, x.[0]] := ++(x.[0], add1, false)
       } else {::
-         [p cf, x.[i]] := ++(x.[i], add0, cf) 
+         [p cf, x.[i]] := ++(x.[i], add0, cf)
       }
     };
      add0 := add0 ? add1 : cf;
-     [p __, x.[0]] := ++(x.[0], add0, false) 
+     [p __, x.[0]] := ++(x.[0], add0, false)
   }%P
   [:: x])].

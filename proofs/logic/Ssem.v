@@ -134,14 +134,14 @@ Definition to_sval t : ssem_t t -> svalue :=
  * -------------------------------------------------------------------- *)
 
 Definition word_array_to_farray {n} {s} (a : Array.array n (word s)) : FArray.array (word s):=
-  FArray.of_fun 
+  FArray.of_fun
     (fun i => match Array.get a i with
      | Ok z => z
      | _    => sdflt_val (ssword s)
      end).
 
 Definition truncate_farray {s} s' (a : FArray.array (word s)) : FArray.array (word s'):=
-  FArray.of_fun 
+  FArray.of_fun
     (fun i => match truncate_word s' (FArray.get a i) with
      | Ok z => z
      | _    => sdflt_val (ssword s')
@@ -208,7 +208,7 @@ Definition ssem_op2_wb sz := @mk_ssem_sop2 (sword sz) (sword sz) sbool.
 
 Definition ssem_sop2 (o:sop2) :=
   match o with
-  | Oand           => ssem_op2_b andb     
+  | Oand           => ssem_op2_b andb
   | Oor            => ssem_op2_b orb
 
   | Oadd Op_int    => ssem_op2_i Z.add
@@ -301,7 +301,7 @@ Notation "'SLet' ( sz , n , t ) ':=' s '.[' x ']' 'in' body" :=
   (@son_arr_var _ s x (fun sz n (t:FArray.array (word sz)) => body)) (at level 25, s at level 0).
 
 Definition sget_global gd g : svalue :=
-  if get_global_value gd g is Some z 
+  if get_global_value gd g is Some z
   then SVword (wrepr (size_of_global g) z)
   else SVword (sdflt_val (sword (size_of_global g))).
 
@@ -321,7 +321,7 @@ Fixpoint ssem_pexpr (s:sestate) (e : pexpr) : exec svalue :=
     Let i := ssem_pexpr s e >>= sto_int in
     let w := FArray.get t i in
     ok (SVword w)
-  | Pload sz x e => 
+  | Pload sz x e =>
     Let w1 := ok (sget_var s.(sevm) x) >>= sto_pointer in
     Let w2 := ssem_pexpr s e >>= sto_pointer in
     let w := read_mem s.(semem) (w1 + w2) sz in
@@ -459,7 +459,7 @@ with ssem_for : var -> seq Z -> sestate -> cmd -> sestate -> Prop :=
     ssem_for i ws s2 c s3 ->
     ssem_for i (w :: ws) s1 c s3
 
-with ssem_call : mem -> funname -> seq svalue -> mem -> seq svalue -> Prop := 
+with ssem_call : mem -> funname -> seq svalue -> mem -> seq svalue -> Prop :=
 | SEcallRun m1 m2 fn f vargs vargs' s1 vm2 vres vres':
     get_fundef (p_funcs P) fn = Some f ->
     mapM2 ErrType truncate_sval (sstypes_of_stypes f.(f_tyin)) vargs' = ok vargs ->
@@ -531,4 +531,4 @@ Proof.
     move => s'.
     case H : cmp_le  => //= _.
     exists (sword s') => //=.
-Qed. 
+Qed.

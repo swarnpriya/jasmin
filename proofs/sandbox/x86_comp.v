@@ -179,7 +179,7 @@ Proof.
   move/L2: (hc) => h/h{h} h/h{h} [lom'] [].
   rewrite -(compile_cmd_name hc).
   move /obindI : (hc) => [irs [? Hwt]].
-  have := (id_gen_sem_wf lom Hwt).  
+  have := (id_gen_sem_wf lom Hwt).
   by rewrite /sem_lo_gen (compile_cmd_name hc) => -> [<-].
 Qed.
 
@@ -190,10 +190,10 @@ Definition compile (op: sopn) (outx : lvals) (inx: pexprs) :=
   compile_hi_sopn op outx inx >>= compile_gen op.
 
 Theorem L (c : cmd_name) (outx : seq var) (inx : seq expr) loid (m1 m2 : mem) lom :
-     compile c outx inx = Some loid 
+     compile c outx inx = Some loid
   -> semc m1 (c, outx, inx) = Some m2
   -> lom_eqv m1 lom
   -> lom_eqv m2 (sem_lo lom loid).
-Proof. 
+Proof.
   by move=> /obindI [lexprs []] /L1 H1 /L3 H3 /H1 /H3 H4 /H4.
 Qed.
