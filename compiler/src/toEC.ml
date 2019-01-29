@@ -549,7 +549,7 @@ let rec pp_expr env fmt (e:expr) =
     pp_oget option pp fmt (x,e)
 
   | Pload (sz, x, e) -> 
-    Format.fprintf fmt "(loadW%a Glob.mem %a)" 
+    Format.fprintf fmt "(loadW%a Glob.mem (W64.to_uint %a))" 
       pp_size sz (pp_wcast env) (add64 x e)
 
   | Papp1 (op1, e) -> 
@@ -629,7 +629,7 @@ let pp_lval1 env pp_e fmt (lv, (ety, e)) =
   match lv with 
   | Lnone _ -> assert false
   | Lmem(ws, x, e1) -> 
-    Format.fprintf fmt "@[Glob.mem <-@ storeW%a Glob.mem %a %a;@]" pp_size ws
+    Format.fprintf fmt "@[Glob.mem <-@ storeW%a Glob.mem (W64.to_uint %a) %a;@]" pp_size ws
       (pp_wcast env) (add64 x e1) pp_e e
   | Lvar x  -> 
     Format.fprintf fmt "@[%a <-@ %a;@]" (pp_var env) (L.unloc x) pp_e e
