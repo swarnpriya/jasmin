@@ -125,12 +125,17 @@ Lemma id_semi_sopn_sem op :
   id_semi id = sopn_sem (Ox86 op).
 Proof. by []. Qed.
 
-Lemma check_sopn_arg_sem_eval gd m s ii args : forall  h h' v,
-lom_eqv m s ->
-check_sopn_arg ii args h h' -> 
-sem_pexpr gd m h = ok v ->
-eval_arg_in_v gd s args h' = ok v.
+Lemma check_sopn_arg_sem_eval gd m s ii args h h' v:
+  lom_eqv m s ->
+  check_sopn_arg ii args h h' -> 
+  sem_pexpr gd m h = ok v ->
+  exists v', eval_arg_in_v gd s args h' = ok v' /\ value_uincl v v'.
 Proof.
+  case: h' => [[ i ad ty]. 
+  rewrite /check_sopn_arg /=.
+
+  Print lom_eqv.
+
 move => e [] a st v Hlev.
 rewrite /check_sopn_arg /=.
 case a => [i|] //=.

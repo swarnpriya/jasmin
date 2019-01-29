@@ -161,6 +161,7 @@ Definition check_oreg or ai :=
   | None, _        => true
   end.
 
+(*
 Definition eval_arg_in_word (s:x86_mem) (args:asm_args) (sz:wsize) (ad:arg_desc) : exec (word sz) :=
   match ad with
   | ADImplicit (IAreg r)   => ok (zero_extend sz (s.(xreg) r))
@@ -207,6 +208,32 @@ Definition eval_arg_in (s:x86_mem) (args:asm_args) (ty:stype) (ad:arg_desc) : ex
 
 Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (aty:arg_desc * stype) : exec value :=
   Let v := eval_arg_in s args aty.2 aty.1 in ok (to_val v).
+
+*)
+
+Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (aty:arg_desc * stype) : exec value :=
+  match aty.1 with
+  | ADImplicit (IAreg r)   => ok (Vword (s.(xreg) r))
+  | ADImplicit (IArflag f) => Let b := st_get_rflag f s in ok (Vbool b)
+  | ADExplicit i or =>
+    match onth args i with
+    | None => type_error
+    | Some a =>
+      Let _ := assert (check_oreg or a) ErrType in
+      match a with
+      | Condt c   => Let b := eval_cond c s.(xrf) in ok (Vbool b)
+      | Imm sz' w => ok (Vword w)
+      | Glob g    => Let w := get_global_word  gd g  in ok (Vword w)
+      | Reg r     => ok (Vword (s.(xreg) r))
+      | Adr adr   => 
+        match aty.2 with
+        | sword sz => Let w := read_mem s.(xmem) (decode_addr s adr) sz in ok (Vword w)
+        | _        => type_error
+        end
+      | XMM x     => ok (Vword (s.(xxreg) x))
+      end
+    end
+  end.
 
 Definition eval_args_in (s:x86_mem) (args:asm_args) (tin : seq (arg_desc * stype)) :=
   mapM (eval_arg_in_v s args) tin.
