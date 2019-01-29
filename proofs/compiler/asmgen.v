@@ -125,14 +125,135 @@ Lemma id_semi_sopn_sem op :
   id_semi id = sopn_sem (Ox86 op).
 Proof. by []. Qed.
 
+Lemma check_oreg_eq a b : check_oreg a b = x86_sem.check_oreg a b.
+Proof. by case a, b. Qed.
+
 Lemma check_sopn_arg_sem_eval gd m s ii args h h' v:
   lom_eqv m s ->
   check_sopn_arg ii args h h' -> 
   sem_pexpr gd m h = ok v ->
   exists v', eval_arg_in_v gd s args h' = ok v' /\ value_uincl v v'.
 Proof.
-  case: h' => [[ i ad ty]. 
-  rewrite /check_sopn_arg /=.
+  case: h' => [[i|n o] ad ty] /=.
+  +{
+    elim ty ; rewrite /eqflags => Hms Hreg Hxmm Hflags.
+    case: i => r.
+    +{
+      clear Hreg Hxmm.
+      rewrite /eval_arg_in_v /check_sopn_arg /=.
+      move => /eq_exprP -> /=.
+      rewrite /st_get_rflag /=.
+      move /Hflags.
+      rewrite /of_rbool.
+      case ((xrf s) r) => [b H|H].
+      + by exists b.
+        (* We need to prove: Error ErrAddrUndef = ok v' which is obviously wrong. *)
+      + exfalso.
+        (* the only solution is to prove that H is not coherent *)
+        move: H.
+        rewrite /value_uincl.
+        case: v => //=.
+        move => [] //=.
+        (* this does not look provable. *)
+        admit.
+     }
+    +{
+      clear Hflags Hxmm.
+      rewrite /eval_arg_in_v /check_sopn_arg /=.
+      move => /eq_exprP -> /=.
+      move /Hreg => H.
+      by exists (Vword ((xreg s) r)).
+     }
+   }
+  +{
+    elim ty => Hms Hreg Hxmm Hflags.
+    rewrite  /eval_arg_in_v /check_sopn_arg /=.
+    case (onth args n) => //=. (* got rid of one case *)
+    move => a.
+    case ad => //=. (* got rid of two cases *)
+    +{
+      case_eq (assemble_cond ii h) => c //=. (* got rid of one case *)
+      move => asscond Hcond /(eval_assemble_cond Hflags asscond). (* if pexpr is not needed *)
+(*       have:= eval_assemble_cond Hflags asscond Hpexpr. (* if pexpr is needed *) *)
+      move => [] x.
+      rewrite -check_oreg_eq.
+      move: Hcond => /andP [] /eqP -> -> //=.
+      rewrite /value_of_bool.
+      case_eq (eval_cond c (xrf s)) => //=.
+      + by move => b Hb H; exists x.
+      + move => [] Heval [] //= Hok Hvincl. (* got rid for four cases *)
+        (* this does not look provable. *)
+        admit.
+     }
+    +{
+      move => w.
+      case_eq (assemble_word ii w h) => //=. (* got rid of one case *)
+      rewrite -check_oreg_eq.
+      move => asm Hasm /andP [] /eqP -> -> //=.
+      move: asm Hasm.
+      case => //=.
+      +{
+        move=> H Hword.
+        rewrite /assemble_word in Hword.
+      SearchAbout sem_pexpr.
+
+ asscword //=. (* got rid of one case *)
+      move => /andP [] Haasm Hcheck.
+      SearchAbout assemble_word.
+ /(eval_assemble_cond Hflags asscond). (* if pexpr is not needed *)
+
+     }
+   }
+
+
+        move => /andP.
+ /andP. //=.
+
+    SearchAbout x86_sem.check_oreg.
+    assert(check_oreg o (Condt c) 
+    rewrite /check
+    move 
+    move /andP in Hcond.
+    move => /eval_assemble_cond.
+
+    move => asscond HCondt.
+    move: Hflags asscond.
+    SearchAbout assemble_cond.
+     (assemble_cond ii h).
+    rewrite /arg_of_pexpr.
+    rewrite /sem_pexpr.
+    SearchAbout sem_pexpr.
+    SearchAbout arg_of_pexpr.
+    rewrite /check_oreg.
+    t_xrbindP.
+
+  + move
+      case: v => //=.
+      elim: v.
+
+      Search value_uincl.
+      
+      SearchAbout lom_eqv.
+
+
+      SearchAbout get_var.
+      move /xgetflag_ex.
+      rewrite /st_get_rflag.
+      apply on_vuP => t.
+      move: ty.
+      SearchAbout evm.
+      case: s => /=.
+      
+      Search _ xrf.
+      move => t.
+  Search on_vu.
+  move => H.
+  erewrite eq_exprP ; 2: apply H.
+  apply /eq_exprP.
+  Search _ eq_expr.
+  move/eqP.
+  case: h.
+  rewrite /sem_pexpr.
 
   Print lom_eqv.
 
