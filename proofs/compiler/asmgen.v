@@ -125,6 +125,61 @@ Lemma id_semi_sopn_sem op :
   id_semi id = sopn_sem (Ox86 op).
 Proof. by []. Qed.
 
+Lemma check_sopn_arg_sem_eval gd m s ii args : forall  h h' v,
+lom_eqv m s ->
+check_sopn_arg ii args h h' -> 
+sem_pexpr gd m h = ok v ->
+eval_arg_in_v gd s args h' = ok v.
+Proof.
+move => e [] a st v Hlev.
+rewrite /check_sopn_arg /=.
+case a => [i|] //=.
+rewrite /eval_arg_in_v.
+rewrite /eval_arg_in => /=.
+
+relim => [|a args' IHloargs] h h' gd m s Hms => //=.
+elim h' => a b //=.
+case h => //= => v.
+
+admit.
+elim h' => a' [] //=.
+rewrite /eval_arg_in_bool.
+case a' => [i|i o].
+case i => //=.
+
+(* 
+elim h => x //=.
+case i => r /eqP => -> //=;
+rewrite /get_var /on_vu.
+1: elim (((evm m).[var_of_flag r])%vmap) => [|[]] => //=.
+2: elim (((evm m).[var_of_register r])%vmap) => [|[]] => //=.
+1,2: move => p ; t_xrbindP => <-.
+rewrite /eval_arg_in_v /eval_arg_in => //=.
+t_xrbindP => Hp.
+rewrite /st_get_rflag.
+elim ((xrf s) r) => //=.
+
+elim s =>  ? ? ? //=.
+elim r => //=.
+rewrite  /xrf.
+t_xrbindP. *)
+
+Admitted.
+
+Lemma eval_args_in_sem_pexprs_eq gd ii loargs m : forall args s ls t,
+lom_eqv m s ->
+check_sopn_args ii loargs args ls ->
+sem_pexprs gd m args = ok t ->
+eval_args_in gd s loargs ls = ok t.
+Proof.
+elim => [|h l IHl] s [|hls qls] t Hlms //=.
++ rewrite /check_sopn_args /=. 
+  move => /andP [] Hhls Hqls.
+  t_xrbindP => v Hv vs Hvs <-.
+  have -> := IHl _ _ _ Hlms Hqls Hvs => /=.
+  simpl.
+Admitted.
+
 (* Lemma app_sopn_asm_op: forall ii s h op m gd args loargs,
 let id := instr_desc op in
 sem_pexprs gd m args = ok h ->
@@ -148,60 +203,32 @@ check_sopn_args ii loargs args id.(id_in) ->
 check_sopn_dest ii loargs lvs id.(id_out) ->
 id.(id_check) loargs ->
 lom_eqv m s ->
-exists s', eval_instr_op gd id loargs s = ok s' /\ lom_eqv m' s'.
+exists s', exec_instr_op gd id loargs s = ok s' /\ lom_eqv m' s'.
 Proof.
 move=> id.
-rewrite /sem_sopn.
-t_xrbindP => x h Hsem.
-rewrite /exec_sopn.
-t_xrbindP => y Hy Htupley Hm' Harg Hdest Hid Hlomeqv.
-rewrite /eval_instr_op.
-subst.
+rewrite /sem_sopn /exec_sopn.
+t_xrbindP => x h Hh t Ht Htuplet Hm' Harg Hdest Hid Hlomeqv.
+rewrite /exec_instr_op /eval_instr_op.
 rewrite Hid /=.
 change (id_semi id) with (sopn_sem (Ox86 op)).
 
-assert(app_asm_op gd s loargs (sopn_sem (Ox86 op)) = ok y).
-admit.
-
-rewrite H => //=.
-clear Hy H.
-move: Hdest.
-move: Hm'.
-move: y.
-move: Hlomeqv.
-clear Hsem.
-move: m.
-move: lvs.
-rewrite /get_instr.
-simpl.
-rewrite /id.
-move: (id_out (instr_desc op)).
-elim => /=; intros.
-case: lvs Hm' Hdest => //=.
-move => [] <- => ?.
-exists s. done.
-case: l H Hdest y Hm' => //=.
-intros.
-2:{
-intros.
-move: y.
-case: l.
-
-
-SearchAbout write_lvals.
-exists s ; split ; trivial.
-
-rewrite /
-
-induction id_out.
-have: (tout (get_instr (Ox86 op)) = id_out id).
-move: tout.
-
-induction lvs.
-
-rewrite /mem_write_res.
-SearchAbout mem_write_res.
-
+assert(Hhh: eval_args_in gd s loargs (id_in id) = ok h).
+{
+  move: Hh.
+  rewrite /eval_args_in /sem_pexprs.
+  rewrite /check_sopn_args in Harg.
+  rewrite /eval_arg_in_v.
+  rewrite /sem_pexpr.
+  rewrite /check_sopn_arg in Harg.
+}
+rewrite Hhh => //=.
+assert(Htt: app_sopn [seq i.2 | i <- id_in id] (sopn_sem (Ox86 op)) h = ok t).
+{
+  admit.
+}
+rewrite Htt => //=.
+clear Hh Hhh Ht Htt.
+rewrite /mem_write_vals.
 Admitted.
 
 
@@ -359,7 +386,7 @@ Definition mixed_sem gd m (o:asm_op) (xs : seq pexpr) :=
 
 (* -------------------------------------------------------------------- *)
 (* High level to mixed semantics                                        *)
-(* 
+(*
 Definition check_sopn_arg (loargs : seq pexpr) (x : pexpr) (ad : arg_desc) :=
   match ad with
   | ADImplicit i => eq_expr x (Pvar (VarI (var_of_implicit i) xH))

@@ -223,6 +223,23 @@ Definition mapM eT aT bT (f : aT -> result eT bT)  : seq aT → result eT (seq b
       Ok eT [:: y & ys]
   end.
 
+Lemma mapM_cons aT eT bT x xs y ys (f : aT -> result eT bT):
+  f x = ok y ->
+  mapM f xs = ok ys 
+  -> mapM f (x :: xs) = ok (y :: ys).
+Proof.
+  move:xs ys.
+  elim.
+  + by elim => //= => ->.
+  + move => a l IHl.
+    elim => //=.
+    + by t_xrbindP => //=.
+    + move => a' l' _ Hxy.
+      t_xrbindP => y' Hay' h' Hmap.
+      move => H' H'' ; subst => //=.
+      by rewrite Hxy Hay' Hmap => /=.
+Qed.
+
 Lemma map_ext aT bT f g m :
   (forall a, List.In a m -> f a = g a) ->
   @map aT bT f m = map g m.
