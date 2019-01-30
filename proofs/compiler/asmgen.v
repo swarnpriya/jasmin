@@ -3,6 +3,7 @@ Require Import low_memory psem x86_sem compiler_util.
 Require Import x86_variables_proofs.
 Import Utf8.
 Import oseq x86_variables.
+Import GRing.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -51,6 +52,10 @@ Definition check_oreg o a :=
   | Some _, Imm _ _ => true
   | Some _, _       => false
   end.
+
+Lemma check_oreg_eq a b : check_oreg a b = x86_sem.check_oreg a b.
+Proof. by case a, b. Qed.
+
 
 Definition compile_arg ii (ade: (arg_desc * stype) * pexpr) (m: nmap asm_arg) : ciexec (nmap asm_arg) :=
   let ad := ade.1 in
@@ -125,18 +130,16 @@ Lemma id_semi_sopn_sem op :
   id_semi id = sopn_sem (Ox86 op).
 Proof. by []. Qed.
 
-Lemma check_oreg_eq a b : check_oreg a b = x86_sem.check_oreg a b.
-Proof. by case a, b. Qed.
-
 Lemma check_sopn_arg_sem_eval gd m s ii args h h' v:
   lom_eqv m s ->
-  check_sopn_arg ii args h h' -> 
+  check_sopn_arg ii args h h' ->
+(*   v !=  *)
   sem_pexpr gd m h = ok v ->
   exists v', eval_arg_in_v gd s args h' = ok v' /\ value_uincl v v'.
 Proof.
-  case: h' => [[i|n o] ad ty] /=.
+  case: h' => [[i|n o] ty lem] /=.
   +{
-    elim ty ; rewrite /eqflags => Hms Hreg Hxmm Hflags.
+    elim lem ; rewrite /eqflags => Hms Hreg Hxmm Hflags.
     case: i => r.
     +{
       clear Hreg Hxmm.
@@ -154,6 +157,7 @@ Proof.
         rewrite /value_uincl.
         case: v => //=.
         move => [] //=.
+        (* FIXME *)
         (* this does not look provable. *)
         admit.
      }
@@ -166,22 +170,21 @@ Proof.
      }
    }
   +{
-    elim ty => Hms Hreg Hxmm Hflags.
+    elim lem => Hms Hreg Hxmm Hflags.
     rewrite  /eval_arg_in_v /check_sopn_arg /=.
     case (onth args n) => //=. (* got rid of one case *)
     move => a.
-    case ad => //=. (* got rid of two cases *)
+    case ty => //=. (* got rid of two cases *)
     +{
       case_eq (assemble_cond ii h) => c //=. (* got rid of one case *)
-      move => asscond Hcond /(eval_assemble_cond Hflags asscond). (* if pexpr is not needed *)
-(*       have:= eval_assemble_cond Hflags asscond Hpexpr. (* if pexpr is needed *) *)
-      move => [] x.
-      rewrite -check_oreg_eq.
-      move: Hcond => /andP [] /eqP -> -> //=.
+      move => asscond /andP [] /eqP -> Hcond /(eval_assemble_cond Hflags asscond). (* if pexpr is not needed *)
+      rewrite -check_oreg_eq Hcond //=.
+      move => [] x [].
       rewrite /value_of_bool.
-      case_eq (eval_cond c (xrf s)) => //=.
+      case (eval_cond c (xrf s)) => //=.
       + by move => b Hb H; exists x.
-      + move => [] Heval [] //= Hok Hvincl. (* got rid for four cases *)
+      +
+        (* FIXME *)
         (* this does not look provable. *)
         admit.
      }
@@ -190,11 +193,50 @@ Proof.
       case_eq (assemble_word ii w h) => //=. (* got rid of one case *)
       rewrite -check_oreg_eq.
       move => asm Hasm /andP [] /eqP -> -> //=.
-      move: asm Hasm.
-      case => //=.
+      case: h Hasm => //=.
       +{
-        move=> H Hword.
+        move => vi.
+        case_eq (xmm_register_of_var vi) => /=.
+        + by move => xmm /xmm_register_of_varI <- [] <- /Hxmm; eauto.
+        + by move => Hxxm ; t_xrbindP => r /reg_of_var_register_of_var /var_of_register_of_var <- <- /Hreg ; eauto.
+      }
+      +{
+        move => g [] => <- /get_globalI [] z.
+        rewrite /get_global_word => -> -> /=.
+        exists (Vword (wrepr (size_of_global g) z)) => //=.
+       }
+      +{
+        move => w0 v0 p.
+
+        (* FIXME *)
+        have: w0 = w.
+        admit.
+        move => ->.
+
+        t_xrbindP => s0.
+        move => Hreg_of_var_v0 addr.
+
+        move => Haddr_of_pexpr <-.
+        move => hu64 vv0.
+        move => Hget_var_v0 /(xgetreg lem Hreg_of_var_v0 Hget_var_v0) <-.
+        move => hu64' h8.
+        move => /(addr_ofsP) => H /H.
+        rewrite -Hms.
+        move => Hoffset h11 Hread <-.
+        exists (Vword h11).
+        have : read_mem (emem m) (decode_addr s addr) w = 
+               read_mem (emem m) ((xreg s) s0 + hu64') w.
+        admit.
+        move => -> ; rewrite Hread //=.
+       }
+     +{
+        move => [] w0 [] //= z.
+        t_xrbindP => y Hassert [] <- //=.
+        rewrite /sem_sop1.
+        t_xrbindP.
+        move=> [] Hword //=.
         rewrite /assemble_word in Hword.
+
       SearchAbout sem_pexpr.
 
  asscword //=. (* got rid of one case *)
