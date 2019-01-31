@@ -4,6 +4,7 @@ Require Import x86_variables_proofs.
 Import Utf8.
 Import oseq x86_variables.
 Import GRing.
+Require Import ssrring.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -31,7 +32,8 @@ Definition get_loarg ii (outx: seq lval) (inx:seq pexpr) (d:source_position) : c
   match d with
   | InArgs x => o2e (onth inx x)
   | InRes  x => o2e (onth outx x) >>= pexpr_of_lval ii
-  end.
+  end
+.
 
 Definition nmap (T:Type) := nat -> option T.
 Definition nget (T:Type) (m:nmap T) (n:nat) := m n.
@@ -130,11 +132,63 @@ Lemma id_semi_sopn_sem op :
   id_semi id = sopn_sem (Ox86 op).
 Proof. by []. Qed.
 
+Lemma word_of_scale1 : word_of_scale Scale1 = 1%R.
+Proof. by rewrite /word_of_scale /= /wrepr; apply/eqP. Qed.
+
+Lemma addr_of_pexprP ii gd r1 e a x o z o' z' m s:
+  lom_eqv s m →
+  reg_of_var ii x = ok r1 →
+  get_var (evm s) x = ok o →
+  to_pointer o = ok z →
+  sem_pexpr gd s e = ok o' →
+  to_pointer o' = ok z' →
+  addr_of_pexpr ii r1 e = ok a →
+  (z + z')%R = decode_addr m a.
+Proof.
+  move => eqv ok_r1 ok_o ok_z ok_o' ok_z'.
+  rewrite /addr_of_pexpr.
+have {ok_o' o' ok_z'} := addr_ofsP ok_o' ok_z'.
+case: addr_ofs => //=.
++ move => ofs /(_ erefl) [<-] [<-] //=.
+  rewrite /decode_addr /= (xgetreg eqv ok_r1 ok_o ok_z);ssring.
++ move => x' /(_ erefl); t_xrbindP => v hv ok_v r ok_r [<-].
+  rewrite /decode_addr /= (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv ok_r hv ok_v) word_of_scale1;ssring.
++ move => ofs x1 /(_ erefl); t_xrbindP => ? ? hx1 hx3 <- ? hx2 sc /xscale_ok -> [<-].
+  rewrite /decode_addr /= (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv hx2 hx1 hx3);ssring.
+move => sc x' ofs /(_ erefl); t_xrbindP => ? ? hx2 hx3 <- ? hx1 ? /xscale_ok -> [<-].
+rewrite /decode_addr /= (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv hx1 hx2 hx3);ssring.
+Qed.
+
+Local Lemma all2_MapM_MapM_all2 (A B C D:Type)
+                          (P: A -> B -> bool)
+                          (Q: A -> exec D)
+                          (R: B -> exec D)
+                          (T: D -> D -> bool):
+  (forall a b c, P a b -> Q a = ok c -> exists d, R b = ok d /\ T c d) ->
+  forall x y h,
+  all2 P x y ->
+  mapM Q x = ok h ->
+  ∃ h', mapM R y = ok h' /\ all2 T h h'.
+Proof.
+  move => HPQRT.
+  elim => [|hx tx IHtx] [|hy ty] [|hh th];
+  try solve [rewrite all2P => /andP [] Hsize HP HQ => //].
+  + by exists [::].
+  + by move => _ /mapM_size.
+  + move => Hall.
+    simpl in Hall.
+    move: Hall => /andP [] HP Hall2 /(iff_sym (mapM_cons _ _ _ _ _)) [] HQ HmapQ.
+    have [d [] Rd Td] := HPQRT  _ _ _ HP HQ.
+    have [h' [] Hmap HT] := IHtx _ _ Hall2 HmapQ.
+    exists (d::h') => /=.
+    by rewrite Rd Hmap HT Td.
+Qed.
+
 Lemma check_sopn_arg_sem_eval gd m s ii args h h' v:
   lom_eqv m s ->
   check_sopn_arg ii args h h' ->
-(*   v !=  *)
   sem_pexpr gd m h = ok v ->
+  is_defined v ->
   exists v', eval_arg_in_v gd s args h' = ok v' /\ value_uincl v v'.
 Proof.
   case: h' => [[i|n o] ty lem] /=.
@@ -150,16 +204,13 @@ Proof.
       rewrite /of_rbool.
       case ((xrf s) r) => [b H|H].
       + by exists b.
+  
         (* We need to prove: Error ErrAddrUndef = ok v' which is obviously wrong. *)
-      + exfalso.
+      + move => Hdef.
+        exfalso.
         (* the only solution is to prove that H is not coherent *)
-        move: H.
-        rewrite /value_uincl.
-        case: v => //=.
-        move => [] //=.
-        (* FIXME *)
-        (* this does not look provable. *)
-        admit.
+        move: H Hdef.
+        by case v.
      }
     +{
       clear Hflags Hxmm.
@@ -183,10 +234,8 @@ Proof.
       rewrite /value_of_bool.
       case (eval_cond c (xrf s)) => //=.
       + by move => b Hb H; exists x.
-      +
-        (* FIXME *)
-        (* this does not look provable. *)
-        admit.
+      + move => [] //= [] <-.
+        by case v.
      }
     +{
       move => w.
@@ -213,128 +262,46 @@ Proof.
         admit.
         move => ->.
 
+        rewrite -Hms.
         t_xrbindP => s0.
         move => Hreg_of_var_v0 addr.
 
         move => Haddr_of_pexpr <-.
         move => hu64 vv0.
-        move => Hget_var_v0 /(xgetreg lem Hreg_of_var_v0 Hget_var_v0) <-.
-        move => hu64' h8.
-        move => /(addr_ofsP) => H /H.
-        rewrite -Hms.
-        move => Hoffset h11 Hread <-.
-        exists (Vword h11).
-        have : read_mem (emem m) (decode_addr s addr) w = 
-               read_mem (emem m) ((xreg s) s0 + hu64') w.
-        admit.
-        move => -> ; rewrite Hread //=.
+        move => get_var_v0.
+        move => to_pointer_vv0.
+        move => h7 h8.
+        move => sem_pexpr_h8.
+        move => to_pointer_h8.
+
+(*         have := (addr_of_pexprP lem Hreg_of_var_v0 get_var_v0 to_pointer_vv0 sem_pexpr_h8 to_pointer_h8 Haddr_of_pexpr).
+        move => ->. *)
+        (* shorter than ssreflect *)
+        erewrite addr_of_pexprP ; eauto.
+        move => h11 -> <- /=.
+        exists (Vword h11) => //=.
        }
      +{
         move => [] w0 [] //= z.
-        t_xrbindP => y Hassert [] <- //=.
-        rewrite /sem_sop1.
-        t_xrbindP.
-        move=> [] Hword //=.
-        rewrite /assemble_word in Hword.
 
-      SearchAbout sem_pexpr.
+        (* FIXME *)
+        have: w0 = w.
+        admit.
+        move => ->.
 
- asscword //=. (* got rid of one case *)
-      move => /andP [] Haasm Hcheck.
-      SearchAbout assemble_word.
- /(eval_assemble_cond Hflags asscond). (* if pexpr is not needed *)
-
+        case_eq (w ≤ U64)%CMP => //= Hassert [] <- //=.
+        rewrite /sem_sop1 => /=.
+        move => [] <-.
+        eexists; split ; [reflexivity|].
+        rewrite /value_uincl.
+        rewrite zero_extend_sign_extend => //=. (* remove sub goal. *)
+        rewrite sign_extend_u.
+        apply word_uincl_refl.
+       }
      }
-   }
-
-
-        move => /andP.
- /andP. //=.
-
-    SearchAbout x86_sem.check_oreg.
-    assert(check_oreg o (Condt c) 
-    rewrite /check
-    move 
-    move /andP in Hcond.
-    move => /eval_assemble_cond.
-
-    move => asscond HCondt.
-    move: Hflags asscond.
-    SearchAbout assemble_cond.
-     (assemble_cond ii h).
-    rewrite /arg_of_pexpr.
-    rewrite /sem_pexpr.
-    SearchAbout sem_pexpr.
-    SearchAbout arg_of_pexpr.
-    rewrite /check_oreg.
-    t_xrbindP.
-
-  + move
-      case: v => //=.
-      elim: v.
-
-      Search value_uincl.
-      
-      SearchAbout lom_eqv.
-
-
-      SearchAbout get_var.
-      move /xgetflag_ex.
-      rewrite /st_get_rflag.
-      apply on_vuP => t.
-      move: ty.
-      SearchAbout evm.
-      case: s => /=.
-      
-      Search _ xrf.
-      move => t.
-  Search on_vu.
-  move => H.
-  erewrite eq_exprP ; 2: apply H.
-  apply /eq_exprP.
-  Search _ eq_expr.
-  move/eqP.
-  case: h.
-  rewrite /sem_pexpr.
-
-  Print lom_eqv.
-
-move => e [] a st v Hlev.
-rewrite /check_sopn_arg /=.
-case a => [i|] //=.
-rewrite /eval_arg_in_v.
-rewrite /eval_arg_in => /=.
-
-relim => [|a args' IHloargs] h h' gd m s Hms => //=.
-elim h' => a b //=.
-case h => //= => v.
-
-admit.
-elim h' => a' [] //=.
-rewrite /eval_arg_in_bool.
-case a' => [i|i o].
-case i => //=.
-
-(* 
-elim h => x //=.
-case i => r /eqP => -> //=;
-rewrite /get_var /on_vu.
-1: elim (((evm m).[var_of_flag r])%vmap) => [|[]] => //=.
-2: elim (((evm m).[var_of_register r])%vmap) => [|[]] => //=.
-1,2: move => p ; t_xrbindP => <-.
-rewrite /eval_arg_in_v /eval_arg_in => //=.
-t_xrbindP => Hp.
-rewrite /st_get_rflag.
-elim ((xrf s) r) => //=.
-
-elim s =>  ? ? ? //=.
-elim r => //=.
-rewrite  /xrf.
-t_xrbindP. *)
-
 Admitted.
 
-Lemma eval_args_in_sem_pexprs_eq gd ii loargs m : forall args s ls t,
+(* Lemma eval_args_in_sem_pexprs_eq gd ii loargs m : forall args s ls t,
 lom_eqv m s ->
 check_sopn_args ii loargs args ls ->
 sem_pexprs gd m args = ok t ->
@@ -346,7 +313,7 @@ elim => [|h l IHl] s [|hls qls] t Hlms //=.
   t_xrbindP => v Hv vs Hvs <-.
   have -> := IHl _ _ _ Hlms Hqls Hvs => /=.
   simpl.
-Admitted.
+Admitted. *)
 
 (* Lemma app_sopn_asm_op: forall ii s h op m gd args loargs,
 let id := instr_desc op in
@@ -380,11 +347,15 @@ rewrite /exec_instr_op /eval_instr_op.
 rewrite Hid /=.
 change (id_semi id) with (sopn_sem (Ox86 op)).
 
-assert(Hhh: eval_args_in gd s loargs (id_in id) = ok h).
+SearchAbout value_uincl.
+have Hhh : exists h', eval_args_in gd s loargs (id_in id) = mapM (is_true value_uincl) h h'.
 {
-  move: Hh.
-  rewrite /eval_args_in /sem_pexprs.
-  rewrite /check_sopn_args in Harg.
+  rewrite /eval_args_in.
+  move: Harg Hh.
+
+  rewrite /check_sopn_args /sem_pexprs.
+  rewrite /eval_args_in.
+  
   rewrite /eval_arg_in_v.
   rewrite /sem_pexpr.
   rewrite /check_sopn_arg in Harg.
@@ -392,6 +363,7 @@ assert(Hhh: eval_args_in gd s loargs (id_in id) = ok h).
 rewrite Hhh => //=.
 assert(Htt: app_sopn [seq i.2 | i <- id_in id] (sopn_sem (Ox86 op)) h = ok t).
 {
+  simpl.
   admit.
 }
 rewrite Htt => //=.
@@ -573,6 +545,7 @@ Definition is_lvar (x:var) lv :=
   | _ => false
   end.
 
+      
 Definition check_sopn_res (loargs : seq pexpr) (x : lval) (ad : arg_desc) :=
   match ad with
   | ADImplicit i => is_lvar (var_of_implicit i) x
@@ -1190,8 +1163,7 @@ Lemma compile_low_argsP ii tys pes gargs :
   size tys = size pes ∧ mapM (compile_pexpr ii) (zip tys pes) = ok gargs.
 Proof. by rewrite/compile_low_args; case: eqP. Qed.
 
-Require Import ssrring.
-
+(* 
 Lemma word_of_scale1 : word_of_scale Scale1 = 1%R.
 Proof. by rewrite /word_of_scale /= /wrepr; apply/eqP. Qed.
 
@@ -1217,7 +1189,7 @@ case: addr_ofs => //=.
   rewrite /decode_addr /= (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv hx2 hx1 hx3);ssring.
 move => sc x' ofs /(_ erefl); t_xrbindP => ? ? hx2 hx3 <- ? hx1 ? /xscale_ok -> [<-].
 rewrite /decode_addr /= (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv hx1 hx2 hx3);ssring.
-Qed.
+Qed. *)
 
 Lemma eval_oprd_of_pexpr ii gd sz s m e c a v:
   lom_eqv s m →
