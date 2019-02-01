@@ -433,8 +433,8 @@ Module CBEA.
       (o1 == o2) && check_eb m e11 e21 && check_eb m e12 e22
     | PappN o1 es1, PappN o2 es2 =>
       (o1 == o2) && all2 (check_eb m) es1 es2
-    | Pif e e1 e2, Pif e' e1' e2' =>
-      check_eb m e e' && check_eb m e1 e1' && check_eb m e2 e2'      
+    | Pif t e e1 e2, Pif t' e' e1' e2' =>
+      (t == t') && check_eb m e e' && check_eb m e1 e1' && check_eb m e2 e2'      
     | _, _ => false
     end.
 
@@ -546,16 +546,15 @@ Module CBEA.
       t_xrbindP => vs ok_vs ok_v1; rewrite -!/(sem_pexprs _ _).
       move: ih => /(_ _ _ rec ok_vs) [] vs' ->.
       exact: (vuincl_sem_opN ok_v1).
-    move => e He e11 He11 e12 He12 [] //= e2 e21 e22 v1.
-    move=> /andP[]/andP[]/He{He}He /He11{He11}He11 /He12{He12}He12.
+    move => t e He e11 He11 e12 He12 [] //= t' e2 e21 e22 v1.
+    move=> /andP[]/andP[]/andP[]/eqP? /He{He}He /He11{He11}He11 /He12{He12}He12;subst t'.
     apply: rbindP => b;apply: rbindP => w /He [ve ->] /=.
     move=> /value_uincl_bool H/H [_ ->] /=.
-    apply: rbindP=> v2 /He11 [] v2' -> Hv2'.
-    apply: rbindP=> v3 /He12 [] v3' -> Hv3'.
-    case: ifP => //= /andP []/(value_uincl_is_defined Hv2') ->
-                             /(value_uincl_is_defined Hv3') ->.
-    case: ifP => //= /(value_uincl_compat_type Hv2' Hv3') -> [<-]; eexists; first reflexivity.
-    by case:(b).
+    t_xrbindP => vt2 v2 /He11 [] v2' -> Hv2' ht2 vt3 v3 /He12 [] v3' -> Hv3' ht3 <- /=.
+    have [? [-> ?]]:= truncate_value_uincl Hv2' ht2.
+    have [? [-> ?] /=]:= truncate_value_uincl Hv3' ht3.
+    eexists; first reflexivity.
+    by case: (b).
   Qed.
 
   End CHECK_EBP.

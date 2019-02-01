@@ -380,18 +380,16 @@ elim: e b => //.
   /to_boolI hb1 /to_boolI hb2 [?] ?; subst v1 v2 b3;
   rewrite /= (He1 _ h1) (He2 _ h2) /= h1 h2;
   apply: (f_equal (@Ok _ _)); rewrite /= ?negb_and ?negb_or.
-move => p hp e1 he1 e2 he2 b /=.
-t_xrbindP => bp vp -> /= -> v1 h1 v2 h2.
-case: andP => // - [] hd1 hd2.
-case: ifP => // hty12  [hb] /=.
-
-have hty : type_of_val v1 = sbool.
-- case: bp hb => ?; subst => //.
-  by case: v1 {h1 hd1} hty12 => //= -[].
-case: v1 h1 hty12 hd1 hb hty => // b1 h1 /= hty12 _ hb _.
-case: v2 h2 hd2 hty12 hb => // b2 h2 /= _ _ hb.
-rewrite (he1 _ h1) (he2 _ h2) /= h1 h2 /=.
-by case: bp {hb}.
+move => st p hp e1 he1 e2 he2 b /=.
+t_xrbindP => bp vp -> /= -> trv1 v1 h1 htr1 trv2 v2 h2 htr2 /= h.
+have : exists (b1 b2:bool), st = sbool /\ sem_pexpr gd s e1 = ok (Vbool b1) /\ sem_pexpr gd s e2 = ok (Vbool b2).
++ rewrite h1 h2;case: bp h => ?;subst.
+  + have [??]:= truncate_val_boolI htr1;subst st v1.
+    by move: htr2; rewrite /truncate_val; t_xrbindP => /= b2 /to_boolI -> ?;eauto.
+  have [??]:= truncate_val_boolI htr2;subst st v2.
+  by move: htr1; rewrite /truncate_val; t_xrbindP => /= b1 /to_boolI -> ?;eauto.
+move=> [b1 [b2 [[->] []/dup[]hb1 /he1 -> /dup[]hb2 /he2 ->]]] /=.
+by rewrite hb1 hb2 /=; case bp.
 Qed.
 
 Section PROOF.

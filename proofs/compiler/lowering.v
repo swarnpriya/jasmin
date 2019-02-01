@@ -183,8 +183,8 @@ Definition lower_cond_classify vi (e: pexpr) :=
   | _ => None
   end.
 
-Definition eq_f  v1 v2 := Pif (Pvar v1) (Pvar v2) (Papp1 Onot (Pvar v2)).
-Definition neq_f v1 v2 := Pif (Pvar v1) (Papp1 Onot (Pvar v2)) (Pvar v2).
+Definition eq_f  v1 v2 := Pif sbool (Pvar v1) (Pvar v2) (Papp1 Onot (Pvar v2)).
+Definition neq_f v1 v2 := Pif sbool (Pvar v1) (Papp1 Onot (Pvar v2)) (Pvar v2).
 
 Definition lower_condition vi (pe: pexpr) : seq instr_r * pexpr :=
   match lower_cond_classify vi pe with
@@ -257,7 +257,7 @@ Variant lower_cassgn_t : Type :=
   | LowerFopn of sopn & list pexpr & option wsize
   | LowerEq   of wsize & pexpr & pexpr
   | LowerLt   of wsize & pexpr & pexpr
-  | LowerIf   of pexpr & pexpr & pexpr
+  | LowerIf   of stype & pexpr & pexpr & pexpr
   | LowerDivMod of divmod_pos & signedness & wsize & sopn & pexpr & pexpr 
   | LowerAssgn.
 
@@ -496,9 +496,9 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
     | _ => LowerAssgn
     end
 
-  | Pif e e1 e2 =>
+  | Pif t e e1 e2 =>
     if stype_of_lval x is sword _ then
-      k16 (wsize_of_lval x) (LowerIf e e1 e2)
+      k16 (wsize_of_lval x) (LowerIf t e e1 e2)
     else
       LowerAssgn
   | _ => LowerAssgn
@@ -680,7 +680,7 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
       
   | LowerEq sz a b => [:: MkI ii (Copn [:: f ; f ; f ; f ; x ] tg (Ox86_CMP sz) [:: a ; b ]) ]
   | LowerLt sz a b => [:: MkI ii (Copn [:: f ; x ; f ; f ; f ] tg (Ox86_CMP sz) [:: a ; b ]) ]
-  | LowerIf e e1 e2 =>
+  | LowerIf t e e1 e2 =>
      let (l, e) := lower_condition vi e in
      let sz := wsize_of_lval x in
      map (MkI ii) (l ++ [:: Copn [:: x] tg (Ox86_CMOVcc sz) [:: e; e1; e2]])

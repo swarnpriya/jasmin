@@ -10,7 +10,7 @@ let coqonly = ref false
 let print_list = ref []
 let ecfile = ref ""
 let ec_list = ref []
-let check_safety = ref true
+let check_safety = ref false
 let safety_param = ref None
 
 let lea = ref false

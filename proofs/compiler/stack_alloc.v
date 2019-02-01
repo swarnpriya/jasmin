@@ -202,11 +202,11 @@ Fixpoint alloc_e (m:map) (e: pexpr) :=
     Let es := mapM (alloc_e m) es in
     ok (PappN o es)  
 
-  | Pif e e1 e2 =>
+  | Pif t e e1 e2 =>
     Let e := alloc_e m e in
     Let e1 := alloc_e m e1 in
     Let e2 := alloc_e m e2 in
-    ok (Pif e e1 e2)
+    ok (Pif t e e1 e2)
   end.
 
 Definition alloc_lval (m:map) (r:lval) ty := 

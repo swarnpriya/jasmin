@@ -185,7 +185,8 @@ let rec cexpr_of_expr tbl = function
   | Papp1 (o, e)      -> C.Papp1(o, cexpr_of_expr tbl e)
   | Papp2 (o, e1, e2) -> C.Papp2(o, cexpr_of_expr tbl e1, cexpr_of_expr tbl e2)
   | PappN (o, es) -> C.PappN (o, List.map (cexpr_of_expr tbl) es)
-  | Pif   (e, e1, e2) -> C.Pif(cexpr_of_expr tbl e,
+  | Pif   (ty, e, e1, e2) -> C.Pif(cty_of_ty ty, 
+                                cexpr_of_expr tbl e,
                                 cexpr_of_expr tbl e1,
                                 cexpr_of_expr tbl e2)
 
@@ -200,7 +201,7 @@ let rec expr_of_cexpr tbl = function
   | C.Papp1 (o, e)      -> Papp1(o, expr_of_cexpr tbl e)
   | C.Papp2 (o, e1, e2) -> Papp2(o, expr_of_cexpr tbl e1, expr_of_cexpr tbl e2)
   | C.PappN (o, es) -> PappN (o, List.map (expr_of_cexpr tbl) es)
-  | C.Pif   (e, e1, e2) -> Pif(expr_of_cexpr tbl e,
+  | C.Pif (ty, e, e1, e2) -> Pif(ty_of_cty ty, expr_of_cexpr tbl e,
                                expr_of_cexpr tbl e1,
                                expr_of_cexpr tbl e2)
 

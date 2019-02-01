@@ -173,7 +173,8 @@ let main () =
                 end) in
 
               AbsInt.analyze ())
-          (snd prog) in ()
+          (snd prog) in
+      exit 0;
     end;
 
     if !ec_list <> [] then begin

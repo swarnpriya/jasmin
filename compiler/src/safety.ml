@@ -156,7 +156,8 @@ end = struct
     | Papp1 (op, e) -> Papp1 (op, mk_expr fn e)
     | Papp2 (op, e1, e2) -> Papp2 (op, mk_expr fn e1, mk_expr fn e2)
     | PappN (op,es) -> PappN (op, List.map (mk_expr fn) es)
-    | Pif (e, el, er)  -> Pif (mk_expr fn e, mk_expr fn el, mk_expr fn er)
+    | Pif (ty, e, el, er)  ->
+      Pif (ty, mk_expr fn e, mk_expr fn el, mk_expr fn er)
 
   and mk_exprs fn exprs = List.map (mk_expr fn) exprs
 
@@ -436,7 +437,8 @@ end = struct
     | Papp1 (_,e1) -> app_expr dp v e1 ct
     | Papp2  (_,e1,e2) -> app_expr (app_expr dp v e1 ct) v e2 ct
     | PappN (_,es) -> List.fold_left (fun dp e -> app_expr dp v e ct) dp es
-    | Pif (b,e1,e2) -> app_expr (app_expr (app_expr dp v b ct) v e1 ct) v e2 ct
+    | Pif (_,b,e1,e2) ->
+      app_expr (app_expr (app_expr dp v b ct) v e1 ct) v e2 ct
 
   (* State while building the dependency graph:
      - dp : dependency graph
@@ -468,7 +470,7 @@ end = struct
       | Papp1 (_,e1) -> aux (acc,st) e1
       | Papp2  (_,e1,e2) -> aux (aux (acc,st) e1) e2
       | PappN (_,es) -> List.fold_left aux (acc,st) es
-      | Pif (b,e1,e2) -> aux (aux (aux (acc,st) e1) e2) b in
+      | Pif (_,b,e1,e2) -> aux (aux (aux (acc,st) e1) e2) b in
 
     aux ([],st) e
 
@@ -655,6 +657,7 @@ module Mmv = struct
 end
 
 module Mm = Map.Make(Mmv)
+
 
 module Mtexpr : sig
   type unop = Apron.Texpr0.unop
@@ -3331,7 +3334,7 @@ let rec add_glob_expr s = function
   | Papp1(_, e)    -> add_glob_expr s e
   | Papp2(_,e1,e2) -> add_glob_expr (add_glob_expr s e1) e2
   | PappN (_,es) -> List.fold_left add_glob_expr s es
-  | Pif(e,e1,e2)   -> add_glob_expr
+  | Pif(_,e,e1,e2)   -> add_glob_expr
                         (add_glob_expr
                            (add_glob_expr s e) e1) e2
 
@@ -3461,7 +3464,7 @@ let rec safe_e_rec safe = function
   | Papp2 (op, e1, e2) -> safe_op2 e2 op @ safe_e_rec (safe_e_rec safe e1) e2
   | PappN (E.Opack _,_) -> safe
 
-  | Pif  (e1, e2, e3) ->
+  | Pif  (_,e1, e2, e3) ->
     (* We do not check "is_defined e1 && is_defined e2" since
         (safe_e_rec (safe_e_rec safe e1) e2) implies it *)
     safe_e_rec (safe_e_rec (safe_e_rec safe e1) e2) e3
@@ -3676,10 +3679,6 @@ let check_is_word v = match v.v_ty with
       v.v_name Printer.pp_ty v.v_ty;
     raise (Aint_error "Bad type")
 
-let map_f f e_opt = match e_opt with
-  | None -> None
-  | Some (b,el,er) -> Some (b, f el, f er)
-
 
 (*********************)
 (* Abstract Iterator *)
@@ -3816,7 +3815,7 @@ end = struct
 
       | Pload _ -> raise Expr_contain_load
 
-      | Pif (_,e1,e2) | Papp2 (_, e1, e2) -> aux (aux acc e1) e2 in
+      | Pif (_,_,e1,e2) | Papp2 (_, e1, e2) -> aux (aux acc e1) e2 in
 
     try PtVars (aux [] e) with Expr_contain_load -> PtTopExpr
 
@@ -3936,9 +3935,13 @@ end = struct
     | _ -> print_not_word_expr e;
       assert false
 
+  let map_f f e_opt = match e_opt with
+    | None -> None
+    | Some (ty,b,el,er) -> Some (ty, b, f el, f er)
+
   let rec remove_if_expr_aux : 'a Prog.gexpr ->
-    ('a Prog.gexpr * 'a Prog.gexpr * 'a Prog.gexpr) option = function
-    | Pif(e1,et,ef) -> Some (e1,et,ef)
+    ('a * 'a Prog.gexpr * 'a Prog.gexpr * 'a Prog.gexpr) option = function
+    | Pif (ty,e1,et,ef) -> Some (ty,e1,et,ef)
 
     | Pconst _  | Pbool _ | Parr_init _ | Pvar _ | Pglobal _ -> None
 
@@ -3969,13 +3972,13 @@ end = struct
 
       match f_expl 0 es with
       | _,None -> None
-      | i,Some (b,el,er) ->
+      | i,Some (ty, b, el, er) ->
         let repi ex = List.mapi (fun j x -> if j = i then ex else x) es in
-        Some (b, PappN (opn, repi el), PappN (opn, repi er))
+        Some (ty, b, PappN (opn, repi el), PappN (opn, repi er))
 
 
   let rec remove_if_expr (e : 'a Prog.gexpr) = match remove_if_expr_aux e with
-    | Some (b,el,er) ->
+    | Some (_,b,el,er) ->
       List.map (fun (l_bool,expr) ->
           (b :: l_bool,expr))
         (remove_if_expr el)
@@ -4015,7 +4018,7 @@ end = struct
 
       | Pglobal _ -> assert false (* Global variables are of type word *)
 
-      | Pif(e1,et,ef) ->
+      | Pif(_,e1,et,ef) ->
         let bet, bef, be1 = aux et, aux ef, aux e1 in
         let be1_f = match flip_btcons be1 with
           | Some c -> c
@@ -4046,7 +4049,7 @@ end = struct
           (* TODO: this is unsound on signed words *)
           | E.Oeq _ | E.Oneq _ | E.Olt _ | E.Ole _ | E.Ogt _ | E.Oge _ ->
             match remove_if_expr_aux e with
-            | Some (eb,el,er)  -> aux (Pif (eb,el,er))
+            | Some (ty,eb,el,er)  -> aux (Pif (ty,eb,el,er))
             | None -> flat_bexpr_to_btcons abs op2 e1 e2 end
 
       | _ -> assert false
@@ -5027,7 +5030,7 @@ end = struct
 
   let analyze () =
     (* Stats *)
-    let exception Done in
+    let exception UserInterupt in
 
     let t_start = Sys.time () in
     let print_stats _ =
@@ -5037,7 +5040,7 @@ end = struct
 
     try
       (* We print stats before exciting *)
-      let hndl = Sys.Signal_handle (fun _ -> print_stats (); raise Done) in
+      let hndl = Sys.Signal_handle (fun _ -> print_stats (); raise UserInterupt) in
       let old_handler = Sys.signal Sys.sigint hndl in
 
       let state = init_state main_decl prog in

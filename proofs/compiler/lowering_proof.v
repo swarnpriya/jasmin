@@ -1000,8 +1000,8 @@ Section PROOF.
       exists b1 b2 b3 b4, sem_pexprs gd s [:: a; b] >>= exec_sopn (Ox86_CMP sz) = ok [:: Vbool b1; Vbool b2; Vbool b3; Vbool b4; v']
     | LowerLt sz a b =>
       exists b1 b2 b3 b4, sem_pexprs gd s [:: a; b] >>= exec_sopn (Ox86_CMP sz) = ok [:: Vbool b1; v'; Vbool b2; Vbool b3; Vbool b4]
-    | LowerIf a e1 e2 =>
-      check_size_16_64 (wsize_of_lval l) = ok tt ∧ e = Pif a e1 e2 ∧ wsize_of_lval l = wsize_of_stype ty ∧ ∃ sz', stype_of_lval l = sword sz'
+    | LowerIf t a e1 e2 =>
+      check_size_16_64 (wsize_of_lval l) = ok tt ∧ e = Pif t a e1 e2 ∧ wsize_of_lval l = wsize_of_stype ty ∧ ∃ sz', stype_of_lval l = sword sz'
     | LowerLea sz l =>
       sz = Uptr ∧ check_scale (wunsigned (lea_scale l)) ∧
       Sv.Subset (read_lea l) (read_e e) ∧
@@ -1016,8 +1016,7 @@ Section PROOF.
       have := truncate_val_subtype Hv'. rewrite Hs -(truncate_val_has_type Hv').
       case hty: (type_of_val v') => [ | | | sz'' ] //= hle.
       case: (write_lval_undef Hw hty) => w ? {hty}; subst v'.
-      have := truncate_val_wordI Hv'.
-      case => s'' [w''] [? _]; subst.
+      have [s'' [w'' [? [? _]]]]:= truncate_val_wordI Hv'; subst.
       case: Hs => ?; subst.
       case: ifP => // h; eexists; first reflexivity.
       split; first exact: (cmp_le_trans hle (cmp_le_trans Hs' h)).
@@ -1666,20 +1665,18 @@ Section PROOF.
       exists s2'; split=> //; apply: sem_seq1; apply: EmkI; apply: Eopn.
       by rewrite /sem_sopn H /= Hw'.
     (* LowerIf *)
-    + move=> cond e1 e2 [Hsz64] [He] [Hsz] [sz' Ht]; subst e.
+    + move=> t cond e1 e2 [Hsz64] [He] [Hsz] [sz' Ht]; subst e.
       set x := lower_condition _ _ _.
       have Hcond: x = lower_condition fv (var_info_of_lval l) cond by [].
       move: x Hcond=> [i e'] Hcond.
       clear s2' Hw' Hs2'.
-      rewrite /= in Hv'.
-      move: Hv'; t_xrbindP=> b bv Hbv Hb v1 Hv1 v2 Hv2.
-      case:ifP => // hdef; case: ifP => // hty' [?]; subst v.
+      move: Hv' => /=; t_xrbindP=> b bv Hbv Hb trv1 v1 Hv1 Htr1 trv2 v2 Hv2 Htr2 ?;subst v.
       have [s2' [Hs2'1 [Hs2'2 Hs2'3]]] := lower_condition_corr ii Hcond Hs1' Hbv.
       have [s3' [Hw' Hs3']] := write_lval_same Hdisjl Hs2'2 Hw.
       exists s3'; split=> //.
       rewrite map_cat.
       apply: sem_app.
-      exact: Hs2'1.
+      + exact: Hs2'1.
       apply: sem_seq1; apply: EmkI; apply: Eopn.
       move: bv Hbv Hb Hs2'3=> [] b0 Hb //=; last by case: (b0).
       case => ? Hb'; subst b0.
@@ -1692,15 +1689,21 @@ Section PROOF.
       have [sz Hvt] := write_lval_word Ht Hw'.
       have [w Hvw] := write_lval_undef Hw' Hvt; subst.
       have /=? := truncate_val_has_type hty; subst ty.
-      rewrite /= in Hsz; rewrite Hsz.
-      case: (truncate_val_wordI hty) => sz'' [w'] [hw' hle].
-      move: (hty); rewrite hw' /truncate_val /= /truncate_word hle /= => - [?]; subst w.
-      rewrite -[X in check_size_16_64 X]Hsz Hsz64.
-      have [-> -> /=] : is_word sz v1 = ok tt ∧ is_word sz v2 = ok tt.
-      + case: b hw' {hty Hv Hb Hb'} hty'.
-        - by move => -> /=; case: (v2) => // -[].
-        by move => -> /=; case: (v1) => // -[].
-      by case: ifP => hb; rewrite hb in hw'; subst; rewrite /= /truncate_word hle /= Hw'.
+      rewrite Hsz64 Hsz /=.
+      have [sz'' [w' [_ [hw' [hle ?]]]] ]:= truncate_val_wordI hty. subst.
+      have : exists w1 w2, to_word sz v1 = ok w1 /\ to_word sz v2 = ok w2 /\ 
+                            (if b then w1 else w2) = zero_extend sz w'.
+      + case: (b) hw' => ?; subst.
+        + have [sz3 [w1 [? [-> [hle3 ?]]]]] /= := truncate_val_wordI Htr1; subst.
+          rewrite zero_extend_idem // /truncate_word (cmp_le_trans hle hle3).
+          move: Htr2 => /=; rewrite /truncate_val; t_xrbindP => /= ? /to_wordI [? [?[hle'??]]] ?;subst.
+          by rewrite /= /truncate_word (cmp_le_trans hle hle');eauto.
+        have [sz3 [w1 [? [-> [hle3 ?]]]]] /= := truncate_val_wordI Htr2; subst.
+        rewrite zero_extend_idem // /truncate_word (cmp_le_trans hle hle3).
+        move: Htr1 => /=; rewrite /truncate_val; t_xrbindP => /= ? /to_wordI [? [?[hle'??]]] ?;subst.
+        by rewrite /= /truncate_word (cmp_le_trans hle hle');eauto.
+      move=> [w1 [w2 [ -> [->]]]] /=.
+      by case: (b) => ?;subst => /=;rewrite Hw'.
     (* LowerDivMod *)
     + move=> d u w s p0 p1 /= [[va [wa [hva hwa hdiv]]] ? hle1 hle2];subst ty.
       set vf := {| v_var := _ |}.

@@ -50,7 +50,7 @@ let rec arrexp_e tbl e =
   | Papp1 (o, e)   -> Papp1(o, arrexp_e tbl e)
   | Papp2(o,e1,e2) -> Papp2(o,arrexp_e tbl e1, arrexp_e tbl e2)
   | PappN (o, es) -> PappN (o, List.map (arrexp_e tbl) es)
-  | Pif(e,e1,e2)   -> Pif(arrexp_e tbl e, arrexp_e tbl e1, arrexp_e tbl e2)
+  | Pif(ty, e,e1,e2)   -> Pif(ty, arrexp_e tbl e, arrexp_e tbl e1, arrexp_e tbl e2)
 
 let arrexp_lv tbl lv =
   match lv with
@@ -108,7 +108,7 @@ let rec array_access_e tbl e =
   | Pload (_,_,e) | Papp1 (_,e) -> array_access_e tbl e 
   | Papp2(_,e1,e2) -> array_access_e (array_access_e tbl e1) e2
   | PappN (_,es) -> array_access_es tbl es
-  | Pif(e1,e2,e3) -> array_access_es tbl [e1;e2;e3]
+  | Pif(_, e1,e2,e3) -> array_access_es tbl [e1;e2;e3]
 
 and array_access_es tbl es = List.fold_left array_access_e tbl es 
 

@@ -56,7 +56,7 @@ type 'ty gexpr =
   | Papp1  of E.sop1 * 'ty gexpr
   | Papp2  of E.sop2 * 'ty gexpr * 'ty gexpr
   | PappN of E.opN * 'ty gexpr list
-  | Pif    of 'ty gexpr * 'ty gexpr * 'ty gexpr
+  | Pif    of 'ty * 'ty gexpr * 'ty gexpr * 'ty gexpr
 
 type 'ty gexprs = 'ty gexpr list
 
@@ -206,7 +206,7 @@ and pexpr_equal e1 e2 =
  | Pload(b1,v1,e1), Pload(b2,v2,e2) -> b1 = b2 && PV.equal (L.unloc v1) (L.unloc v2) && pexpr_equal e1 e2
  | Papp1(o1,e1), Papp1(o2,e2) -> o1 = o2 && pexpr_equal e1 e2
  | Papp2(o1,e11,e12), Papp2(o2,e21,e22) -> o1 = o2 &&  pexpr_equal e11 e21 && pexpr_equal e12 e22
- | Pif(e11,e12,e13), Pif(e21,e22,e23) -> pexpr_equal e11 e21 && pexpr_equal e12 e22 && pexpr_equal e13 e23 
+ | Pif(_,e11,e12,e13), Pif(_,e21,e22,e23) -> pexpr_equal e11 e21 && pexpr_equal e12 e22 && pexpr_equal e13 e23 
  | _, _ -> false
 
 (* ------------------------------------------------------------------------ *)
@@ -268,7 +268,7 @@ let rec rvars_e s = function
   | Papp1(_, e)    -> rvars_e s e
   | Papp2(_,e1,e2) -> rvars_e (rvars_e s e1) e2
   | PappN (_, es) -> rvars_es s es
-  | Pif(e,e1,e2)   -> rvars_e (rvars_e (rvars_e s e) e1) e2
+  | Pif(_,e,e1,e2)   -> rvars_e (rvars_e (rvars_e s e) e1) e2
 
 and rvars_es s es = List.fold_left rvars_e s es
 

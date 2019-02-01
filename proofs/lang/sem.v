@@ -828,15 +828,11 @@ Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
   | PappN op es =>
     Let vs := mapM (sem_pexpr s) es in
     sem_opN op vs
-  | Pif e e1 e2 =>
+  | Pif t e e1 e2 =>
     Let b := sem_pexpr s e >>= to_bool in
-    Let v1 := sem_pexpr s e1 in
-    Let v2 := sem_pexpr s e2 in
-    if is_defined v1 && is_defined v2 then
-      if compat_type (type_of_val v1) (type_of_val v2) then
-        ok (if b then v1 else v2)
-      else type_error
-    else undef_error
+    Let v1 := sem_pexpr s e1 >>= truncate_val t in
+    Let v2 := sem_pexpr s e2 >>= truncate_val t in
+    ok (if b then v1 else v2)
   end.
 
 Definition sem_pexprs s := mapM (sem_pexpr s).
@@ -1416,12 +1412,10 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
     | [:: v1; v2; v3] =>
       Let _ := check_size_16_64 sz in
       Let b := to_bool v1 in
-      Let _ := is_word sz v2 in
-      Let _ := is_word sz v3 in
-      if b then
-        Let w2 := to_word sz v2 in ok [:: Vword w2]
-      else
-        Let w3 := to_word sz v3 in ok [:: Vword w3]
+      Let w2 := to_word sz v2 in
+      Let w3 := to_word sz v3 in
+      if b then (ok [:: Vword w2])
+      else (ok [:: Vword w3])
     | _ => type_error end)
   | Ox86_ADD sz => app_ww sz x86_add
   | Ox86_SUB sz => app_ww sz x86_sub
@@ -1517,7 +1511,8 @@ Lemma sopn_toutP o vs vs' : exec_sopn o vs = ok vs' ->
 Proof.
   rewrite /exec_sopn ;case: o => /=; app_sopn_t => //;
   try (by apply: rbindP => _ _; app_sopn_t).
-  + by move=> ??????; case: ifP => ?; t_xrbindP => ?? <-.
+
+  + by move=> ???? w2 w3; case: ifP => ? [<-].
   + by rewrite /x86_div;t_xrbindP => ??;case: ifP => // ? [<-].
   + by rewrite /x86_idiv;t_xrbindP => ??;case: ifP => // ? [<-].
   + by rewrite /x86_lea;t_xrbindP => ??;case: ifP => // ? [<-].
