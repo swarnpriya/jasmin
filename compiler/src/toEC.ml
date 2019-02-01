@@ -267,7 +267,8 @@ let ec_keyword =
  ; "last"
  ; "do"
  ; "strict"
- ; "expect" ]
+ ; "expect"
+ ; "interleave" ]
 
 let internal_keyword = 
   [ "safe"; "leakages"]
@@ -561,8 +562,20 @@ let rec pp_expr env fmt (e:expr) =
     Format.fprintf fmt "(%a %a %a)"
       (pp_wcast env) te1 pp_op2 op2 (pp_wcast env) te2
 
-  | PappN (_op, _es) ->
-    assert false (* TODO: nary *)
+  | PappN (op, es) ->
+    (* FIXME *)
+    begin match op with
+    | Opack (ws, we) ->
+      let i = int_of_pe we in
+      let rec aux fmt es = 
+        match es with
+        | [] -> assert false
+        | [e] -> Format.fprintf fmt "%a" (pp_expr env) e
+        | e::es -> 
+          Format.fprintf fmt "@[(%a %%%% 2^%i +@ 2^%i * %a)@]"
+            (pp_expr env) e i i aux es in
+      Format.fprintf fmt "(W%a.of_int %a)" pp_size ws aux es
+    end
 
   | Pif(_,e1,et,ef) -> 
     let ty = ty_expr e in
