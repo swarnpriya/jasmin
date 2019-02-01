@@ -474,9 +474,12 @@ Definition assemble_word ii (sz:wsize) (e:pexpr) :=
   | Pglobal g =>
     ok (Glob g)
   | Pload sz' v e =>
-    Let s := reg_of_var ii v in
-    Let w := addr_of_pexpr ii s e in
-    ok (Adr w)
+    if (sz == sz') then
+      Let s := reg_of_var ii v in
+      Let w := addr_of_pexpr ii s e in
+      ok (Adr w)
+    else
+    cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for word: invalid Load size"))
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for word"))
   end.
 

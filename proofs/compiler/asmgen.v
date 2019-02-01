@@ -55,7 +55,7 @@ Definition check_oreg o a :=
   | Some _, _       => false
   end.
 
-Lemma check_oreg_eq a b : check_oreg a b = x86_sem.check_oreg a b.
+Local Lemma check_oreg_eq a b : check_oreg a b = x86_sem.check_oreg a b.
 Proof. by case a, b. Qed.
 
 
@@ -159,18 +159,29 @@ move => sc x' ofs /(_ erefl); t_xrbindP => ? ? hx2 hx3 <- ? hx1 ? /xscale_ok -> 
 rewrite /decode_addr /= (xgetreg eqv ok_r1 ok_o ok_z) (xgetreg eqv hx1 hx2 hx3);ssring.
 Qed.
 
-Local Lemma all2_MapM_MapM_all2 (A B C D:Type)
+Local Lemma Forall2_cons (A  B:Type) (f:A -> B -> Prop) (a:A) (a': seq A) (b:B) (b':seq B) :
+  List.Forall2 f (a:: a') (b :: b') <-> f a b /\ List.Forall2 f a' b'.
+Proof.
+  split.
+(*   eapply (@List.Forall2_ind _ _ _ (fun l l' => _ /\ _) _ _ (a :: a') (b::b')). *)
+  by move => H; inversion H.
+  by move => [] ; apply List.Forall2_cons.
+Qed.
+
+Local Lemma all2_MapM_MapM_all2 (A B D:Type)
                           (P: A -> B -> bool)
                           (Q: A -> exec D)
                           (R: B -> exec D)
-                          (T: D -> D -> bool):
-  (forall a b c, P a b -> Q a = ok c -> exists d, R b = ok d /\ T c d) ->
+                          (S: D -> bool)
+                          (T: D -> D -> Prop):
+  (forall a b c, P a b -> Q a = ok c -> S c -> exists d, R b = ok d /\ T c d) ->
   forall x y h,
   all2 P x y ->
   mapM Q x = ok h ->
-  ∃ h', mapM R y = ok h' /\ all2 T h h'.
+  all S h ->
+  ∃ h', mapM R y = ok h' /\ List.Forall2 T h h'.
 Proof.
-  move => HPQRT.
+   move => HPQRT.
   elim => [|hx tx IHtx] [|hy ty] [|hh th];
   try solve [rewrite all2P => /andP [] Hsize HP HQ => //].
   + by exists [::].
@@ -178,10 +189,12 @@ Proof.
   + move => Hall.
     simpl in Hall.
     move: Hall => /andP [] HP Hall2 /(iff_sym (mapM_cons _ _ _ _ _)) [] HQ HmapQ.
-    have [d [] Rd Td] := HPQRT  _ _ _ HP HQ.
-    have [h' [] Hmap HT] := IHtx _ _ Hall2 HmapQ.
+    simpl all => /andP [] HShh HSth.
+    have [d [] Rd Td] := HPQRT  _ _ _ HP HQ HShh.
+    have [h' [] Hmap HT] := IHtx _ _ Hall2 HmapQ HSth.
     exists (d::h') => /=.
-    by rewrite Rd Hmap HT Td.
+    rewrite Forall2_cons.
+    by rewrite Rd Hmap.
 Qed.
 
 Lemma check_sopn_arg_sem_eval gd m s ii args h h' v:
@@ -239,6 +252,7 @@ Proof.
      }
     +{
       move => w.
+      (* TODO case over h *)
       case_eq (assemble_word ii w h) => //=. (* got rid of one case *)
       rewrite -check_oreg_eq.
       move => asm Hasm /andP [] /eqP -> -> //=.
@@ -255,6 +269,7 @@ Proof.
         exists (Vword (wrepr (size_of_global g) z)) => //=.
        }
       +{
+
         move => w0 v0 p.
 
         (* FIXME *)
@@ -281,7 +296,7 @@ Proof.
         move => h11 -> <- /=.
         exists (Vword h11) => //=.
        }
-     +{
+      +{
         move => [] w0 [] //= z.
 
         (* FIXME *)
@@ -347,28 +362,37 @@ rewrite /exec_instr_op /eval_instr_op.
 rewrite Hid /=.
 change (id_semi id) with (sopn_sem (Ox86 op)).
 
-SearchAbout value_uincl.
-have Hhh : exists h', eval_args_in gd s loargs (id_in id) = mapM (is_true value_uincl) h h'.
+have Hhh : exists h', eval_args_in gd s loargs (id_in id) = ok h' /\ List.Forall2 value_uincl h h'.
 {
+admit.
+(* 
   rewrite /eval_args_in.
   move: Harg Hh.
 
   rewrite /check_sopn_args /sem_pexprs.
-  rewrite /eval_args_in.
-  
-  rewrite /eval_arg_in_v.
-  rewrite /sem_pexpr.
-  rewrite /check_sopn_arg in Harg.
+  apply all2_MapM_MapM_all2.
+(*   rewrite /eval_args_in. *)
+  move => a b c Hcheck Hsempexr.
+  apply (check_sopn_arg_sem_eval Hlomeqv Hcheck Hsempexr).(* FIX ME *)
+  (* Yes we are defined. *)
+  admit. *)
 }
-rewrite Hhh => //=.
-assert(Htt: app_sopn [seq i.2 | i <- id_in id] (sopn_sem (Ox86 op)) h = ok t).
+move: Hhh => [] h' [] -> Hincl /=.
+have Hhh' : app_sopn [seq i.2 | i <- id_in id] (sopn_sem (Ox86 op)) h' = ok t.
 {
-  simpl.
-  admit.
+eapply vuincl_sopn.
+by have -> := id_tin_narr id.
+apply Hincl.
+apply Ht.
 }
-rewrite Htt => //=.
-clear Hh Hhh Ht Htt.
+case Hlomeqv => Hms Hreg Hxmm Hflags.
+rewrite Hhh' => /=.
+
 rewrite /mem_write_vals.
+SearchAbout mem_write_val.
+(* λ (f : msb_flag) (args : asm_args) (aty : arg_desc * stype) (v : value) (s : x86_mem), *)
+SearchAbout write_lval.
+(* λ (gd : glob_decls) (l : lval) (v : value) (s : estate), *)
 Admitted.
 
 
@@ -545,7 +569,6 @@ Definition is_lvar (x:var) lv :=
   | _ => false
   end.
 
-      
 Definition check_sopn_res (loargs : seq pexpr) (x : lval) (ad : arg_desc) :=
   match ad with
   | ADImplicit i => is_lvar (var_of_implicit i) x
