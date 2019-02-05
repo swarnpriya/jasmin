@@ -1,0 +1,120 @@
+./jasminc.native -debug -checksafety -safetyparam "plain;len:output;len" examples/safety/libjc/avx/chacha20.jazz 2>&1 | tee chacha20_avx.res
+
+   *** No Safety Violation
+
+
+   Memory ranges:
+     mem_len: [0; 0]
+     mem_key: [0; 32]
+     mem_nonce: [0; 12]
+     mem_counter: [0; 0]
+
+   * Rel:
+   [|inv_len-mem_plain>=0; -inv_len+4294967295>=0; mem_plain>=0|]
+   mem_plain: [0; 4294967295]
+
+   * Rel:
+   [|inv_len-mem_output>=0; -inv_len+4294967295>=0; mem_output>=0|]
+   mem_output: [0; 4294967295]
+
+
+./jasminc.native -debug -checksafety -safetyparam "plain;len:output;len" examples/safety/libjc/avx2/chacha20.jazz 2>&1 | tee chacha20_avx2.res
+
+   *** Safety Violation(s):
+     line 1114: is_init k14
+
+
+   Memory ranges:
+     mem_len: [0; 0]
+     mem_key: [0; 32]
+     mem_nonce: [0; 12]
+     mem_counter: [0; 0]
+
+   * Rel:
+   [|inv_len-mem_plain>=0; -inv_len+4294967295>=0; mem_plain>=0|]
+   mem_plain: [0; 4294967295]
+
+   * Rel:
+   [|inv_len-mem_output>=0; -inv_len+4294967295>=0; mem_output>=0|]
+   mem_output: [0; 4294967295]
+
+
+./jasminc.native -debug -checksafety -safetyparam "out;inlen:in;inlen" examples/safety/libjc/avx/poly1305.japp 2>&1 | tee poly1305_avx.res
+
+   *** Safety Violation(s):
+     line 333: is_init[5] r44#broadcast_r4
+     line 358: is_init[5] r12#poly1305_avx_setup
+
+
+
+   Memory ranges:
+     mem_inlen: [0; 0]
+     mem_k: [0; 32]
+
+   * Rel:
+   [|-mem_out+16>=0; -inv_inlen+18446744073709551615>=0; inv_inlen>=0;
+     mem_out>=0|]
+   mem_out: [0; 16]
+
+   * Rel:
+   [|inv_inlen-mem_in>=0; -inv_inlen+18446744073709551615>=0; mem_in>=0|]
+   mem_in: [0; 18446744073709551615]
+
+
+./jasminc.native -debug -checksafety -safetyparam "out;inlen:in;inlen" examples/safety/libjc/avx/poly1305_inlined_unpack.japp 2>&1 | tee poly1305_unlined_unpack_avx.res
+
+   *** No Safety Violation
+
+
+   Memory ranges:
+     mem_inlen: [0; 0]
+     mem_k: [0; 32]
+
+   * Rel:
+   [|-mem_out+16>=0; -inv_inlen+18446744073709551615>=0; inv_inlen>=0;
+     mem_out>=0|]
+   mem_out: [0; 16]
+
+   * Rel:
+   [|inv_inlen-mem_in>=0; -inv_inlen+18446744073709551615>=0; mem_in>=0|]
+   mem_in: [0; 18446744073709551615]
+
+./jasminc.native -debug -checksafety -safetyparam "out;inlen:in;inlen" examples/safety/libjc/avx2/poly1305.japp 2>&1 | tee poly1305_avx2.res
+
+   *** Safety Violation(s):
+     line 344: is_init[5] r1234#poly1305_avx2_setup
+
+
+
+   Memory ranges:
+     mem_inlen: [0; 0]
+     mem_k: [0; 32]
+
+   * Rel:
+   [|-mem_out+16>=0; -inv_inlen+18446744073709551615>=0; inv_inlen>=0;
+     mem_out>=0|]
+   mem_out: [0; 16]
+
+   * Rel:
+   [|inv_inlen-mem_in>=0; -inv_inlen+18446744073709551615>=0; mem_in>=0|]
+   mem_in: [0; 18446744073709551615]
+
+
+
+./jasminc.native -debug -checksafety -safetyparam "out;inlen:in;inlen" examples/safety/libjc/avx2/poly1305_inlined_unpack.japp 2>&1 | tee poly1305_unlined_unpack_avx2.res
+
+   *** No Safety Violation
+
+
+   Memory ranges:
+     mem_inlen: [0; 0]
+     mem_k: [0; 32]
+
+   * Rel:
+   [|-mem_out+16>=0; -inv_inlen+18446744073709551615>=0; inv_inlen>=0;
+     mem_out>=0|]
+   mem_out: [0; 16]
+
+   * Rel:
+   [|inv_inlen-mem_in>=0; -inv_inlen+18446744073709551615>=0; mem_in>=0|]
+   mem_in: [0; 18446744073709551615]

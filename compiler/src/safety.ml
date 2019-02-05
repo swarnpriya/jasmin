@@ -79,6 +79,8 @@ module Aparam = struct
   let ignore_unconstrained = true
 end
 
+(* Turn on printing of only the relational part *)
+let only_rel_print = ref false
 
 (*************************)
 (* Unique Variable Names *)
@@ -1680,7 +1682,7 @@ module AbsNumProd (VDW : VDomWrap) (NonRel : AbsNumType) (PplDom : AbsNumType)
       let pp_map pp_el fmt l =
         pp_list pp_el fmt (List.map snd (Mdom.bindings l)) in
 
-      if Mdom.cardinal a.nrd = 0 then
+      if Mdom.cardinal a.nrd = 0 || !only_rel_print then
         Format.fprintf fmt "@[<v 0>* Rel:@;%a@]"
           (pp_map (PplDom.print ~full:full)) a.ppl
       else
@@ -1915,7 +1917,6 @@ module Ptree = struct
       | Leaf x -> Leaf (f cs x) in
     aux [] t
 
-  (* REM: should no longer check shape here (and in eval2) *)
   let apply2_merge (fmerge : 'a t -> 'b t -> ('a t * 'b t))
       (f : Mtcons.t list -> 'a -> 'b -> 'c) t1 t2 =
     let rec aux cs t1 t2 = match t1,t2 with
@@ -3172,11 +3173,11 @@ module AbsBoolNoRel (AbsNum : AbsNumT) (Pt : PointsTo)
 
       let b_list,n_list = List.map (fun x -> x.bool) t_list,
                           List.map (fun x -> x.num) t_list in
+
       { bool = join_map b_list;
         init = s_init;
         num = AbsNum.R.join_list n_list;
         points_to = points_to_init }
-
 
   (* Assign a boolean expression.
      As we did in assign_sexpr, we unpopulate init *)
@@ -3270,9 +3271,13 @@ module AbsBoolNoRel (AbsNum : AbsNumT) (Pt : PointsTo)
 
   let print : ?full:bool -> Format.formatter -> t -> unit =
     fun ?full:(full=false) fmt t ->
-      Format.fprintf fmt "@[<v 0>@[<v 0>%a@]@;%a@]"
-        (AbsNum.R.print ~full:full) t.num
-        Pt.print t.points_to
+      if !only_rel_print then
+        Format.fprintf fmt "@[<v 0>%a@]"
+          (AbsNum.R.print ~full:full) t.num
+      else
+        Format.fprintf fmt "@[<v 0>@[<v 0>%a@]@;%a@]"
+          (AbsNum.R.print ~full:full) t.num
+          Pt.print t.points_to
 
   let new_cnstr_blck t = { t with num = AbsNum.R.new_cnstr_blck t.num }
 
@@ -3622,7 +3627,8 @@ let op2_to_abs_binop op2 = match op2 with
   | E.Osub _ -> Some Texpr1.Sub
   | E.Omod _ -> Some Texpr1.Mod
 
-  | E.Odiv _ -> None
+  | E.Odiv _ -> Some Texpr1.Div
+
   | E.Oand | E.Oor
   | E.Oland _ | E.Olor _ | E.Olxor _ (* bit-wise boolean connectives *)
   | E.Olsr _ | E.Olsl _ | E.Oasr _
@@ -3901,10 +3907,7 @@ end = struct
             | E.Omod (Cmp_w (_,_))  ->
               (* TODO: signed words *)
               let l_e1 = linearize_wexpr abs e1 in
-              (* let w_e1 = wrap_if_overflow abs l_e1 false (int_of_ws ws) in *)
-
               let l_e2 = linearize_wexpr abs e2 in
-              (* let w_e2 = wrap_if_overflow abs l_e2 false (int_of_ws ws) in *)
 
               let lin = Mtexpr.(binop Texpr1.Mod l_e1 l_e2) in
               wrap_if_overflow abs lin false (int_of_ws ws_e)
@@ -4342,6 +4345,13 @@ end = struct
     add_violations state unsafe
 
   type mlvar = MLnone | MLvar of mvar | MLvars of mvar list
+
+  let pp_mlvar fmt = function
+    | MLnone -> Format.fprintf fmt "MLnone"
+    | MLvar mv -> Format.fprintf fmt "MLvar %a" pp_mvar mv
+    | MLvars mvs ->
+      Format.fprintf fmt "MLvars @[<hov 2>%a@]"
+        (pp_list pp_mvar) mvs
 
   (* Return te mvar where the abstract assignment takes place. For now, no
      abstraction of the memory. *)
@@ -5021,11 +5031,11 @@ end = struct
     let abs_proj = AbsDom.forget_list state.abs rem_vars
                    |> AbsDom.pop_cnstr_blck in
 
-    let sb = !Aparam.nrel_no_print in (* Not very clean *)
-    Aparam.nrel_no_print := true;
+    let sb = !only_rel_print in (* Not very clean *)
+    only_rel_print := true;
     Format.fprintf fmt "@[%a@]"
       (AbsDom.print ~full:true) abs_proj;
-    Aparam.nrel_no_print := sb
+    only_rel_print := sb
 
 
   let analyze () =

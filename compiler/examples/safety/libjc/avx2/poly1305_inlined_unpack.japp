@@ -1,9 +1,5 @@
-//-------------------------------------------
-// inline of #include "../ref3/poly1305.jazz"
-//-------------------------------------------
-
-// assuming little endian for load and store
-fn load(reg u64 p) -> reg u64[2]
+// assuming little endian for loads and stores
+fn load2(reg u64 p) -> reg u64[2]
 {
   reg u64[2] x;
   x[0] = [p + 0];
@@ -13,10 +9,21 @@ fn load(reg u64 p) -> reg u64[2]
 
 
 
-fn load_last(reg u64 ptr, reg u64 len) -> reg u64[2]
+fn load_add(reg u64[3] h, reg u64 in) -> reg u64[3]
 {
+  reg bool cf;
+  cf, h[0] += [in + 0];
+  cf, h[1] += [in + 8] + cf;
+   _, h[2] +=        1 + cf;
+  return h;
+}
+
+
+
+fn load_last_add(reg u64[3] h, reg u64 in, reg u64 len) -> reg u64[3]
+{
+  reg bool cf;
   reg   u64    j;
-  reg   u64[2] x;
   stack u64[2] s;
   reg   u8     c;
 
@@ -25,22 +32,23 @@ fn load_last(reg u64 ptr, reg u64 len) -> reg u64[2]
 
   j = 0;
   while(j < len)
-  { c = (u8)[ptr + j];
+  { c = (u8)[in + j];
     s[u8 (int)j] = c;
     j += 1;
   }
 
   s[u8 (int)j] = 0x1;
 
-  x[0] = s[0];
-  x[1] = s[1];
+  cf, h[0] += s[0];
+  cf, h[1] += s[1] + cf;
+   _, h[2] +=    0 + cf;
 
-  return x;
+  return h;
 }
 
 
 
-fn store(reg u64 p, reg u64[3] x)
+fn store2(reg u64 p, reg u64[2] x)
 {
   [p + 0] = x[0];
   [p + 8] = x[1];
@@ -48,278 +56,115 @@ fn store(reg u64 p, reg u64[3] x)
 
 
 
-fn clamp(reg u64 k) -> reg u64[2], reg u64
+fn clamp(reg u64 k) -> reg u64[3]
 {
-  reg u64[2] r;
-  reg u64 r54;
-  r = load(k);
+  reg u64[3] r;
+  r[0] = [k + 0];
+  r[1] = [k + 8];
   r[0] &= 0x0ffffffc0fffffff;
   r[1] &= 0x0ffffffc0ffffffc;
-  r54 = r[1];
-  r54 >>= 2;
-  r54 += r[1];
-  return r, r54; // r54 = r[1] * 5/4;
+  r[2] = r[1];
+  r[2] >>= 2;
+  r[2] += r[1];
+  return r;
 }
 
 
 
-// h += m where
-//   h = 2**0 * h[0] + 2**64 * h[1] + 2**128 * h[2]
-//   m = 2**0 * m[0] + 2**64 * m[1] + 2**128 * b
-fn add_bit(reg u64[3] h, reg u64[2] m, inline int b) -> reg u64[3]
+// h += s
+fn add2(reg u64[2] h, reg u64[2] s) -> reg u64[2]
 {
   reg bool cf;
-  cf, h[0] += m[0];
-  cf, h[1] += m[1] + cf;
-   _, h[2] +=    b + cf;
+  cf, h[0] += s[0];
+   _, h[1] += s[1] + cf;
   return h;
 }
 
 
 
-// h *= r where:
-//   h = 2**0 * h[0] + 2**64 * h[1] + 2**128 * h[2]
-//   r = 2**0 * r[0] + 2**64 * r[1]
-//
-//
-// (2**0 * h[0] + 2**64 * h[1] + 2**128 * h[2]) *
-// (2**0 * r[0] + 2**64 * r[1])
-//
-// 2**0   * ( h[0] * r[0] ) +
-// 2**64  * ( h[0] * r[1]   + h[1] * r[0] ) +
-// 2**128 * ( h[1] * r[1]   + h[2] * r[0] ) +
-// 2**192 * ( h[2] * r[1] )
-//
-// for the reduction: 128 - 130 = -2 => 2^-2
-//
-// 2**0   * ( h[0] * r[0]   + (h[1] * r[1] * (5/4)) )
-// 2**64  * ( h[0] * r[1]   +  h[1] * r[0]  + (h[2] * r[1] * (5/4)) )
-// 2**128 * ( h[2] * r[0]   )
-//
-// note: throughout this function there are some --informal-- comments regarding
-// safety. The main goal is to count the maximum number of bits that are needed
-// at each point. TODO: formally verify the notes (if necessary for the safety
-// analysis)
-//
-fn mulmod(reg u64[3] h, reg u64[2] r, reg u64 r54) -> reg u64[3]
+fn mulmod(reg u64[3] h, reg u64[3] r) -> reg u64[3]
 {
   reg bool cf;
-  reg u64 high low h2rx4 h2r;
   reg u64[3] t;
+  reg u64 v0 rax rdx tt;
 
-  // 2**0 * (h[0] * r[0] + (h[1] * r[1] * (5/4)))
+  t[1] = r[2];
+  t[1] *= h[2];
 
-    // t[1], t[0] = (h[0] * r[0])
-    //
-    //   r[0] upper bound is 0x0ffffffc0fffffff (60 bits)
-    //   h[0] upper bound is 2**64-1 (64 bits, all bits can be set)
-    //   the resulting multiplication requires 124 bits, 60 + 64:
-    //   - 0x0ffffffc_0ffffffe_f0000003_f0000001
-    low = h[0];
-    high, low = low * r[0];
-    t[0] = low;
-    t[1] = high;
+  rax = r[2];
+  rdx, rax = rax * h[1];
 
-    // t[1], t[0] += (h[1] * r[1] * (5/4))
-    //
-    //   r[1] * 5/4 is precomputed (in clamp function) and it is in r54 variable
-    //   r[1] upper bound is : 0x0ffffffc0ffffffc
-    //
-    //   we compute r54 in the following manner
-    //     - r54 = r[1] + r[1]/4 where /4 is performed by a shift to the right
-    //       by 2 (first 2 bits of r[1] are 0 (0x..fc))
-    //     - r54 upper bound is 0x13fffffb13fffffb which requires 61 bits
-    //
-    //   the resulting multiplication of (h[1] * r54) requires 125 bits, 61 + 64:
-    //     - 0x13fffffb_13fffffa_ec000004_ec000005
-    //
-    //   since we are adding this partial result to the previous one we get
-    //   (124 bits + 125 bits):
-    //     - 0x0ffffffc_0ffffffe_f0000003_f0000001 +
-    //     - 0x13fffffb_13fffffa_ec000004_ec000005 =
-    //     - 0x23fffff7_23fffff9_dc000008_dc000006 which requires 126 bits
-    //       (atm there are only 2 bits left in t[1])
-    low = h[1];
-    high, low = low * r54;
-    cf, t[0] += low;
-     _, t[1] += high + cf;
+  t[1] += rdx;
 
-  // 2**64 * (h[0] * r[1]   +  h[1] * r[0]  + (h[2] * r[1] * (5/4)))
-  t[2] = 0;
+  t[0] = rax;
+  rax = r[0];
+  rdx, rax = rax * h[1];
 
-    // t[2], t[1] += (h[0] * r[1])
-    //
-    //   r[1] upper bound is 0x0ffffffc0ffffffc (60 bits)
-    //   h[0] upper bound is 2**64-1 (64 bits, all bits can be set)
-    //   the resulting multiplication requires 124 bits, 60 + 64:
-    //     - 0x0ffffffc_0ffffffb_f0000003_f0000004
-    //
-    //   since we are adding this result to t[2] (still 0) and t[1] (2 bits free):
-    //     - t[1] = 0x23fffff7_23fffff9 (previous value) + 0xf0000003_f0000004
-    //            = 0x1_13fffffb_13fffffd which requires 65 bits to hold the
-    //              result, carry will happen
-    //     - t[2] = 0 (previous value) + 0x0ffffffc_0ffffffb + 1 (carry)
-    //            = 0x0ffffffc_0ffffffc which still requires 60 bits (4 bits free)
-    //
-    low = h[0];
-    high, low = low * r[1];
-    cf, t[1] += low;
-     _, t[2] += high + cf;
+  t[2] = rdx;
+  h[1] = rax;
 
-    // t[2], t[1] += (h[1] * r[0])
-    //
-    //   r[0] upper bound is 0x0ffffffc0fffffff (60 bits)
-    //   h[1] upper bound is 2**64-1 (64 bits, all bits can be set)
-    //   the resulting multiplication requires 124 bits, 60 + 64:
-    //     - 0x0ffffffc_0ffffffe_f0000003_f0000001
-    //
-    //   since we are adding this result to t[2] (4 bits free) and t[1]:
-    //   - t[1] = 0x13fffffb_13fffffd (previous value) + 0xf0000003_f0000001
-    //          = 0x1_03ffffff_03fffffe 65 bits, carry will happen
-    //   - t[2] = 0x0ffffffc_0ffffffc (prev. v.) + 0x0ffffffc_0ffffffe + 1 (carry)
-    //          = 0x1ffffff8_1ffffffb which requires 61 bits (3 bits free)
-    low = h[1];
-    high, low = low * r[0];
-    cf, t[1] += low;
-     _, t[2] += high + cf;
+  h[2] *= r[0];
 
-    // t[2], t[1] = (h[2] * r[1] * (5/4))
-    //
-    //   first call of mulmod, inside while(len >= 16):
-    //     r54 upper bound is 0x13fffffb13fffffb which requires 61 bits
-    //     h[2] upper bound is 0x1 (h is 0 and the last bit is set by add_bit)
-    //     the resulting multiplication requires 61 bits:
-    //       - 0x13fffffb13fffffb
-    //
-    //     - t[1] = 0x03ffffff_03fffffe + 0x13fffffb_13fffffb
-    //            = 0x17fffffa_17fffff9 (althouth the result fits in t[1], in the
-    //              context of this analysis, carry can, and will, happen for lower
-    //              t[2] values/greater t[1] values, as such, we propagate it)
-    //     - t[2] = 0x1ffffff8_1ffffffb + 1
-    //            = 0x1ffffff8_1ffffffc (non-rigourous upper bound: in this explanation
-    //              we are interested in the number of bits that are set in the last touched
-    //              variable, still 61)
-    //
-    //   second and subsequent calls of mulmod:
-    //     r54 upper bound is 0x13fffffb13fffffb which requires 61 bits
-    //     h[2] upper bound is 0x4 (check final comments)
-    //     the resulting multiplication requires 63 bits:
-    //       - 0x4fffffec_4fffffec
-    //
-    //     - t[1] = 0x03ffffff_03fffffe (*1* atm t[1] only depends of h[0], h[1], r[0],
-    //                                   r[1] and r54 so the presented value should
-    //                                   hold for the second and subsequent executions
-    //                                   of mulmod)
-    //                                  + 0x4fffffec_4fffffec
-    //
-    //            = 0x53ffffeb_53ffffea (althouth the result fits in t[1], in the
-    //              context of this analysis, carry can, and will, happen for lower
-    //              t[2] values/greater t[1] values, as such, we propagate it)
-    //
-    //     - t[2] = 0x1ffffff8_1ffffffb (*1* comment holds) + 1
-    //            = 0x1ffffff8_1ffffffc (non-rigourous upper bound: in this explanation
-    //              we are interested in the number of bits that are set in the last touched
-    //              variable, still 61)
-    //
-    low = h[2];
-    low *= r54;
-    cf, t[1] += low;
-     _, t[2] += 0 + cf;
+  rax = r[0];
 
-  // 2**128 * (h[2] * r[0])
+  rdx, rax = rax * h[0];
+  //v0 = rax;
 
-    //   first call of mulmod, inside while(len >= 16):
-    //     r[0] upper bound is 0x0ffffffc_0fffffff (60 bits)
-    //     h[2] upper bound is 0x1 (h is 0 and the last bit is set by add_bit)
-    //     the resulting multiplication requires 60 bits:
-    //       - 0x0ffffffc_0fffffff
-    //
-    //   second and subsequent calls of mulmod:
-    //     r[0] upper bound is 0x0ffffffc_0fffffff (60 bits)
-    //     h[2] upper bound is 0x4
-    //     the resulting multiplication requires 62 bits:
-    //       - 0x3ffffff0_3ffffffc
-    //
-    //   since we don't need the original value of h[2] anymore the multiplication
-    //   will happen inplace
+  cf, h[1] += rdx;
+  _,  h[2] += t[2] + cf;
 
-    h[2] *= r[0];
+  v0 = rax; // moved here bc no more registers...
 
+  rax = r[1];
+  rdx, rax = rax * h[0];
 
-  // since we don't need the original values of h anymore we merge t and h
-  h[0] = t[0];
-  h[1] = t[1];
-  // for the first call of mulmod:
-  //   - h[2] upper bound is 0x0ffffffc_0fffffff (60 bits)
-  //   - t[2] upper bound is 0x1ffffff8_1ffffffc (61 bits)
-  //   - as such, h[2] = 0x2ffffff4_2ffffffb (62 bits)
-  //
-  // for the second and subsequent calls of mulmod:
-  //   - h[2] upper bound is 0x3ffffff0_3ffffffc (62 bits)
-  //   - t[2] upper bound is 0x1ffffff8_1ffffffc (61 bits)
-  //   - as such, h[2] = 0x5fffffe8_5ffffff8 (63 bits)
-  //
-  h[2] += t[2];
+  cf, t[0] += v0;
+  cf, h[1] += rax + cf;
+  _,  h[2] += rdx + cf;
 
+  //h0 = andMask(h2,0xfffffffffffffffc)
+  h[0] = 0xfffffffffffffffc;
+  h[0] &= h[2];
 
-  // now we need to reduce h: in h[0] and h[1] we have 128 bits. The first 2
-  // bits of h[2] stay in h[2] (to make it 130) and reduce the remaining.
-  // Since we are in mod 2**130 - 5 we just need to take all the bits after 130
-  // (h[2] >> 2), multiply it by 5 (which is the same as (h[2]>>2)*4 + (h[2]>>2)
-  // or (h[2]>>2)<<2 + (h[2]>>2)), add it to the first limb and propagate the carry.
+  // #andMask(h2,0x03)
+  h[2] &= 0x03;
 
-  // for the first call of mulmod:
-  //   h[2] = 0x2ffffff4_2ffffffb
-  //   (h[2]/4) * 5 = 0x3bfffff1_3bfffff9 (62 bits are required)
-  //
-  // for the second and subsequent calls to mulmod
-  //   h[2] = 0x5fffffe8_5ffffff8
-  //   (h[2]/4) * 5 = 0x77ffffe2_77fffff6 (63 bits are required)
+  //tt = div4(h0)
+  tt = h[0];
+  tt >>= 2;
 
-  h2r = h[2];
-  h2rx4 = h[2];
-  h[2] &= 3; // clear the remaining bits
-  h2r >>= 2; // (h[2]>>2)
-  h2rx4 &= -4; // clear first 2 bits: (h[2]>>2)<<2
-  h2r += h2rx4;
+  h[0] += tt;
 
-  cf, h[0] += h2r;
-  cf, h[1] += 0 + cf;
-   _, h[2] += 0 + cf;
+  cf, h[0] += t[0];
+  cf, h[1] += t[1] + cf;
+  _,  h[2] += 0 + cf;
 
-  // question: how many bits have h[2] after the last full carry propagation, 2 or 3?
-  // - if it has 2 bits the maximum value of is
-  //    h <= 2**0 * (2**64 -1)  +  2**64 * (2**64 -1) + 2**128 * (2**2 -1)
-  // - if it has 3 bits it means that all bits of h[1] and the first 2 bits of h[2] are
-  //   zero, so the maximum value of h[2] is 100b which is 4 (but we could just assume, for
-  //   the simplicity of the proof, that h[1] can have a value different than 0)
-
-  // main observation: there could be only one bit set after the first two of h[2], and
-  // h[2] can be 0, 1, 2, 3 or 4.
   return h;
 }
 
-
-
-fn freeze(reg u64[3] h) -> reg u64[3]
+fn freeze(reg u64[3] h) -> reg u64[2]
 {
   reg bool cf;
-  reg u64[3] g;
+  reg u64[2] g;
+  reg u64 g2;
   reg u64 mask;
 
-  g = h;
+  g[0] = h[0];
+  g[1] = h[1];
+  g2 = h[2];
 
+  //                  <= 6 then g[2] can be at most 7 (111b)
   // if h[2] value is <= 4 then g[2] can be at most 5 (101b)
   cf, g[0] += 5;
   cf, g[1] += 0 + cf;
-   _, g[2] += 0 + cf;
+   _, g2 += 0 + cf;
 
   // which means that by shifting right by 2 we are left with only 1 bit set
-  g[2] >>= 2;
+  g2 >>= 2;
 
   // and if this bit is set g[2]: mask will be 2**64-1 (all bits are set) otherwise
   // the mask will be zero
-  mask = -g[2];
+  mask = -g2;
 
   g[0] ^= h[0];
   g[1] ^= h[1];
@@ -329,81 +174,80 @@ fn freeze(reg u64[3] h) -> reg u64[3]
 
   // if bit == 1 then h[0..1] ^= (g[0..1] ^ h[0..1])
   // else             h[0..1] ^= 0
-  h[0] ^= g[0];
-  h[1] ^= g[1];
+  g[0] ^= h[0];
+  g[1] ^= h[1];
 
   // at this point we only need the first 128 bits
-  return h;
+  return g;
 }
 
 
 
-fn ref3_setup(reg u64 k) -> reg u64[3], reg u64[2], reg u64, reg u64
+fn poly1305_ref3_setup(reg u64 k) -> reg u64[3], reg u64[3], reg u64
 {
   inline int i;
   reg u64[3] h;
-  reg u64[2] r;
-  reg u64 len r54;
+  reg u64[3] r;
+  reg u64 len;
 
   for i=0 to 3 { h[i] = 0; }
-  r, r54 = clamp(k);
+  r = clamp(k);
   k += 16;
-  return h, r, r54, k;
+  return h, r, k;
 }
 
 
 
-fn ref3_update(reg u64 in, reg u64 len, reg u64[3] h, reg u64[2] r, reg u64 r54) -> reg u64, reg u64, reg u64[3]
+fn poly1305_ref3_update(reg u64 in, reg u64 inlen, reg u64[3] h, reg u64[3] r) -> reg u64, reg u64, reg u64[3]
 {
+  reg bool cf;
   reg u64[2] m;
 
-  while(len >= 16)
-  { m = load(in);
-    h = add_bit(h, m, 1);
-    h = mulmod(h, r, r54);
+  while(inlen >= 16)
+  {
+    h = load_add(h, in);
+    h = mulmod(h, r);
     in += 16;
-    len -= 16;
+    inlen -= 16;
   }
 
-  return in, len, h;
+  return in, inlen, h;
 }
 
 
 
-fn ref3_last(reg u64 out, reg u64 in, reg u64 len, reg u64 k, reg u64[3] h, reg u64[2] r, reg u64 r54)
+fn poly1305_ref3_last(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k, reg u64[3] h, reg u64[3] r)
 {
   reg u64[2] m, s;
+  reg u64[2] h2;
 
-  if(len > 0)
-  { m = load_last(in, len);
-    h = add_bit(h, m, 0); // load last already sets the last bit
-    h = mulmod(h, r, r54);
+  if(inlen > 0)
+  { h = load_last_add(h, in, inlen);
+    h = mulmod(h, r);
   }
 
-  h = freeze(h);
-  s = load(k);
-  h = add_bit(h, s, 0);
+  h2 = freeze(h);
+  s = load2(k);
+  h2 = add2(h2, s);
 
-  store(out, h);
+  store2(out, h2);
 }
 
 
 
-fn local(reg u64 out, reg u64 in, reg u64 len, reg u64 k)
+fn poly1305_ref3_local(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
 {
   reg u64[3] h;
-  reg u64[2] r;
-  reg u64 r54;
+  reg u64[3] r;
+  reg u64 len;
 
-  h, r, r54, k = ref3_setup(k);
-  in, len, h = ref3_update(in, len, h, r, r54);
-  ref3_last(out, in, len, k, h, r, r54);
+  h, r, k = poly1305_ref3_setup(k);
+  len = inlen;
+  in, len, h = poly1305_ref3_update(in, len, h, r);
+  poly1305_ref3_last(out, in, len, k, h, r);
 }
 
 
-//-----------------------------------------
-// end of inline of "../ref3/poly1305.jazz"
-//-----------------------------------------
 
 
 u64 zero_u64 = 0;
@@ -485,24 +329,78 @@ fn broadcast_r4(stack u256[5] r1234, stack u256[4] r1234x5) -> stack u256[5], st
 
 
 
-fn avx2_setup(reg u64[2] r, reg u64 r54) ->
+fn poly1305_avx2_setup(reg u64[3] r) ->
   stack u256[5], stack u256[4],
   stack u256[5], stack u256[4]
 {
-  inline int i;
+  inline int i, mask26, o;
   stack u256[5] r4444   r1234;
   stack u256[4] r4444x5 r1234x5;
   reg u256 t;
   reg u64[3] rt;
+  reg u64 h, l;
 
   // rt = r; store rt
   for i=0 to 2 { rt[i] = r[i]; } rt[2] = 0;
-  r1234 = unpack(r1234, rt, 3); // r^1
+  // inline r1234 = unpack(r1234, rt, 3);
+  o = 3;
+  mask26 = 0x3ffffff;
+
+  l = rt[0];
+  l &= mask26;
+  r1234[u64 o + 0] = l;
+
+  l = rt[0];
+  l >>= 26;
+  l &= mask26;
+  r1234[u64 o + 4] = l;
+
+  l = rt[0];
+  l = #x86_SHRD(l, rt[1], 52);
+  h = l;
+  l &= mask26;
+  r1234[u64 o + 8] = l;
+
+  l = h;
+  l >>= 26;
+  l &= mask26;
+  r1234[u64 o + 12] = l;
+
+  l = rt[1];
+  l = #x86_SHRD(l, rt[2], 40);
+  r1234[u64 o + 16] = l;
+  // end inline
 
   // precompute r^2 r^3 r^4
   for i=0 to 3
-  { rt = mulmod(rt, r, r54);
-    r1234 = unpack(r1234, rt, 2-i);
+  { rt = mulmod(rt, r);
+    // inline r1234 = unpack(r1234, rt, 2-i);
+    o = 2 - i;
+
+    l = rt[0];
+    l &= mask26;
+    r1234[u64 o + 0] = l;
+
+    l = rt[0];
+    l >>= 26;
+    l &= mask26;
+    r1234[u64 o + 4] = l;
+
+    l = rt[0];
+    l = #x86_SHRD(l, rt[1], 52);
+    h = l;
+    l &= mask26;
+    r1234[u64 o + 8] = l;
+
+    l = h;
+    l >>= 26;
+    l &= mask26;
+    r1234[u64 o + 12] = l;
+
+    l = rt[1];
+    l = #x86_SHRD(l, rt[2], 40);
+    r1234[u64 o + 16] = l;
+    //end inline
   }
 
   // compute r1234x5
@@ -530,8 +428,8 @@ fn load_avx2(reg u64 in, reg u256 mask26, stack u256 s_bit25) -> reg u256[5], re
   //    t = { in[128:257] , in[0:127]   }
   // m[1] = { in[384:511] , in[256:383] }
 
-  m[0] = #x86_VPERM2I128(t, m[1], 0x20);
-  m[1] = #x86_VPERM2I128(t, m[1], 0x31);
+  m[0] = #x86_VPERM2I128(t, m[1], 0x20); // TODO FIXME (2u4)[2,0]);
+  m[1] = #x86_VPERM2I128(t, m[1], 0x31); // TODO FIXME //(2u4)[3,1]);
   // m[0] = { in[256:383] , in[0:127] }
   // m[1] = { in[384:511] , in[128:257] }
 
@@ -614,12 +512,12 @@ fn pack_avx2(reg u256[5] h) -> reg u64[3]
   // we then permute the internal state of t2 so that:
   // t2 = { e(2+3), e(0+1), xxx, yyy }
   // and since we are not interested in e1 and e3 anymore we just write xxx, yyy
-  t[2] = #x86_VPERMQ(t[2], 0x80);
+  t[2] = #x86_VPERMQ(t[2], 0x80); //TODO FIXME (4u2)[2,0,0,0]);
 
   // let u0 be { cd(1), cd(0), ab(1), ab(0) } and
   //     u1 be { cd(3), cd(2), ab(3), ab(2) } and
-  u[0] = #x86_VPERM2I128(t[0], t[1], 0x20);
-  u[1] = #x86_VPERM2I128(t[0], t[1], 0x31);
+  u[0] = #x86_VPERM2I128(t[0], t[1], 0x20); //TODO FIXME (2u4)[2,0]);
+  u[1] = #x86_VPERM2I128(t[0], t[1], 0x31); //TODO FIXME (2u4)[3,1]);
 
   // t0 = { cd(1+3), cd(0+2), ab(1+3), ab(0+2) }
   t[0] = u[0] +4u64 u[1];
@@ -998,8 +896,8 @@ fn mainloop_avx2_v1(
   // t2 += h0*r2
   // t3 += h1*r2
   // t4 += h2*r2
-  u[0] = #x86_VPMULU_256(h[0], r2); m[0] = #x86_VPERM2I128(m0, m[1], 0x20);
-  u[1] = #x86_VPMULU_256(h[1], r2); m[1] = #x86_VPERM2I128(m0, m[1], 0x31);
+  u[0] = #x86_VPMULU_256(h[0], r2); m[0] = #x86_VPERM2I128(m0, m[1], 0x20); //TODO FIXME //(2u4)[2,0]);
+  u[1] = #x86_VPMULU_256(h[1], r2); m[1] = #x86_VPERM2I128(m0, m[1], 0x31); //TODO FIXME //(2u4)[3,1]);
   u[2] = #x86_VPMULU_256(h[2], r2);
 
 
@@ -1128,7 +1026,7 @@ fn final_avx2_v0(
 
 
 // update AVX2
-fn avx2_update(
+fn poly1305_avx2_update(
   reg u64 in, reg u64 len,
   stack u256[5] r4444,
   stack u256[4] r4444x5,
@@ -1164,29 +1062,31 @@ fn avx2_update(
 
 
 
-fn wrapper(reg u64 out, reg u64 in, reg u64 len, reg u64 k)
+fn poly1305_avx2_wrapper(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
 {
   reg u64[3] h;
-  reg u64[2] r;
-  reg u64 r54;
+  reg u64[3] r;
+  reg u64 len;
   stack u256[5] r4444   r1234;
   stack u256[4] r4444x5 r1234x5;
 
-  h, r, r54, k = ref3_setup(k);
-  r4444, r4444x5, r1234, r1234x5 = avx2_setup(r, r54);
+  len = inlen;
 
-  in, len, h = avx2_update(in, len, r4444, r4444x5, r1234, r1234x5);
-  in, len, h = ref3_update(in, len, h, r, r54);
+  h, r, k = poly1305_ref3_setup(k);
+  r4444, r4444x5, r1234, r1234x5 = poly1305_avx2_setup(r);
 
-  ref3_last(out, in, len, k, h, r, r54);
+  in, len, h = poly1305_avx2_update(in, len, r4444, r4444x5, r1234, r1234x5);
+  in, len, h = poly1305_ref3_update(in, len, h, r);
+
+  poly1305_ref3_last(out, in, len, k, h, r);
 }
 
 
 
-export fn poly1305_avx2(reg u64 out, reg u64 in, reg u64 len, reg u64 k)
+export fn poly1305_avx2(reg u64 out, reg u64 in, reg u64 inlen, reg u64 k)
 {
-  if(len < 257)
-  { local(out, in, len, k); }
+  if(inlen < 257)
+  { poly1305_ref3_local(out, in, inlen, k); }
   else
-  { wrapper(out, in, len, k); }
+  { poly1305_avx2_wrapper(out, in, inlen, k); }
 }
