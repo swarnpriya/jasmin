@@ -574,7 +574,7 @@ let rec pp_expr env fmt (e:expr) =
         | e::es -> 
           Format.fprintf fmt "@[(%a %%%% 2^%i +@ 2^%i * %a)@]"
             (pp_expr env) e i i aux es in
-      Format.fprintf fmt "(W%a.of_int %a)" pp_size ws aux es
+      Format.fprintf fmt "(W%a.of_int %a)" pp_size ws aux (List.rev es)
     end
 
   | Pif(_,e1,et,ef) -> 
@@ -1181,7 +1181,7 @@ let pp_prog fmt model globs funcs =
     | Normal -> () in
 
   Format.fprintf fmt 
-     "@[<v>require import List Jasmin_model Int IntDiv CoreMap.@ %a%a@ %a@ @ module M = {@   @[<v>%a%a@]@ }.@ @]@." 
+     "@[<v>require import List Jasmin_model Int IntExtra IntDiv CoreMap.@ %a%a@ %a@ @ module M = {@   @[<v>%a%a@]@ }.@ @]@." 
     (pp_arrays "Array") env.arrsz
     (pp_arrays "WArray") env.warrsz
     (pp_list "@ @ " (pp_glob_decl env)) globs 
