@@ -197,123 +197,129 @@ Proof.
     by rewrite Rd Hmap.
 Qed.
 
-Lemma check_sopn_arg_sem_eval gd m s ii args h h' v:
-  lom_eqv m s ->
-  check_sopn_arg ii args h h' ->
-  sem_pexpr gd m h = ok v ->
-  is_defined v ->
-  exists v', eval_arg_in_v gd s args h' = ok v' /\ value_uincl v v'.
+Inductive check_sopn_argI ii args e : arg_desc * stype -> Prop :=
+| CSA_Implicit i ty :
+       (eq_expr e {| v_var := var_of_implicit i; v_info := 1%positive |})
+    -> check_sopn_argI ii args e (ADImplicit i, ty)
+
+| CSA_Explicit n o a ty :
+       onth args n = Some a
+    -> arg_of_pexpr ii ty e = ok a
+    -> check_oreg o a
+    -> check_sopn_argI ii args e (ADExplicit n o, ty).
+
+Lemma check_sopn_argP ii args e sp :
+  check_sopn_arg ii args e sp -> check_sopn_argI ii args e sp.
 Proof.
-  case: h' => [[i|n o] ty lem] /=.
-  +{
-    elim lem ; rewrite /eqflags => Hms Hreg Hxmm Hflags.
-    case: i => r.
-    +{
-      clear Hreg Hxmm.
-      rewrite /eval_arg_in_v /check_sopn_arg /=.
-      move => /eq_exprP -> /=.
-      rewrite /st_get_rflag /=.
-      move /Hflags.
-      rewrite /of_rbool.
-      case ((xrf s) r) => [b H|H].
-      + by exists b.
-  
-        (* We need to prove: Error ErrAddrUndef = ok v' which is obviously wrong. *)
-      + move => Hdef.
-        exfalso.
-        (* the only solution is to prove that H is not coherent *)
-        move: H Hdef.
-        by case v.
-     }
-    +{
-      clear Hflags Hxmm.
-      rewrite /eval_arg_in_v /check_sopn_arg /=.
-      move => /eq_exprP -> /=.
-      move /Hreg => H.
-      by exists (Vword ((xreg s) r)).
-     }
-   }
-  +{
-    elim lem => Hms Hreg Hxmm Hflags.
-    rewrite  /eval_arg_in_v /check_sopn_arg /=.
-    case (onth args n) => //=. (* got rid of one case *)
-    move => a.
-    case ty => //=. (* got rid of two cases *)
-    +{
-      case_eq (assemble_cond ii h) => c //=. (* got rid of one case *)
-      move => asscond /andP [] /eqP -> Hcond /(eval_assemble_cond Hflags asscond). (* if pexpr is not needed *)
-      rewrite -check_oreg_eq Hcond //=.
-      move => [] x [].
-      rewrite /value_of_bool.
-      case (eval_cond c (xrf s)) => //=.
-      + by move => b Hb H; exists x.
-      + move => [] //= [] <-.
-        by case v.
-     }
-    +{
-      move => w.
-      (* TODO case over h *)
-      case_eq (assemble_word ii w h) => //=. (* got rid of one case *)
-      rewrite -check_oreg_eq.
-      move => asm Hasm /andP [] /eqP -> -> //=.
-      case: h Hasm => //=.
-      +{
-        move => vi.
-        case_eq (xmm_register_of_var vi) => /=.
-        + by move => xmm /xmm_register_of_varI <- [] <- /Hxmm; eauto.
-        + by move => Hxxm ; t_xrbindP => r /reg_of_var_register_of_var /var_of_register_of_var <- <- /Hreg ; eauto.
-      }
-      +{
-        move => g [] => <- /get_globalI [] z.
-        rewrite /get_global_word => -> -> /=.
-        exists (Vword (wrepr (size_of_global g) z)) => //=.
-       }
-      +{
+case: sp => -[i|n o] ty; first by apply: CSA_Implicit.
+rewrite /check_sopn_arg /=; case Enth: onth => [a|] //.
+case E: arg_of_pexpr => [a'|] // /andP[/eqP Ea'] hco; subst a'.
+by apply: (CSA_Explicit (a := a)).
+Qed.
 
-        move => w0 v0 p.
+Lemma check_sopn_arg_const ii args z sp :
+  ~ (check_sopn_arg ii args (Pconst z) sp).
+Proof. by case/check_sopn_argP => //= n o a []. Qed.
 
-        (* FIXME *)
-        have: w0 = w.
-        admit.
-        move => ->.
+Lemma check_sopn_arg_bool ii args b sp :
+  ~ (check_sopn_arg ii args (Pbool b) sp).
+Proof. by case/check_sopn_argP => //= n o a []. Qed.
 
-        rewrite -Hms.
-        t_xrbindP => s0.
-        move => Hreg_of_var_v0 addr.
+Lemma check_sopn_arg_arr_init ii args p sp :
+  ~ (check_sopn_arg ii args (Parr_init p) sp).
+Proof. by case/check_sopn_argP => //= n o a []. Qed.
 
-        move => Haddr_of_pexpr <-.
-        move => hu64 vv0.
-        move => get_var_v0.
-        move => to_pointer_vv0.
-        move => h7 h8.
-        move => sem_pexpr_h8.
-        move => to_pointer_h8.
+Lemma check_sopn_arg_get ii args w v e sp :
+  ~ (check_sopn_arg ii args (Pget w v e) sp).
+Proof. by case/check_sopn_argP => //= n o a []. Qed.
 
-(*         have := (addr_of_pexprP lem Hreg_of_var_v0 get_var_v0 to_pointer_vv0 sem_pexpr_h8 to_pointer_h8 Haddr_of_pexpr).
-        move => ->. *)
-        (* shorter than ssreflect *)
-        erewrite addr_of_pexprP ; eauto.
-        move => h11 -> <- /=.
-        exists (Vword h11) => //=.
-       }
-      +{
-        move => [] w0 [] //= z.
-
-        (* FIXME *)
-        have: w0 = w.
-        admit.
-        move => ->.
-
-        case_eq (w ≤ U64)%CMP => //= Hassert [] <- //=.
-        rewrite /sem_sop1 => /=.
-        move => [] <-.
-        eexists; split ; [reflexivity|].
-        rewrite /value_uincl.
-        rewrite zero_extend_sign_extend => //=. (* remove sub goal. *)
-        rewrite sign_extend_u.
-        apply word_uincl_refl.
-       }
-     }
+Lemma check_sopn_arg_sem_eval gd m s ii args e sp v:
+     lom_eqv m s
+  -> check_sopn_arg ii args e sp
+  -> sem_pexpr gd m e = ok v
+  -> is_defined v
+  -> exists v', eval_arg_in_v gd s args sp = ok v' /\ value_uincl v v'.
+Proof.
+case: sp => ad ty eqm hcheck okv dv; case: e hcheck okv => /=.
++ by move=> z /check_sopn_arg_const.
++ by move=> b /check_sopn_arg_bool.
++ by move=> b /check_sopn_arg_arr_init.
++ move=> x /check_sopn_argP[i|n o a] ty'.
+  - move=> /= /eqP-> okv; rewrite /eval_arg_in_v /=.
+    case: i okv => /= [rf|r] okv.
+    * case: eqm => _ _ _ /(_ _ _ okv) h.
+      eexists; split; last by exact/h.
+      admit.
+    * case: eqm => _ h _ _; move/(_ _ _ okv): h => h.
+      by eexists; split; last by exact/h.
+  - move=> h1 h2 h3 h4; rewrite /eval_arg_in_v /= h1.
+    rewrite -check_oreg_eq h3 /=; case: ty' h2 => //.
+    * rewrite /arg_of_pexpr; t_xrbindP=> cv okcv <- /=.
+      move/eval_assemble_cond: okcv => /(_ gd m (xrf s) v).
+      (case=> //=; first by case: eqm) => v' [okv' v_in_v'].
+      exists v'; split=> //; case: eval_cond okv' v_in_v' => //.
+      by case=> //= -[<-]; move/(value_uincl_is_defined) => -/(_ dv).
+    * move=> w; rewrite /arg_of_pexpr /=.
+      case E: xmm_register_of_var => [r|].
+      + case=> <- /=; case: eqm => _ _ h _.
+        move/xmm_register_of_varI: E h4 => <- {}/h h.
+        by eexists; split; last by exact/h.
+      + t_xrbindP=> r okr <- /=; eexists; split=> //.
+        case: eqm => _ /(_ r v) h _ _; apply: h.
+        move/reg_of_var_register_of_var: okr.
+        by move/var_of_register_of_var => ->.
++ move=> g /check_sopn_argP[] //= n o a [] //= w.
+  move=> h1 h2 h3 h4; exists v; split=> //=.
+  rewrite /eval_arg_in_v /= h1 -check_oreg_eq h3 /=.
+  case: h2 => <-; case/get_globalI: h4 => z h4 ->.
+  by rewrite /get_global_word h4 /=.
++ by move=> w vw e /check_sopn_arg_get.
++ move=> w x e /check_sopn_argP[] //= n o a ty' => h1 h2 h3.
+  t_xrbindP=> vp vx okvx okvp ve vpe okvpe okve v' okv' vE.
+  case: ty' h2 => //= w'; case: eqP => // ?; subst w'.
+  t_xrbindP=> r okr pa okpa aE; rewrite /eval_arg_in_v /=.
+  rewrite h1 -check_oreg_eq h3 /= -{}aE /=.
+  rewrite -(addr_of_pexprP eqm okr okvx okvp okvpe okve okpa).
+  by case: eqm => <- _ _ _; rewrite okv' -vE /=; exists (Vword v').
++ move=> op e /check_sopn_argP[] //= n o a ty' => h1 h2 h3.
+  t_xrbindP=> ve okve okv; rewrite /eval_arg_in_v /= h1.
+  rewrite -check_oreg_eq h3 /=; case: ty' h2 => //.
+  * rewrite /arg_of_pexpr; t_xrbindP=> cv okcv <- /=.
+    move/eval_assemble_cond: okcv => /(_ gd m (xrf s) v).
+    case=> //=; first by case: eqm. 1: by rewrite okve.
+    move=> v' [okv' v_in_v']; exists v'; split=> //.
+    case: eval_cond okv' v_in_v' => // -[] //= -[<-].
+    by move/(value_uincl_is_defined) => -/(_ dv).
+  * move=> w; rewrite /eval_arg_in_v /=; case: op okv => //.
+    move=> w' okv; case: e okve => // z okve.
+    t_xrbindP=> /= _ /assertP le_w'_64 //= [<-] /=; set v' := Vword _.
+    exists v'; split=> //; move: okv; rewrite /sem_sop1.
+    t_xrbindP => /= z' okz' <- /= {v'}.
+    case: okve okz' => <- -[<-]. admit.
++ move=> op e1 e2 /check_sopn_argP[] //= n o a ty' => h1 h2 h3.
+  t_xrbindP=> ve1 okve1 ve2 okve2 okv; rewrite /eval_arg_in_v /= h1.
+  rewrite -check_oreg_eq h3 /=; case: ty' h2 => //.
+  rewrite /arg_of_pexpr; t_xrbindP=> cv okcv <- /=.
+  move/eval_assemble_cond: okcv => /(_ gd m (xrf s) v).
+  case=> //=; first by case: eqm. 1: by rewrite okve1 okve2.
+  move=> v' [okv' v_in_v']; exists v'; split=> //.
+  case: eval_cond okv' v_in_v' => // -[] //= -[<-].
+  by move/(value_uincl_is_defined) => -/(_ dv).
++ move=> op es /check_sopn_argP[] //= n o a ty' => h1 h2 h3.
+  t_xrbindP=> vs okvs ok; rewrite /eval_arg_in_v /= h1.
+  by rewrite -check_oreg_eq h3 /=; case: ty' h2.
++ move=> ty' c e1 e2 /check_sopn_argP[] //= n o a ty'' => h1 h2 h3.
+  t_xrbindP=> b vb okvb /to_boolI ?; subst vb.
+  move=> v1 v'1 okv'1 okv1 v2 v'2 okv'2 okv2 vE.
+  case: ty'' h2 => //; rewrite /arg_of_pexpr; t_xrbindP=> cv okcv.
+  move=> ?; subst a; move/eval_assemble_cond: okcv.
+  case/(_ gd m (xrf s) v); first by case: eqm.
+  - by rewrite /= okvb okv'1 okv'2 /= okv1 okv2 /= vE.
+  move=> v' [okv' v_in_v']; exists v'; split=> //.
+  rewrite /eval_arg_in_v /= h1 -check_oreg_eq h3 /=.
+  case: eval_cond okv' v_in_v'; last first.
+  - by case=> //= -[<-] /(value_uincl_is_defined) /(_ dv).
+  by move=> b' /= [->].
 Admitted.
 
 (* Lemma eval_args_in_sem_pexprs_eq gd ii loargs m : forall args s ls t,

@@ -652,14 +652,16 @@ Lemma assemble_word_eq_expr ii pe pe' sz1 o :
   assemble_word ii sz1 pe = ok o →
   assemble_word ii sz1 pe = assemble_word ii sz1 pe'.
 Proof.
-case: pe pe' o => [ z | b | n | x | g | ws x pe | sz x pe | op pe | op pe1 pe2 | op pes | t pe1 pe2 pe3 ]
+case: pe pe' o =>
+  [ z | b | n | x | g | ws x pe | sz x pe | op pe | op pe1 pe2 | op pes | t pe1 pe2 pe3 ]
   [ z' | b' | n' | x' | g' | ws' x' pe' | sz' x' pe' | op' pe' | op' pe1' pe2' | op' pes' | t' pe1' pe2' pe3' ] // o.
-+ by move=> /= /eqP ->.
-+ by move=> /eqP ->.
-+ move => /= /andP [] /andP [] /eqP ? /eqP <- h.
-  by t_xrbindP => r -> a ha /=; rewrite (addr_of_pexpr_eq_expr h ha).
-move=> /= /andP [] /eqP <- {op'}.
-by case: op pe pe'=> // sz [] // z [] //= z' /eqP ->.
++ by move/eq_expr_var=> /= ->.
++ by move/eq_expr_global => ->.
++ case/eq_expr_load=> <- eq_x eq_e /=; case: ifP => // /eqP _.
+  t_xrbindP => r okr a oka oE; subst o; rewrite -{}eq_x.
+  by rewrite okr /= (addr_of_pexpr_eq_expr eq_e oka).
++ case/eq_expr_app1=> <- eq_e; case: op => //=.
+  by move=> w; case: pe eq_e => // z /eq_expr_constL -> /=.
 Qed.
 
 (*Lemma arg_of_pexpr_eq_expr ii ty pe pe' o :
