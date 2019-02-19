@@ -247,9 +247,10 @@ case: sp => ad ty eqm hcheck okv dv; case: e hcheck okv => /=.
 + move=> x /check_sopn_argP[i|n o a] ty'.
   - move=> /= /eqP-> okv; rewrite /eval_arg_in_v /=.
     case: i okv => /= [rf|r] okv.
-    * case: eqm => _ _ _ /(_ _ _ okv) h.
+    * case: {+}eqm => _ _ _ /(_ _ _ okv) h.
       eexists; split; last by exact/h.
-      admit.
+      rewrite /st_get_rflag; case: (xrf s rf) h => //=.
+      by move/value_uincl_is_defined => /(_ dv).
     * case: eqm => _ h _ _; move/(_ _ _ okv): h => h.
       by eexists; split; last by exact/h.
   - move=> h1 h2 h3 h4; rewrite /eval_arg_in_v /= h1.
