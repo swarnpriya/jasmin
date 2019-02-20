@@ -1690,8 +1690,8 @@ Proof.
     have [vs' -> /=] := sem_pexpr_rec_uincl Hu ok_vs Hes.
     exact: vuincl_sem_opN.
   t_xrbindP => b ve /He [] ve' -> Hue' /value_uincl_bool -/(_ _ Hue')[??]; subst ve ve'.
-  move=> vte1 ve1 /He1 [] ve1' -> /= Hue1' /(truncate_value_uincl Hue1') [] vte1' [] -> Huvte1.
-  move=> vte2 ve2 /He2 [] ve2' -> /= Hue2' /(truncate_value_uincl Hue2') [] vte2' [] -> Huvte2 /= <-.
+  move=> vte1 ve1 /He1 [] ve1' -> /= Hue1' /(truncate_value_uincl Hue1') [] vte1' -> Huvte1.
+  move=> vte2 ve2 /He2 [] ve2' -> /= Hue2' /(truncate_value_uincl Hue2') [] vte2' -> Huvte2 /= <-.
   eexists;first by reflexivity.
   by case: (b).
 Qed.

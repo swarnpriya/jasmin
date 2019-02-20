@@ -344,8 +344,8 @@ Section PROOF.
       t_xrbindP => e_ /He he e1_ /H1 hrec e1'_ /H1' hrec' <-.
       move=> b vb /he [vb' /= [-> ub]] /(value_uincl_bool ub) [??];subst vb vb'.
       move=> vte1 ve1 /hrec [ve1' /= [-> hu] /=] ht1 vte2 ve2 /hrec' [ve2' /= [-> hu'] /=] ht2 <-.
-      have [? [-> ?]]:= truncate_value_uincl hu ht1.
-      have [? [-> ?] /=]:= truncate_value_uincl hu' ht2.
+      have [? -> ?]:= truncate_value_uincl hu ht1.
+      have [? -> ? /=]:= truncate_value_uincl hu' ht2.
       eexists;split;first by reflexivity.
       by case: (b).
     Qed.
