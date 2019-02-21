@@ -364,6 +364,20 @@ let pp_instr name (i : X86_sem.asm) =
 
   | IDIV (ws, op) -> pp_instr_unop "idiv" ws op
 
+  | ADCX(ws, r, op) -> 
+    let rs = rs_of_ws ws in
+    `Instr (pp_iname rs "adcx", [pp_register rs r; pp_opr rs op])
+
+  | ADOX(ws, r, op) -> 
+    let rs = rs_of_ws ws in
+    `Instr (pp_iname rs "adox", [pp_register rs r; pp_opr rs op])
+
+  | MULX(ws, r1, r2, op) ->
+    let rs = rs_of_ws ws in
+    `Instr (pp_iname rs "mulx", 
+            [pp_register rs r1; pp_register rs r2; pp_opr rs op])
+ 
+
   | CQO ws ->
     let name =
       match ws with
@@ -538,7 +552,7 @@ let wregs_of_instr (c : rset) (i : X86_sem.asm) =
   | VPSLLDQ _ | VPSRLDQ _
   | VPSHUFB _ | VPSHUFHW _ | VPSHUFLW _ | VPSHUFD _
   | VPUNPCKH _ | VPUNPCKL _
-  | VPBLENDD _ | VPBROADCAST _ | VBROADCASTI128 _ | VEXTRACTI128 _ | VINSERTI128 _ | VPERM2I128 _ | VPERMQ _
+  | VPBLENDD _ | VPBROADCAST _ | VBROADCASTI128 _ | VEXTRACTI128 _ | VINSERTI128 _ | VPERM2I128 _ | VPERMQ _ | ADCX _ | ADOX _ 
     -> c
 
   | LEA    (_, op, _) -> Set.add op c
@@ -580,7 +594,8 @@ let wregs_of_instr (c : rset) (i : X86_sem.asm) =
   | DIV  _
   | IDIV _ ->
       List.fold_right Set.add [X86_sem.RAX; X86_sem.RDX] c
-  | CQO _ -> Set.add X86_sem.RDX c
+  | CQO _ | MULX _ -> Set.add X86_sem.RDX c
+  
 
 (* -------------------------------------------------------------------- *)
 let wregs_of_instrs (c : rset) (is : X86_sem.asm list) =

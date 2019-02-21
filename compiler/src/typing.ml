@@ -927,6 +927,9 @@ let prim_string =
     "x86_SAR", PrimP (T.U64, fun sz -> Ox86_SAR sz);
     "x86_SHLD", PrimP (T.U64, fun sz -> Ox86_SHLD sz);
     "x86_SHRD", PrimP (T.U64, fun sz -> Ox86_SHRD sz);
+    "x86_ADCX", PrimP (T.U64, fun sz -> Ox86_ADCX sz);
+    "x86_ADOX", PrimP (T.U64, fun sz -> Ox86_ADOX sz);
+    "x86_MULX", PrimP (T.U64, fun sz -> Ox86_MULX sz);
     "x86_BSWAP", PrimP (T.U64, fun sz -> Ox86_BSWAP sz);
     "x86_MOVD", PrimP (T.U64, fun sz -> Ox86_MOVD sz);
     "x86_VMOVDQU", PrimP (T.U128, fun sz -> Ox86_VMOVDQU sz);

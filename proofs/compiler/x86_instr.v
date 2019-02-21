@@ -365,6 +365,55 @@ Qed.
 Definition ADC_desc sz := make_instr_desc (ADC_gsc sz).
 
 (* ----------------------------------------------------------------------------- *)
+Lemma ADCX_gsc sz :
+   gen_sem_correct [:: TYreg; TYoprd] (Ox86_ADCX sz)
+       ([::F CF; E sz 0])
+       [:: E sz 0; E sz 1; F CF] [::] (ADCX sz).
+Proof.
+move => x y; split => // gd m m'.
+rewrite /low_sem_aux /= /eval_ADCX /x86_adcx !arg_of_oprdE /=.
+t_xrbindP=> ???? hy ?? hc <- <- <- /=. 
+t_xrbindP => ? hx ? /to_wordI [sz' [w' [hsz ??]]] ? /to_boolI ?; subst => ? -> ?; subst => /= -[] <-.
+have -> /= := value_of_boolI hc.
+have -> /= := eval_low_read hsz hy.
+have [? <-]:= truncate_wordP hx; update_set.
+Qed.
+
+Definition ADCX_desc sz := make_instr_desc (ADCX_gsc sz).
+
+(* ----------------------------------------------------------------------------- *)
+Lemma ADOX_gsc sz :
+   gen_sem_correct [:: TYreg; TYoprd] (Ox86_ADOX sz)
+       ([::F OF; E sz 0])
+       [:: E sz 0; E sz 1; F OF] [::] (ADOX sz).
+Proof.
+move => x y; split => // gd m m'.
+rewrite /low_sem_aux /= /eval_ADOX /x86_adox /x86_adcx !arg_of_oprdE /=.
+t_xrbindP=> ???? hy ?? hc <- <- <- /=. 
+t_xrbindP => ? hx ? /to_wordI [sz' [w' [hsz ??]]] ? /to_boolI ?; subst => ? -> ?; subst => /= -[] <-.
+have -> /= := value_of_boolI hc.
+have -> /= := eval_low_read hsz hy.
+have [? <-]:= truncate_wordP hx; update_set.
+Qed.
+
+Definition ADOX_desc sz := make_instr_desc (ADOX_gsc sz).
+
+(* ----------------------------------------------------------------------------- *)
+Lemma MULX_gsc sz :
+   gen_sem_correct [:: TYreg; TYreg; TYoprd] (Ox86_MULX sz)
+       ([::E sz 0; E sz 1])
+        [:: R RDX; E sz 2] [::] (MULX sz).
+Proof.
+move=> x y z; split => // gd m m'.
+rewrite /low_sem_aux /= /eval_MULX /x86_mulx !arg_of_oprdE /=.
+t_xrbindP=> ???? hz <- <-. 
+t_xrbindP=> ? /to_wordI  [sz' [w' [hsz /Vword_inj [?]]]]. 
+subst => /= <- -> ? /to_wordI [sz'' [w'' [hsz' ??]]] ? -> <-;subst => -[<-] /=.
+have -> /= := eval_low_read hsz' hz; update_set.
+Qed.
+
+Definition MULX_desc sz := make_instr_desc (MULX_gsc sz).
+(* ----------------------------------------------------------------------------- *)
 Lemma SBB_gsc sz :
    gen_sem_correct [:: TYoprd; TYoprd] (Ox86_SBB sz)
        (implicit_flags ++ [:: E sz 0])
@@ -1427,6 +1476,9 @@ Definition sopn_desc ii (c : sopn) : ciexec instr_desc :=
   | Ox86_SAR sz => ok (SAR_desc sz)
   | Ox86_SHLD sz => ok (SHLD_desc sz)
   | Ox86_SHRD sz => ok (SHRD_desc sz)
+  | Ox86_ADCX sz => ok (ADCX_desc sz)
+  | Ox86_ADOX sz => ok (ADOX_desc sz)
+  | Ox86_MULX sz => ok (MULX_desc sz)
   | Ox86_BSWAP sz => ok (BSWAP_desc sz)
   | Ox86_MOVD sz => ok (MOVD_desc sz)
   | Ox86_VMOVDQU sz => ok (VMOVDQU_desc sz)

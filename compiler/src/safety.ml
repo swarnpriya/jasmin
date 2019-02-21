@@ -3489,7 +3489,7 @@ let safe_opn safe opn es = match opn with
   | E.Omulu _ | E.Oaddcarry _ | E.Osubcarry _ | E.Oset0 _
   | E.Ox86_MOV _ | E.Ox86_MOVSX _ | E.Ox86_MOVZX _ | E.Ox86_MOVZX32
   | E.Ox86_CMOVcc _ | E.Ox86_ADD _ | E.Ox86_SUB _ | E.Ox86_MUL _ | E.Ox86_IMUL _
-  | E.Ox86_IMULt _ | E.Ox86_IMULtimm _ -> safe
+  | E.Ox86_ADCX _| E.Ox86_ADOX _ | E.Ox86_MULX _ | E.Ox86_IMULt _ | E.Ox86_IMULtimm _ -> safe
 
   | E.Ox86_DIV sz | E.Ox86_IDIV sz ->  NotZero (sz, List.nth es 2) :: safe
 

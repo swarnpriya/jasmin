@@ -159,6 +159,10 @@ Variant asm : Type :=
 | INC    of wsize & oprd                        (* increment *)
 | DEC    of wsize & oprd                        (* decrement *)
 
+| ADCX   of wsize & register & oprd                 (* add with carry, no flag *)
+| ADOX   of wsize & register & oprd                 (* add with carry, no flag *)
+| MULX   of wsize & register & register & oprd  (* mul unsigned, no flag   *)
+
   (* Flag *)
 | SETcc  of condt & oprd                        (* Set byte on condition *)
 | BT     of wsize & oprd & ireg                 (* Bit test, sets result to CF *)
@@ -905,6 +909,35 @@ Definition eval_ADC (sz: wsize) (o1 o2: oprd) (s: x86_mem) : x86_result :=
   write_oprd o1 v s.
 
 (* -------------------------------------------------------------------- *)
+Definition eval_ADCX (sz: wsize) (o1:register) (o2: oprd) (s: x86_mem) : x86_result :=
+  Let _  := check_size_32_64 sz in
+  let v1 := zero_extend sz (s.(xreg) o1) in
+  Let v2 := read_oprd sz o2 s in
+  Let c  := st_get_rflag CF s in
+  let (c, v) := waddcarry v1 v2 c in
+  let s := mem_set_rflags CF c s in
+  ok (mem_write_reg o1 v s).
+
+(* -------------------------------------------------------------------- *)
+Definition eval_ADOX (sz: wsize) (o1:register) (o2: oprd) (s: x86_mem) : x86_result :=
+  Let _  := check_size_32_64 sz in
+  let v1 := zero_extend sz (s.(xreg) o1) in
+  Let v2 := read_oprd sz o2 s in
+  Let c  := st_get_rflag OF s in
+  let (c, v) := waddcarry v1 v2 c in
+  let s := mem_set_rflags OF c s in
+  ok (mem_write_reg o1 v s).
+Print x86_mulx.
+(* -------------------------------------------------------------------- *)
+Definition eval_MULX (sz: wsize) (d1 d2 : register) (o1: oprd) (s: x86_mem) : x86_result :=
+  Let _  := check_size_32_64 sz in
+  let v1 := zero_extend sz (s.(xreg) RDX) in
+  Let v2 := read_oprd sz o1 s in
+  let (hi,lo) := wumul v1 v2 in
+  let s  := mem_write_reg d1 hi s in
+  ok (mem_write_reg d2 lo s).
+
+(* -------------------------------------------------------------------- *)
 Definition eval_SBB (sz: wsize) (o1 o2: oprd) (s: x86_mem) : x86_result :=
   Let _  := check_size_8_64 sz in
   Let v1 := read_oprd sz o1 s in
@@ -1359,6 +1392,10 @@ Definition eval_instr_mem (i : asm) s : x86_result :=
   | NEG    sz o        => eval_NEG    sz o s
   | INC    sz o        => eval_INC    sz o s
   | DEC    sz o        => eval_DEC    sz o s
+  | ADCX   sz r o      => eval_ADCX   sz r o s
+  | ADOX   sz r o      => eval_ADOX   sz r o s
+  | MULX   sz r1 r2 o  => eval_MULX   sz r1 r2 o s
+
   | SETcc     ct o     => eval_SETcc  ct o s
   | BT     sz o ir     => eval_BT     sz o ir s
   | LEA    sz o1 o2    => eval_LEA    sz o1 o2 s

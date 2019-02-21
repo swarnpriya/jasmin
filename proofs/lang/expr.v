@@ -148,6 +148,9 @@ Variant sopn : Set :=
 | Ox86_SAR     of wsize  (*   signed / right *)
 | Ox86_SHLD    of wsize  (* unsigned double-word / left  *)
 | Ox86_SHRD    of wsize  (* unsigned double-word / right  *)
+| Ox86_MULX    of wsize  (* mul unsigned, doesn't affect arithmetic flags *)
+| Ox86_ADCX    of wsize  (* add with carry flag, only writes carry flag *)
+| Ox86_ADOX    of wsize  (* add with overflow flag, only writes overflow flag *)
 
 | Ox86_BSWAP of wsize (* byte swap *)
 
@@ -279,6 +282,9 @@ Definition string_of_sopn o : string :=
   | Ox86_SAR sz => "Ox86_SAR " ++ string_of_wsize sz
   | Ox86_SHLD sz => "Ox86_SHLD " ++ string_of_wsize sz
   | Ox86_SHRD sz => "Ox86_SHRD " ++ string_of_wsize sz
+  | Ox86_MULX sz => "Ox86_MULX " ++ string_of_wsize sz
+  | Ox86_ADCX sz => "Ox86_ADCX " ++ string_of_wsize sz
+  | Ox86_ADOX sz => "Ox86_ADOX " ++ string_of_wsize sz
   | Ox86_BSWAP sz => "Ox86_BSWAP " ++ string_of_wsize sz
   | Ox86_MOVD sz => "Ox86_MOVD " ++ string_of_wsize sz
   | Ox86_VMOVDQU sz => "Ox86_VMOVDQU " ++ string_of_wsize sz
@@ -324,8 +330,8 @@ Definition b5ww_ty sz := [:: sbool;sbool;sbool;sbool;sbool;sword sz;sword sz].
 
 Definition sopn_tout (o:sopn) :  list stype :=
   match o with
-  | Omulu sz => [::sword sz; sword sz]
-  | Oaddcarry sz | Osubcarry sz => [:: sbool; sword sz]
+  | Omulu sz | Ox86_MULX sz => [::sword sz; sword sz]
+  | Oaddcarry sz | Osubcarry sz | Ox86_ADCX sz | Ox86_ADOX sz => [:: sbool; sword sz]
   | Oset0 sz => b5w_ty sz
   | Ox86_MOV sz
   | Ox86_MOVSX sz _
@@ -379,6 +385,8 @@ Definition sopn_tin (o: sopn) : list stype :=
   | Osubcarry sz
   | Ox86_ADC sz
   | Ox86_SBB sz
+  | Ox86_ADCX sz 
+  | Ox86_ADOX sz
     => let t := sword sz in [:: t ; t ; sbool ]
   | Oset0 _ => [::]
   | Ox86_MOV sz
@@ -399,6 +407,7 @@ Definition sopn_tin (o: sopn) : list stype :=
   | Ox86_ADD sz
   | Ox86_SUB sz
   | Ox86_MUL sz
+  | Ox86_MULX sz
   | Ox86_IMUL sz
   | Ox86_IMULt sz
   | Ox86_IMULtimm sz

@@ -1370,6 +1370,17 @@ Definition x86_vpermq (v: u256) (m: u8) : exec values :=
   ok [:: Vword (wpermq v m) ].
 
 (* ---------------------------------------------------------------- *)
+Definition x86_adcx {sz:wsize} (w1 w2: word sz) (c:bool) : exec values := 
+  Let _ := check_size_32_64 sz in
+  ok (@pval sbool (sword sz) (waddcarry w1 w2 c)).
+
+Definition x86_adox {sz} := @x86_adcx sz.
+
+Definition x86_mulx {sz:wsize} (w1 w2: word sz) : exec values := 
+  Let _ := check_size_32_64 sz in
+  ok (@pval (sword sz) (sword sz) (wumul w1 w2)).
+
+(* ---------------------------------------------------------------- *)
 Definition is_word (sz: wsize) (v: value) : exec unit :=
   match v with
   | Vword _ _
@@ -1448,6 +1459,9 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
   | Ox86_SAR sz => app_w8 sz x86_sar
   | Ox86_SHLD sz => app_ww8 sz x86_shld
   | Ox86_SHRD sz => app_ww8 sz x86_shrd
+  | Ox86_ADCX sz => app_wwb sz x86_adcx
+  | Ox86_ADOX sz => app_wwb sz x86_adox
+  | Ox86_MULX sz => app_ww sz x86_mulx
   | Ox86_BSWAP sz => app_w sz x86_bswap
   | Ox86_MOVD sz => app_w sz x86_movd
   | Ox86_VMOVDQU sz => app_sopn [:: sword sz ] (λ x,
