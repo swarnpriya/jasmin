@@ -63,16 +63,17 @@ let pp_cc =
 let pp_var fmt x =
   F.fprintf fmt "%s" (L.unloc x)
 
-let string_of_op2 =
-  let f s p = F.sprintf "%s%s" p (string_of_castop s) in
+let pp_op2 fmt =
+  let f s p = F.fprintf fmt "%s%a" p ptype (string_of_castop s) in
+  let ret s = F.fprintf fmt "%s" s in
   function
   | `Add s -> f s "+"
   | `Sub s -> f s "-"
   | `Mul s -> f s "*"
   | `Div s -> f s "/"
   | `Mod s -> f s "\\%"
-  | `And -> "&&"
-  | `Or -> "||"
+  | `And -> ret "&&"
+  | `Or -> ret "||"
   | `BAnd s -> f s "&"
   | `BOr s -> f s "|"
   | `BXOr s -> f s "\\textasciicircum{}"
@@ -84,7 +85,7 @@ let string_of_op2 =
   | `Le s -> f s "<="
   | `Gt s -> f s ">"
   | `Ge s -> f s ">="
-  | `Raw -> ""
+  | `Raw -> ret ""
 
 type prio =
   | Pmin
@@ -155,7 +156,7 @@ let rec pp_expr_rec prio fmt pe =
   | PEOp2 (op, (e, r)) ->
     let p = prio_of_op2 op in
     optparent fmt prio p "(";
-    F.fprintf fmt "%a %s %a" (pp_expr_rec p) e (string_of_op2 op) (pp_expr_rec p) r;
+    F.fprintf fmt "%a %a %a" (pp_expr_rec p) e pp_op2 op (pp_expr_rec p) r;
     optparent fmt prio p ")"
   | PEIf (e1, e2, e3) ->
     let p = Pternary in
@@ -220,8 +221,8 @@ let pp_lv fmt x =
   | PLArray (ws, x, e) -> F.fprintf fmt "%a[%a%a%a]" pp_var x (pp_opt pp_ws) ws (pp_opt pp_space) ws pp_expr e
   | PLMem (ty, x, e) -> F.fprintf fmt "%a[%a + %a]" (pp_opt (pp_paren pp_ws)) ty pp_var x pp_expr e
 
-let string_of_eqop op =
-  F.sprintf "%s=" (string_of_op2 op)
+let pp_eqop fmt op =
+  F.fprintf fmt "%a=" pp_op2 op
 
 let pp_sidecond fmt =
   F.fprintf fmt " %a %a" kw "if" pp_expr
@@ -233,7 +234,7 @@ let rec pp_instr depth fmt p =
   | PIAssign (lvs, op, e, cnd) ->
     begin match lvs with
     | [] -> ()
-    | _ -> F.fprintf fmt "%a %s " (pp_list ", " pp_lv) lvs (string_of_eqop op) end;
+    | _ -> F.fprintf fmt "%a %a " (pp_list ", " pp_lv) lvs pp_eqop op end;
     F.fprintf fmt "%a%a;"
       pp_expr e
       (pp_opt pp_sidecond) cnd
