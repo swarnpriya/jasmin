@@ -32,6 +32,11 @@ abstract theory MonoArray.
     t1 = t2 <=> forall i, 0 <= i < size => t1.[i] = t2.[i].
   proof. by move=> />;apply ext_eq. qed.
 
+  lemma init_ext (f1 f2: int -> elem): 
+    (forall x, 0 <= x < size => f1 x = f2 x) =>
+    init f1 = init f2.
+  proof. by move=> h;apply ext_eq => i hi;rewrite !initE hi h. qed.
+
   (* -------------------------------------------------------------------- *)
   lemma initiE (f:int -> elem) i : 0 <= i < size => (init f).[i] = f i.
   proof. by move=> hi;rewrite initE hi. qed.
@@ -99,6 +104,11 @@ abstract theory MonoArray.
     k <> k' => t.[k <- x].[k' <- x'] = t.[k' <- x'].[k <- x].
   proof. by rewrite set_set_if => ->. qed.
 
+  lemma set_notmod (t:t) i : t.[i <- t.[i]] = t.
+  proof. 
+    by apply ext_eq => j hj; rewrite get_set_if; case: (0 <= i < size /\ j = i).
+  qed.
+
   (* -------------------------------------------------------------------- *)
   op of_list (l:elem list) = 
     init (fun i => nth dfl l i)
@@ -150,7 +160,7 @@ abstract theory MonoArray.
     by rewrite nth_iota // initiE.
   qed.
 
-  hint simplify init_of_list@1.
+  (* hint simplify init_of_list@1. *)
  
   (* -------------------------------------------------------------------- *)
   op create (a:elem) = init (fun (i:int) => a).
@@ -159,7 +169,7 @@ abstract theory MonoArray.
   proof. by apply initiE. qed.
 
   lemma createL (a:elem) : create a = of_list (map (fun i => a) (iota_ 0 size)).
-  proof. by rewrite /create. qed.
+  proof. by rewrite /create init_of_list. qed.
 
   hint simplify (createiE, createL).
 
@@ -178,7 +188,7 @@ abstract theory MonoArray.
 
   lemma map_to_list f t :
     map f t = of_list (map f (to_list t)).
-  proof. rewrite to_listE /map /= -map_comp //. qed.
+  proof. by rewrite to_listE /map /= -map_comp // init_of_list. qed.
   
   hint simplify (mapiE, map_of_list)@0.
 (*  hint simplify map_to_list@1. *)
@@ -199,7 +209,7 @@ abstract theory MonoArray.
   lemma map2_to_list f t1 t2 :
     map2 f t1 t2 = of_list (map2 f (to_list t1) (to_list t2)).
   proof. 
-    rewrite to_listE /map2 map2_zip/=;congr.
+    rewrite to_listE /map2 map2_zip init_of_list /=;congr.
     apply (eq_from_nth dfl).   
     + by rewrite !size_map size_zip !size_map min_ler.
     move=> i; rewrite size_map => hi.
@@ -342,6 +352,11 @@ abstract theory PolyArray.
     k <> k' => t.[k <- x].[k' <- x'] = t.[k' <- x'].[k <- x].
   proof. by rewrite set_set_if => ->. qed.
 
+  lemma set_notmod (t:'a t) i : t.[i <- t.[i]] = t.
+  proof. 
+    by apply ext_eq => j hj; rewrite get_set_if; case: (0 <= i < size /\ j = i).
+  qed.
+
   (* -------------------------------------------------------------------- *)
   op create (a:'a) = init (fun (i:int) => a)
   axiomatized by createE.
@@ -384,6 +399,9 @@ abstract theory PolyArray.
     by move=> ->;apply /allP.
   qed.
   
+  lemma all_eq_eq (t1 t2: 'a t) : all_eq t1 t2 => t1 = t2.
+  proof. by move=> /ext_eq_all. qed.
+
   (* -------------------------------------------------------------------- *)
 
   op of_list (dfl:'a) (l:'a list) = 
@@ -491,7 +509,7 @@ abstract theory PolyArray.
 
 end PolyArray.
 
-clone export PolyArray as Array0  with op size <- 0.
+(*clone export PolyArray as Array0  with op size <- 0.
 clone export PolyArray as Array1  with op size <- 1.
 clone export PolyArray as Array2  with op size <- 2.
 clone export PolyArray as Array3  with op size <- 3.
@@ -544,6 +562,6 @@ clone export PolyArray as Array45  with op size <- 45.
 clone export PolyArray as Array46  with op size <- 46.
 clone export PolyArray as Array47  with op size <- 47.
 clone export PolyArray as Array48  with op size <- 48.
-clone export PolyArray as Array49  with op size <- 49.
+clone export PolyArray as Array49  with op size <- 49. *)
 
 

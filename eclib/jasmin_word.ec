@@ -138,8 +138,8 @@ proof.
     + smt (gt0_pow2 pow_Mle).
     case (i < p) => hip /=.
     + have -> : p = ((p - i - 1) + 1) + i by ring.
-      rewrite h0i his -pow_add //= 1:/# divzMDl; 1: smt (gt0_pow2).
-      by rewrite -pow_add 1:/# //= modzMDl divNz // gt0_pow2.
+      rewrite h0i his -pow_add // 1:/# divzMDl; 1: smt (gt0_pow2).
+      rewrite -pow_add 1:/# //= modzMDl divNz // gt0_pow2.
     by rewrite divz_small //; smt (gt0_pow2 pow_Mle).
   case : (p <= size) => hps; 1: by apply aux.
   rewrite (_:i < p) 1:/# -of_int_mod.
@@ -489,6 +489,18 @@ qed.
 lemma to_uintM (x y : t) : to_uint (x * y) = (to_uint x * to_uint y) %% modulus.
 proof. by rewrite mulE /ulift2 !of_uintK. qed.
 
+lemma to_uintD_small (x y : t) : to_uint x + to_uint y < modulus => 
+  to_uint (x + y) = to_uint x + to_uint y.
+proof. 
+  move=> h;rewrite to_uintD modz_small 2://; smt (to_uint_cmp). 
+qed.
+
+lemma to_uintM_small (x y : t) : to_uint x * to_uint y < modulus => 
+  to_uint (x * y) = (to_uint x * to_uint y).
+proof. 
+  move=> h;rewrite to_uintM modz_small 2://; smt (to_uint_cmp). 
+qed.
+
 clone export Ring.ComRing as WRingA with 
    type t <- t,
    op zeror <- of_int 0,
@@ -556,7 +568,7 @@ abbrev (^) = WRingA.exp.
 lemma ofintS (n : int) : 0 <= n => of_int (n + 1) = of_int 1 + of_int n.
 proof. by rewrite of_intD addrC. qed. 
 
-lemma to_uint_minus (x y: t) : y \ule x => to_uint (x - y) = to_uint x - to_uint y.
+lemma to_uintB (x y: t) : y \ule x => to_uint (x - y) = to_uint x - to_uint y.
 proof.
   rewrite uleE=> hle.
   rewrite to_uintD to_uintN modzDmr modz_small //; smt (to_uint_cmp).
@@ -643,6 +655,7 @@ instance ring with t
 
 (* --------------------------------------------------------------------- *)
 (* Exact arithmetic operations                                           *)
+op subc : t -> t -> bool -> bool * t.
 op addc : t -> t -> bool -> bool * t.
 op mulu : t -> t -> t * t.
 
@@ -1056,24 +1069,24 @@ abstract theory W_WS.
     by move=> hi;rewrite pack'RbE // map2iE // !initiE.
   qed.
 
-  lemma andb'SE (w1 w2:WB.t) i : 0 <= i < r =>
+  lemma andb'SE (w1 w2:WB.t) i : 
     (WB.andw w1 w2) \bits'S i = WS.andw (w1 \bits'S i) (w2 \bits'S i).
   proof.
-    move=> hi; apply WS.wordP => j hj.
+    apply WS.wordP => j hj.
     by rewrite bits'SiE // WB.andwE WS.andwE !bits'SiE.
   qed.
 
-  lemma orb'SE (w1 w2:WB.t) i : 0 <= i < r =>
+  lemma orb'SE (w1 w2:WB.t) i : 
     (WB.orw w1 w2) \bits'S i = WS.orw (w1 \bits'S i) (w2 \bits'S i).
   proof.
-    move=> hi; apply WS.wordP => j hj.
+    apply WS.wordP => j hj.
     by rewrite bits'SiE // WB.orwE WS.orwE !bits'SiE.
   qed.
 
-  lemma xorb'SE (w1 w2:WB.t) i : 0 <= i < r =>
+  lemma xorb'SE (w1 w2:WB.t) i :
     (WB.(+^) w1 w2) \bits'S i = WS.(+^) (w1 \bits'S i) (w2 \bits'S i).
   proof.
-    move=> hi; apply WS.wordP => j hj.
+   apply WS.wordP => j hj.
     by rewrite bits'SiE // WB.xorwE WS.xorwE !bits'SiE.
   qed.
 
@@ -1166,6 +1179,12 @@ abstract theory W_WS.
 
    op x86_VPADD_'Ru'S (w1 : WB.t) (w2:WB.t) = 
      map2 WS.(+) w1 w2.
+
+(*   op x86_VPSUB_'Ru'S (w1 : WB.t) (w2:WB.t) = 
+     map2 (fun (x y:WS.t) => x - y) w1 w2.
+
+   op x86_VPMUL_'Ru'S (w1 : WB.t) (w2:WB.t) = 
+     map2 WS.( * ) w1 w2. *)
 
    op x86_VPSLL_'Ru'S (w : WB.t) (cnt : W8.t) = 
      map (fun (w:WS.t) => w `<<` cnt) w.
@@ -1385,3 +1404,4 @@ lemma foo (x y:W128.t) (x1 x2 y1 y2:W64.t):
   x `|` y = pack2 [x1 `|` y1; x2 `|` y2].
 proof. move=> -> -> /=.
 *)
+
