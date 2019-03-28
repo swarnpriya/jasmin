@@ -3529,7 +3529,7 @@ let safe_return main_decl =
 (* Utils *)
 (*********)
 
-let pcast ws e = match Conv.ty_of_cty (ty_expr e) with
+let pcast ws e = match Conv.ty_of_cty (Conv.cty_of_ty (ty_expr e)) with
   | Bty Int -> Papp1 (E.Oword_of_int ws, e)
   | Bty (U ws') ->
     assert (int_of_ws ws' <= int_of_ws ws);
@@ -3669,7 +3669,7 @@ let print_not_word_expr e =
   Format.eprintf "@[<v>Should be a word expression:@;\
                   @[%a@]@;Type:@;@[%a@]@]@."
     (Printer.pp_expr ~debug:(!Glob_options.debug)) e
-    (Printer.pp_ty) (Conv.ty_of_cty (ty_expr e))
+    (Printer.pp_ty) (Conv.ty_of_cty (Conv.cty_of_ty (ty_expr e)))
 
 let check_is_int v = match v.v_ty with
   | Bty Int -> ()
@@ -3845,7 +3845,7 @@ end = struct
       Mtexpr.var apr_env (Mvalue (Avar (L.unloc x)))
 
     | Papp1(E.Oint_of_word sz,e1) ->
-      assert (ty_expr e1 = Type.Coq_sword sz);
+      assert (ty_expr e1 = tu sz);
       let abs_expr1 = linearize_wexpr abs e1 in
       wrap_if_overflow abs abs_expr1 false (int_of_ws sz)
 
@@ -3871,7 +3871,7 @@ end = struct
 
   and linearize_wexpr abs (e : ty gexpr) =
     let apr_env = AbsDom.get_env abs in
-    let ws_e = get_wsize (ty_expr e) in
+    let ws_e = ws_of_ty (ty_expr e) in
 
     match e with
     | Pvar x ->
@@ -3884,12 +3884,12 @@ end = struct
       wrap_if_overflow abs lin false (int_of_ws ws)
 
     | Papp1(E.Oword_of_int sz,e1) ->
-      assert (ty_expr e1 = Type.Coq_sint);
+      assert (ty_expr e1 = tint);
       let abs_expr1 = linearize_iexpr abs e1 in
       wrap_if_overflow abs abs_expr1 false (int_of_ws sz)
 
     | Papp1(E.Ozeroext (osz,isz),e1) ->
-      assert (ty_expr e1 = Type.Coq_sword isz);
+      assert (ty_expr e1 = tu isz);
       let abs_expr1 = linearize_wexpr abs e1 in
       cast_if_overflows abs (int_of_ws osz) (int_of_ws isz) abs_expr1
 
@@ -4070,12 +4070,12 @@ end = struct
 
         | E.Op_w ws ->
           let lin1 = match ty_expr e1' with
-            | Coq_sint -> linearize_iexpr abs e1'
-            | Coq_sword _ -> linearize_wexpr abs e1'
+            | Bty Int   -> linearize_iexpr abs e1'
+            | Bty (U _) -> linearize_wexpr abs e1'
             | _ -> assert false
           and lin2 = match ty_expr e2' with
-            | Coq_sint -> linearize_iexpr abs e2'
-            | Coq_sword _ -> linearize_wexpr abs e2'
+            | Bty Int   -> linearize_iexpr abs e2'
+            | Bty (U _) -> linearize_wexpr abs e2'
             | _ -> assert false in
 
           (* TODO: signed words *)
@@ -4119,7 +4119,7 @@ end = struct
             if List.exists (fun x -> x = None) b_list then []
             else List.map oget b_list in
 
-          let in_sw = get_wsize (ty_expr e) in
+          let in_sw = ws_of_ty (ty_expr e) in
 
           let lin_expr =
             try linearize_wexpr abs expr
@@ -4133,14 +4133,14 @@ end = struct
   let rec linearize_if_expr : int -> 'a Prog.gexpr -> AbsDom.t -> s_expr =
     fun out_ws e abs ->
       match ty_expr e with
-      | Coq_sint ->
+      | Bty Int ->
         assert (out_ws = -1);
         linearize_if_iexpr e abs
 
-      | Coq_sword _ -> linearize_if_wexpr out_ws e abs
+      | Bty (U _) -> linearize_if_wexpr out_ws e abs
 
-      | Coq_sbool -> assert false
-      | Coq_sarr _ -> assert false
+      | Bty Bool -> assert false
+      | Arr _ -> assert false
 
 
   let init_env : 'info prog -> mem_loc list -> s_env =
@@ -4381,7 +4381,7 @@ end = struct
       let inv_os = Mtexpr.var env (MvarOffset inv) in
 
       let off_e = linearize_wexpr abs offset_expr
-      and e_ws = get_wsize (ty_expr offset_expr) in
+      and e_ws = ws_of_ty (ty_expr offset_expr) in
       let wrap_off_e = wrap_if_overflow abs off_e false (int_of_ws e_ws) in
 
       let sexpr =
@@ -4454,7 +4454,7 @@ end = struct
 
       | _, MLvars vs -> { state with abs = AbsDom.forget_list state.abs vs }
 
-      | Coq_sint, MLvar mvar | Coq_sword _, MLvar mvar ->
+      | Bty Int, MLvar mvar | Bty (U _), MLvar mvar ->
         (* Numerical abstraction *)
         let lv_s = wsize_of_ty out_ty in
         let s_expr = linearize_if_expr lv_s e state.abs in
@@ -4469,7 +4469,7 @@ end = struct
 
         { state with abs = abs }
 
-      | Coq_sbool, MLvar mvar ->
+      | Bty Bool, MLvar mvar ->
         begin let svar = string_of_mvar mvar in
           match bexpr_to_btcons e state.abs with
           | None -> { state with abs = AbsDom.forget_bvar state.abs svar }
@@ -4477,7 +4477,7 @@ end = struct
             let abs' = AbsDom.assign_bexpr state.abs svar btcons in
             { state with abs = abs' } end
 
-      | Coq_sarr _, MLvar mvar ->
+      | Arr _, MLvar mvar ->
         match e with
         | Pvar x ->
           let apr_env = AbsDom.get_env state.abs in
