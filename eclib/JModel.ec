@@ -295,6 +295,11 @@ op x86_VPSRLDQ_128 (w1:W128.t) (w2:W8.t) =
 op x86_VPSRLDQ_256 (w1:W256.t) (w2:W8.t) = 
   map (fun w => x86_VPSRLDQ_128 w w2) w1.
 (* ------------------------------------------------------------------- *)
+abbrev [-printing] (\vshr32u128) (w1:W128.t) (w2:W8.t) = x86_VPSRL_4u32 w1 w2.
+abbrev [-printing] (\vshl32u128) (w1:W128.t) (w2:W8.t) = x86_VPSLL_4u32 w1 w2.
+abbrev [-printing] (\vadd32u128) (w1 w2:W128.t) = x86_VPADD_4u32 w1 w2.
+
+
 abbrev [-printing] (\vshr32u256) (w1:W256.t) (w2:W8.t) = x86_VPSRL_8u32 w1 w2.
 abbrev [-printing] (\vshl32u256) (w1:W256.t) (w2:W8.t) = x86_VPSLL_8u32 w1 w2.
 
