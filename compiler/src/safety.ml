@@ -247,6 +247,7 @@ type mvar =
   | Mvalue of atype             (* Variable value *)
   | MinValue of ty gvar         (* Variable initial value *)
   | MvarOffset of ty gvar       (* Variable offset *)
+  | MNumInv of L.t              (* Numerical Invariants *)
   | MmemRange of mem_loc        (* Memory location range *)
 
 let weak_update v = match v with
@@ -254,6 +255,7 @@ let weak_update v = match v with
   | MinValue _
   | Mglobal _
   | Temp _
+  | MNumInv _
   | MvarOffset _ -> false
   | MmemRange _ -> true
   | WTemp _ -> true
@@ -274,6 +276,7 @@ let string_of_mvar = function
   | MinValue s -> "inv_" ^ s.v_name
   | Mvalue at -> string_of_atype at
   | MvarOffset s -> "o_" ^ s.v_name
+  | MNumInv lt -> "ni_" ^ string_of_int (fst lt.loc_start)
   | MmemRange loc -> "mem_" ^ string_of_mloc loc
 
 let pp_mvar fmt v = Format.fprintf fmt "%s" (string_of_mvar v)
@@ -315,18 +318,10 @@ let ty_mvar = function
   | MinValue s -> s.v_ty
   | Mvalue at -> ty_atype at
   | MvarOffset _ -> Bty Int
+  | MNumInv _ -> Bty Int
   | MmemRange _ -> Bty Int
 
 let avar_of_mvar a = string_of_mvar a |> Var.of_string
-
-let temp_cpy s i v = match v with
-  | Mvalue _
-  | Mglobal _
-  | MmemRange _
-  | MvarOffset _ -> Temp (s,i, ty_mvar v)
-  | Temp _
-  | WTemp _
-  | MinValue _ -> assert false
 
 
 let u8_blast_at at = match at with
@@ -2345,6 +2340,8 @@ module PIMake (PW : ProgWrap) : VDomWrap = struct
   let vdom = function
     | Temp _ | WTemp _ -> assert false
 
+    | MNumInv _ -> Ppl 0        (* Numerical invariant must be relational *)
+
     | Mvalue (Avar v) | MinValue v ->
       if Sv.mem v v_rel then Ppl 0 else Nrd 0
 
@@ -3382,6 +3379,7 @@ type safe_cond =
   | InBound of int * wsize * expr
   | Valid of wsize * ty gvar * expr
   | NotZero of wsize * expr
+  | Termination
 
 let pp_var = Printer.pp_var ~debug:false
 let pp_expr = Printer.pp_expr ~debug:false
@@ -3399,6 +3397,7 @@ let pp_safety_cond fmt = function
       pp_expr e (int_of_ws ws) n
   | Valid (sz, x, e) ->
     Format.fprintf fmt "is_valid %s + %a W%a" x.v_name pp_expr e pp_ws sz
+  | Termination -> Format.fprintf fmt "termination"
 
 type violation_loc =
   | InProg of Prog.L.t
@@ -4294,7 +4293,7 @@ end = struct
         | None -> false
         | Some c -> AbsDom.is_bottom (AbsDom.meet_btcons state.abs c) end
 
-    | Valid _ -> true
+    | Valid _ | Termination -> true (* These are checked elsewhere *)
 
   (* Update abs with the abstract memory range for memory accesses. *)
   let rec mem_safety_apply (abs, violations, s_effect) = function
@@ -4677,6 +4676,12 @@ end = struct
     | Some (BLeaf c) -> Some c
     | _ -> None
 
+  let dec_num_of_mtcons c =
+    let sc = simpl_obtcons c in
+    match omap Mtcons.get_typ sc with
+    | Some Lincons0.SUPEQ | Some Lincons0.SUP -> omap Mtcons.get_expr sc
+    | _ -> None
+
   let split_opn n opn es = match opn with
     | E.Oset0 ws -> [None;None;None;None;None;
                      Some (pcast ws (Pconst (B.of_int 0)))]
@@ -4824,11 +4829,59 @@ end = struct
         let eval_body state_i state =
           let cpt_instr = !num_instr_evaluated - 1 in
 
+          let ni_e = dec_num_of_mtcons oec in
+          (* We evaluate a quantity that we try to prove is decreasing. *)
+          Format.eprintf "@[<v>Candidate decreasing numerical quantity:@;\
+                          @[%a@]@;@;@]"
+            (pp_opt Mtexpr.print) ni_e;
+
+          let mvar_ni = MNumInv (fst ginstr.i_loc) in
+          let state_i = match ni_e with
+            | None -> state_i
+            | Some nie ->
+              { state_i with abs = AbsDom.assign_sexpr state_i.abs
+                                 mvar_ni
+                                 (sexpr_from_simple_expr nie) } in
+
           (* We add a disjunctive constraint block *)
           let state_i = { state_i with
                           abs = AbsDom.new_cnstr_blck state_i.abs } in
 
           let state_o = aeval_gstmt (c2 @ c1) state_i in
+
+          (* We check that ni_e decreased by at least one *)
+          let state_o = match ni_e with
+            | None -> (* Here, we cannot prove termination *)
+              let violation = (InProg (fst ginstr.i_loc), Termination) in
+              add_violations state_o [violation]
+
+            | Some nie ->
+              let env = AbsDom.get_env state_o.abs in
+              let nie = Mtexpr.extend_environment nie env in
+
+              (* (initial nie) - nie - 1 *)
+              let e = Mtexpr.(binop Sub
+                                (var env mvar_ni) nie) in
+
+              let int = AbsDom.bound_texpr state_o.abs e
+              and zint = AbsDom.bound_variable state_o.abs mvar_ni
+              and test_intz =
+                Interval.of_scalar (Scalar.of_int 0) (Scalar.of_infty 1)
+              and test_into =
+                Interval.of_scalar (Scalar.of_int 1) (Scalar.of_infty 1) in
+
+              Format.eprintf "@[<v>@;Numerical quantity decreasing by:@;\
+                              @[%a@]@;\
+                              Initial numerical quantity in interval:@;\
+                              @[%a@]@;@]"
+                Interval.print int
+                Interval.print zint;
+
+              if (Interval.is_leq int test_into) &&
+                 (Interval.is_leq zint test_intz) then state_o
+              else
+                let violation = (InProg (fst ginstr.i_loc), Termination) in
+                add_violations state_o [violation] in
 
           (* We pop the disjunctive constraint block *)
           let state_o = { state_o with
@@ -5139,5 +5192,5 @@ module AbsAnalyzer (EW : ExportWrap) = struct
         (pp_list print_mvar_interval) npt
         (pp_list (fun fmt (_,f,_) -> f fmt ())) l_res;
 
-      assert (violations = [])  (* TODO:temp *)
+      assert (violations = [])
 end
