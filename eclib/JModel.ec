@@ -1,7 +1,7 @@
 (* -------------------------------------------------------------------- *)
 require import AllCore BitEncoding IntDiv SmtMap Ring List StdOrder Bool.
 (*---*) import CoreMap Map Ring.IntID IntOrder.
-require export Jasmin_utils Jasmin_array Jasmin_word Jasmin_word_array Jasmin_memory.
+require export JUtils JArray JWord JWord_array JMemory.
 
 (* -------------------------------------------------------------------- *)
 abbrev x86_MOVD_32 (x : W32.t) = pack4 [x; W32.zero; W32.zero; W32.zero].
@@ -52,7 +52,7 @@ lemma rotate8_128_E w :
 proof.
   have h : W128.all_eq 
     (x86_VPSHUFB_128 w const_rotate8_128) (W4u32.map (fun w => W32.rol w 8) w).
-  + by cbv W128.all_eq x86_VPSHUFB_128 x86_VPSHUFB_128_B W16u8.unpack8 (%%) (%/). 
+  + by cbv W128.all_eq x86_VPSHUFB_128 x86_VPSHUFB_128_B W16u8.unpack8 edivz.
   by apply (W128.all_eq_eq _ _ h).
 qed.
 
@@ -61,7 +61,7 @@ lemma rotate16_128_E w :
 proof.
   have h : W128.all_eq 
     (x86_VPSHUFB_128  w const_rotate16_128) (W4u32.map (fun w => W32.rol w 16) w).
-  + by cbv W128.all_eq x86_VPSHUFB_128 x86_VPSHUFB_128_B  W16u8.unpack8 (%%) (%/).
+  + by cbv W128.all_eq x86_VPSHUFB_128 x86_VPSHUFB_128_B  W16u8.unpack8.
   by apply (W128.all_eq_eq _ _ h).
 qed.
 
@@ -70,7 +70,7 @@ lemma rotate24_128_E w :
 proof.
   have h : W128.all_eq 
     (x86_VPSHUFB_128 w const_rotate24_128) (W4u32.map (fun w => W32.rol w 24) w).
-  + by cbv W128.all_eq x86_VPSHUFB_128 x86_VPSHUFB_128_B W16u8.unpack8 (%%) (%/).
+  + by cbv W128.all_eq x86_VPSHUFB_128 x86_VPSHUFB_128_B W16u8.unpack8 edivz.
   by apply (W128.all_eq_eq _ _ h).
 qed.
 hint simplify (rotate8_128_E, rotate16_128_E, rotate24_128_E).
@@ -94,7 +94,7 @@ qed. *)
 lemma pack2_4u32_8u32 (w0 w1 w2 w3 w4 w5 w6 w7 :W32.t) :
    pack2 [pack4 [w0;w1;w2;w3]; pack4 [w4; w5; w6; w7]] =
    pack8 [w0; w1; w2; w3; w4; w5; w6; w7].
-proof. by apply W256.all_eq_eq;cbv W256.all_eq (%/) (%%). qed.
+proof. by apply W256.all_eq_eq;cbv W256.all_eq edivz. qed.
 
 lemma rotate8_256_E w : 
   x86_VPSHUFB_256 w const_rotate8_256 = W8u32.map (fun w => W32.rol w 8) w.
@@ -104,7 +104,7 @@ admitted.
   rewrite -(W8u32.unpack32K w) /unpack32 /= /x86_VPSHUFB_256 -{1}pack2_4u32_8u32.
   rewrite -(W2u128.unpack128K const_rotate8_256) /unpack128 /=.
   rewrite !W2u128.of_int_bits128_div 1,2://.
-  rewrite -W128.of_int_mod; cbv (%/) (%%). 
+  rewrite -W128.of_int_mod; cbv edivz. 
   by rewrite pack2_4u32_8u32.
 qed.
 *)
@@ -116,7 +116,7 @@ admitted.
   rewrite -(W8u32.unpack32K w) /unpack32 /= /x86_VPSHUFB_256 -{1}pack2_4u32_8u32.
   rewrite -(W2u128.unpack128K const_rotate16_256) /unpack128 /=.
   rewrite !W2u128.of_int_bits128_div 1,2://.
-  rewrite -W128.of_int_mod; cbv (%/) (%%).
+  rewrite -W128.of_int_mod; cbv edivz.
   by rewrite pack2_4u32_8u32.
 qed.
 *)
@@ -128,7 +128,7 @@ admitted.
   rewrite -(W8u32.unpack32K w) /unpack32 /= /x86_VPSHUFB_256 -{1}pack2_4u32_8u32.
   rewrite -(W2u128.unpack128K const_rotate24_256) /unpack128 /=.
   rewrite !W2u128.of_int_bits128_div 1,2://.
-  rewrite -W128.of_int_mod; cbv (%/) (%%).
+  rewrite -W128.of_int_mod; cbv edivz.
   by rewrite pack2_4u32_8u32.
 qed.
 *)
@@ -315,5 +315,3 @@ type leakage_t = [
 ].
 
 type leakages_t = leakage_t list.
-
-

@@ -1,6 +1,6 @@
 require import AllCore SmtMap List.
 (*---*) import CoreMap. 
-require import Jasmin_utils.
+require import JUtils.
 
 (*-------------------------------------------------------------------- *)
 

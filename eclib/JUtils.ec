@@ -59,8 +59,7 @@ qed.
 lemma nosmt divz_mod_mul n p i: 0 <= p => 0 <= n =>
   (i %% (n*p)) %/ p = (i %/ p) %% n.
 proof.
-  move=> [hp | <- /=]; last by rewrite divz0.
-  move=> [hn | <- /=]; last by rewrite !modz0.
+  move=> [hp | <- //]; move=> [hn | <- //].
   rewrite {2}(divz_eq i (n*p)) {2} (divz_eq (i %% (n * p)) p).
   pose i1 := i %% (n * p).
   have -> : (i %/ (n * p) * (n * p) + (i1 %/ p * p + i1 %% p)) = 
@@ -76,7 +75,7 @@ lemma nosmt divz_mod_div n p i: p %| n => 0 <= p => 0 <= n =>
   (i %% n) %/ p = (i %/ p) %% (n%/p).
 proof.
   rewrite dvdz_eq => {2}<- hp hn;apply divz_mod_mul => //.
-  by case: hp => [hp | <-];[apply divz_ge0 | rewrite divz0].
+  by case: hp => [hp | <-//]; apply divz_ge0.
 qed.
 
 lemma modz_mod_pow2 i n k : i %% 2^n %% 2^k = i %% 2^(min n k).

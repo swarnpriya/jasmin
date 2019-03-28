@@ -1,7 +1,7 @@
 (* -------------------------------------------------------------------- *)
 require import AllCore SmtMap List IntDiv.
 (*---*) import CoreMap StdOrder.IntOrder.
-require import Jasmin_utils Jasmin_word.
+require import JUtils JWord.
 
 (* -------------------------------------------------------------------- *)
 theory W8List.

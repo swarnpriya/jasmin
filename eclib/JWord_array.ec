@@ -1,7 +1,7 @@
 (* -------------------------------------------------------------------- *)
 require import AllCore BitEncoding IntDiv SmtMap List StdOrder BitEncoding Bool.
 (*---*) import Ring.IntID IntOrder BS2Int.
-require import Jasmin_utils Jasmin_array Jasmin_word.
+require import JUtils JArray JWord.
 
 abstract theory WArray.
 

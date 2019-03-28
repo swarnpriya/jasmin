@@ -1,7 +1,7 @@
 (* -------------------------------------------------------------------- *)
 require import AllCore BitEncoding IntDiv SmtMap List StdOrder BitEncoding Bool.
 (*---*) import Ring.IntID IntOrder BS2Int.
-require import Jasmin_utils Jasmin_array.
+require import JUtils JArray.
 
 (* -------------------------------------------------------------------- *)
 abstract theory BitWord.
@@ -124,7 +124,7 @@ proof.
 qed.
 
 lemma zerowE i: zero.[i] = false.
-proof. by rewrite of_intwE /int_bit (modz_small 0). qed.
+proof. by rewrite of_intwE /int_bit. qed.
 hint simplify zerowE.
   
 lemma of_int_powm1 p i : 
@@ -167,7 +167,7 @@ lemma bits_divmod w i j: 0 <= i => 0 <= j => bs2int (bits w i j) = ((to_uint w) 
 proof.
   move => hi; rewrite /bits.
   elim /intind: j.
-  + by rewrite mkseq0 bs2int_nil /= modz1.
+  + by rewrite mkseq0 bs2int_nil /=.
   move=> j hj hrec; rewrite mkseqS 1:// bs2int_rcons.
   rewrite size_mkseq max_ler 1:// /= hrec.  
   have {2}->:= modz_pow_split (i+j+1) (i+j) (to_uint w) 2 _; 1: smt().
