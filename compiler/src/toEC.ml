@@ -1128,7 +1128,7 @@ let pp_array_decl i =
   let file = Format.sprintf "Array%i.ec" i in
   let out = open_out file in
   let fmt = Format.formatter_of_out_channel out in
-  Format.fprintf fmt "@[<v>require import Jasmin_array.@ @ ";
+  Format.fprintf fmt "@[<v>from Jasmin require import JArray.@ @ ";
   Format.fprintf fmt "clone export PolyArray as Array%i  with op size <- %i.@]@." i i;
   close_out out
 
@@ -1136,7 +1136,7 @@ let pp_warray_decl i =
   let file = Format.sprintf "WArray%i.ec" i in
   let out = open_out file in
   let fmt = Format.formatter_of_out_channel out in
-  Format.fprintf fmt "@[<v>require import Jasmin_word_array.@ @ ";
+  Format.fprintf fmt "@[<v>from Jasmin require import JWord_array.@ @ ";
   Format.fprintf fmt "clone export WArray as WArray%i  with op size <- %i.@]@." i i;
   close_out out
 
@@ -1166,7 +1166,9 @@ let pp_prog fmt model globs funcs =
     | Normal -> () in
 
   Format.fprintf fmt 
-     "@[<v>require import List Jasmin_model Int IntExtra IntDiv CoreMap.@ %a%a@ %a@ @ module M = {@   @[<v>%a%a@]@ }.@ @]@." 
+     "@[<v>%s.@ %s.@ @ %a%a@ %a@ @ module M = {@   @[<v>%a%a@]@ }.@ @]@." 
+    "require import List Int IntExtra IntDiv CoreMap"
+    "from Jasmin require import JModel"
     (pp_arrays "Array") env.arrsz
     (pp_arrays "WArray") env.warrsz
     (pp_list "@ @ " (pp_glob_decl env)) globs 

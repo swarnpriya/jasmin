@@ -12,6 +12,7 @@ all:
 	$(MAKE) -C proofs all
 	$(MAKE) -C compiler CIL
 	$(MAKE) -C compiler all
+	$(MAKE) -C eclib check
 
 clean:
 	$(MAKE) -C proofs clean

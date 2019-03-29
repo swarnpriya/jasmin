@@ -927,7 +927,7 @@ Definition eval_ADOX (sz: wsize) (o1:register) (o2: oprd) (s: x86_mem) : x86_res
   let (c, v) := waddcarry v1 v2 c in
   let s := mem_set_rflags OF c s in
   ok (mem_write_reg o1 v s).
-Print x86_mulx.
+
 (* -------------------------------------------------------------------- *)
 Definition eval_MULX (sz: wsize) (d1 d2 : register) (o1: oprd) (s: x86_mem) : x86_result :=
   Let _  := check_size_32_64 sz in

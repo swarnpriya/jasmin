@@ -184,8 +184,6 @@ Definition program := [::
   }%P
   [::])].
 
-Print program.
-
 Definition program1 := [::
   ("add",
   MkFun 2%positive [:: x; ya] {
