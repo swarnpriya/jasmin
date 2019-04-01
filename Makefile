@@ -24,7 +24,7 @@ dist:
 	rm -rf jasmin/proofs/logic
 	if [ -x scripts/anonymize ]; then SED=$(SED) scripts/anonymize; fi
 	$(SED) -i -e "/logic/d" jasmin/proofs/_CoqProject
-	tar czf jasmin.tar.gz jasmin && rm -rf jasmin
+	tar -czf jasmin.tar.gz --owner=0 --group=0 jasmin && rm -rf jasmin
 
 distcheck: dist
 	tar -xof $(DISTDIR).tar.gz
