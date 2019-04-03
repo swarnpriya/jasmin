@@ -6,3 +6,4 @@ _c_build
 *.exe
 lib*.a
 /jasmin.mlpack
+/jasminc
