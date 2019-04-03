@@ -113,6 +113,9 @@ move=> eq_mod; rewrite -(to_uintK x) -(to_uint_mod x).
 by rewrite eq_mod to_uint_mod.
 qed.
 
+lemma to_uint_eq (x y:t) :  (x = y) <=> (to_uint x = to_uint y).
+proof. by rewrite Core.inj_eq // (Core.can_inj _ _  to_uintK). qed.
+
 (* -------------------------------------------------------------------- *)
 op int_bit x i = (x%%modulus) %/ 2 ^ i %% 2 <> 0.
 
@@ -905,6 +908,12 @@ theory W8.
     by rewrite modz_small.
   qed.
 
+  lemma rol_xor_shft w i : 0 < i < size => 
+    rol w i = (w `<<` of_int i) +^ (w `>>` of_int (size - i)).
+  proof.
+    move=> hi; rewrite /(`<<`) /(`>>`) !of_uintK /=.
+    by rewrite !(modz_small _ 256) 1,2:/# !modz_small 1,2:/# rol_xor 1:/#.
+  qed.
 end W8. export W8. 
 
 abstract theory WT.
@@ -923,6 +932,7 @@ abstract theory WT.
 
   op (`>>`) : t -> W8.t -> t. 
   op (`<<`) : t -> W8.t -> t.
+  op rol : t -> int -> t.
   op of_int : int -> t.
   op to_uint : t -> int.
   op to_sint : t -> int.
@@ -938,6 +948,15 @@ abstract theory WT.
   axiom wordP (w1 w2 : t) :
     w1 = w2 <=> forall (i : int), 0 <= i < size => w1.[i] = w2.[i].
 
+  axiom to_uint_cmp (x : t) : 0 <= to_uint x < 2^size.
+
+  op int_bit x i = (x%%2^size) %/ 2 ^ i %% 2 <> 0.
+
+  axiom of_intwE x i :  
+   (of_int x).[i] = (0 <= i < size /\ int_bit x i).
+
+  axiom get_to_uint w i : w.[i] = (0 <= i < size /\ to_uint w %/ 2 ^ i %% 2 <> 0). 
+
   axiom bitsE w k len : bits w k len = mkseq (fun (i:int) => w.[k+i]) len.
 
   axiom bits_divmod w i j: 0 <= i => 0 <= j => 
@@ -951,13 +970,14 @@ abstract theory WT.
 
   axiom to_uintK : cancel to_uint of_int.
 
-  axiom to_uint_cmp (x : t) : 0 <= to_uint x < 2^size.
-
   axiom of_int_mod (x : int) : of_int (x %% 2^size) = of_int x.
 
   axiom and_mod k w : 
     0 <= k => 
       andw w (of_int (2^k - 1)) = of_int (to_uint w %% 2^k).
+
+  axiom rol_xor_shft w i : 0 < i < size => 
+    rol w i = (w `<<` W8.of_int i) +^ (w `>>` W8.of_int (size - i)).
 
 end WT.
 
@@ -1034,7 +1054,22 @@ abstract theory W_WS.
   proof. 
     by move=> hi; rewrite bits'SE WS.initiE /= -?divz_eq; 1:by apply modz_cmp.
   qed.
- 
+
+  lemma get_out (w:WB.t) i : 
+     !(0 <= i < r) => 
+     w \bits'S i = WS.of_int 0.
+  proof.
+    move=> hi;apply WS.wordP => k hk.
+    rewrite bits'SiE 1:// WS.of_intwE /WS.int_bit /= get_to_uint. 
+    smt(gt0_r WS.gt0_size sizeBrS).
+  qed.
+
+  lemma get_zero i : WB.of_int 0 \bits'S i = WS.of_int 0.
+  proof.
+    apply WS.wordP => k hk.
+    by rewrite bits'SiE 1:// WS.of_intwE /WS.int_bit /= get_to_uint /= WB.of_uintK.
+  qed.
+
   lemma unpack'SK w : pack'R_t (unpack'S w) = w.
   proof.
     apply wordP => i hi; rewrite pack'RE initiE //= get_bits'S //.
@@ -1050,6 +1085,15 @@ abstract theory W_WS.
 
   lemma pack'RK ws : unpack'S (pack'R_t ws) = ws.
   proof. by apply packP => i hi; rewrite get_unpack'S // pack'RbE. qed.
+
+  lemma wordP (w1 w2 :WB.t) : (forall i, 0 <= i < r => w1 \bits'S i = w2 \bits'S i) => w1 = w2.
+  proof.
+    move=> h; rewrite -(unpack'SK w1) -(unpack'SK w2); congr.
+    by apply Pack.packP => i hi; rewrite !get_unpack'S 1,2://; apply h.
+  qed.
+
+  lemma allP (w1 w2 :WB.t) : all (fun i => w1 \bits'S i = w2 \bits'S i) (iota_ 0 r) => w1 = w2.
+  proof. rewrite allP => h; apply wordP => i; rewrite -(mema_iota 0 r); apply h. qed.
 
   abbrev map (f:WS.t -> WS.t) (w:WB.t) = 
     pack'R_t (map f (unpack'S w)).
@@ -1147,6 +1191,17 @@ abstract theory W_WS.
      apply pow_Mle;smt (le_size WS.gt0_size).
    qed.
 
+   lemma zeroextu'B_bit (w:WS.t) i: (zeroextu'B w).[i] = ((0 <= i < sizeS) /\ w.[i]).
+   proof.
+     rewrite /zeroextu'B WB.of_intwE /WB.int_bit (modz_small (to_uint w)).
+     + smt(gt0_r WS.gt0_size sizeBrS pow_Mle WS.to_uint_cmp).
+     have -> := WS.get_to_uint w i.
+     case: (0 <= i < sizeS) => hi /=;1: smt(gt0_r WS.gt0_size sizeBrS).
+     have [ /#| h]: (i < 0 \/ sizeS <= i) by smt().
+     rewrite divz_small 2://.
+     smt(gt0_r WS.gt0_size sizeBrS pow_Mle WS.to_uint_cmp).
+   qed.
+
    lemma to_uint_truncateu'S (w:WB.t) :
      WS.to_uint (truncateu'S w) = WB.to_uint w %% 2 ^ sizeS.
    proof. by rewrite /truncateu'S WS.of_uintK. qed.
@@ -1195,6 +1250,25 @@ abstract theory W_WS.
    op x86_VPBROADCAST_'Ru'S (w: WS.t) = 
      pack'R (map (fun i => w) (iota_ 0 r)).
 
+   lemma x86_'Ru'S_rol_xor i w : 0 < i < sizeS => 
+      x86_VPSLL_'Ru'S w (W8.of_int i) +^ x86_VPSRL_'Ru'S w (W8.of_int (sizeS - i)) =
+      map (fun w0 => WS.rol w0 i) w.
+   proof.
+     move=> hr;rewrite /x86_VPSRL_'Ru'S /x86_VPSLL_'Ru'S.
+     rewrite /map;apply wordP => j hj.
+     by rewrite xorb'SE !pack'RbE 1..3:// !initiE 1..3:// /= rol_xor_shft.
+   qed.
+
+   lemma x86_'Ru'S_rol_xor_red w1 w2 i si: 
+     w1 = w2 => W8.to_uint si = sizeS - W8.to_uint i => 0 < W8.to_uint i < sizeS =>
+     x86_VPSLL_'Ru'S w1 i +^ x86_VPSRL_'Ru'S w2 si =
+     map (fun w0 => WS.rol w0 (W8.to_uint i)) w1.
+   proof.
+     by move=> -> hsi hi; rewrite -(W8.to_uintK i) -(W8.to_uintK si) hsi x86_'Ru'S_rol_xor.
+   qed.
+
+   hint simplify x86_'Ru'S_rol_xor_red.
+
 end W_WS.
 
 abstract theory BitWordSH.
@@ -1219,6 +1293,16 @@ abstract theory BitWordSH.
     move=> hi;rewrite shr_div of_uintK.
     rewrite (modz_small i) 1:pow2_8; 1: smt (size_le_256).
     by rewrite modz_small //;apply bound_abs.
+  qed.
+
+  lemma rol_xor_shft w i : 0 < i < size => 
+    rol w i = (w `<<` W8.of_int i) +^ (w `>>` W8.of_int (size - i)).
+  proof.
+    move=> hi; rewrite /(`<<`) /(`>>`) !W8.of_uintK.
+    have h : 0 <= i < `|W8.modulus|.
+    + by rewrite /=; smt (size_le_256).
+    rewrite !(modz_small _ W8.modulus) 1:// 1:[smt (size_le_256)] !modz_small 1,2:/#.
+    by rewrite rol_xor 1:/#.
   qed.
 
 end BitWordSH.
@@ -1404,4 +1488,842 @@ lemma foo (x y:W128.t) (x1 x2 y1 y2:W64.t):
   x `|` y = pack2 [x1 `|` y1; x2 `|` y2].
 proof. move=> -> -> /=.
 *)
+
+lemma divmod_mul n d i j : 
+  0 < n => 
+  0 <= j < d =>  
+  (i * d + j) %/ (n * d) = i%/ n /\ (i * d + j) %% (n * d) = i %% n * d + j.
+proof.
+  move=> hn hj.
+  have -> : i * d + j = (i %/ n) * (n * d) + (d * (i %% n) + j).
+  + have [h1 h2]:= edivzP i n.
+    by rewrite {1 2} h1 divzMDl 1:/# (divz_small (i%%n) n) 1:/# /=; ring.
+  rewrite divzMDl 1:/# modzMDl.
+  have hb: 0 <= d * (i %% n) + j < `|n * d|. 
+  + have := modz_cmp i n hn.
+    have -> : `|n * d| = n * d by smt().
+    have -> h : n * d = (n-1) * d + d by ring.
+    split;1: smt(); move=> ?. 
+    apply ler_lt_add; 2:smt().
+    by rewrite mulzC ler_pmul2r /#.
+  by rewrite (divz_small _ (n*d)) 1://  (modz_small _ (n*d)) 1:// /=; ring.
+qed.
+
+(* --------------------------------------------------------------------------------- *)
+(* Lemmas on \bits8                                                                  *)
+(* --------------------------------------------------------------------------------- *)
+
+lemma bits8_W2u16 ws i : 
+  W2u16.pack2_t ws \bits8 i = if 0 <= i < 4 then ws.[i%/2] \bits8 (i%%2) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 4) => /= hi; last by rewrite W32.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 2 8 i j _ hj; 1 :done; rewrite W2u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W2u16_red ws i : 
+  0 <= i < 4 => W2u16.pack2_t ws \bits8 i = ws.[i%/2] \bits8 (i%%2).
+proof. by move=> h;rewrite bits8_W2u16 h. qed.
+
+lemma bits8_W4u16 ws i : 
+  W4u16.pack4_t ws \bits8 i = if 0 <= i < 8 then ws.[i%/2] \bits8 (i%%2) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 8) => /= hi; last by rewrite W64.get_out 1:/#.
+  rewrite pack4wE 1:/#; have /= [-> ->] := divmod_mul 2 8 i j _ hj; 1:done; rewrite W2u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W4u16_red ws i : 
+  0 <= i < 8 => W4u16.pack4_t ws \bits8 i = ws.[i%/2] \bits8 (i%%2).
+proof. by move=> h;rewrite bits8_W4u16 h. qed.
+
+lemma bits8_W8u16 ws i : 
+  W8u16.pack8_t ws \bits8 i = if 0 <= i < 16 then ws.[i%/2] \bits8 (i%%2) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 16) => /= hi; last by rewrite W128.get_out 1:/#.
+  rewrite pack8wE 1:/#; have [-> ->] := divmod_mul 2 8 i j _ hj; 1: done; rewrite W2u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W8u16_red ws i : 
+  0 <= i < 16 => W8u16.pack8_t ws \bits8 i = ws.[i%/2] \bits8 (i%%2).
+proof. by move=> h;rewrite bits8_W8u16 h. qed.
+
+lemma bits8_W16u16 ws i : 
+  W16u16.pack16_t ws \bits8 i = if 0 <= i < 32 then ws.[i%/2] \bits8 (i%%2) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 32) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack16wE 1:/#; have [-> ->] := divmod_mul 2 8 i j _ hj; 1: done; rewrite W2u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W16u16_red ws i : 
+  0 <= i < 32 => W16u16.pack16_t ws \bits8 i = ws.[i%/2] \bits8 (i%%2).
+proof. by move=> h;rewrite bits8_W16u16 h. qed.
+
+hint simplify bits8_W2u16_red, bits8_W4u16_red, bits8_W8u16_red, bits8_W16u16_red.
+
+lemma bits8_W2u32 ws i : 
+  W2u32.pack2_t ws \bits8 i = if 0 <= i < 8 then ws.[i%/4] \bits8 (i%%4) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 8) => /= hi; last by rewrite W64.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 4 8 i j _ hj; 1: done; rewrite W4u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W2u32_red ws i : 
+  0 <= i < 8 => W2u32.pack2_t ws \bits8 i = ws.[i%/4] \bits8 (i%%4).
+proof. by move=> h;rewrite bits8_W2u32 h. qed.
+
+lemma bits8_W4u32 ws i : 
+  W4u32.pack4_t ws \bits8 i = if 0 <= i < 16 then ws.[i%/4] \bits8 (i%%4) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 16) => /= hi; last by rewrite W128.get_out 1:/#.
+  rewrite pack4wE 1:/#; have /= [-> ->] := divmod_mul 4 8 i j _ hj; 1: done; rewrite W4u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W4u32_red ws i : 
+  0 <= i < 16 => W4u32.pack4_t ws \bits8 i = ws.[i%/4] \bits8 (i%%4).
+proof. by move=> h;rewrite bits8_W4u32 h. qed.
+
+lemma bits8_W8u32 ws i : 
+  W8u32.pack8_t ws \bits8 i = if 0 <= i < 32 then ws.[i%/4] \bits8 (i%%4) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 32) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack8wE 1:/#; have /= [-> ->] := divmod_mul 4 8 i j _ hj; 1: done; rewrite W4u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W8u32_red ws i : 
+  0 <= i < 32 => W8u32.pack8_t ws \bits8 i = ws.[i%/4] \bits8 (i%%4).
+proof. by move=> h;rewrite bits8_W8u32 h. qed.
+
+hint simplify bits8_W2u32_red, bits8_W4u32_red, bits8_W8u32_red.
+
+lemma bits8_W2u64 ws i : 
+  W2u64.pack2_t ws \bits8 i = if 0 <= i < 16 then ws.[i%/8] \bits8 (i%%8) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 16) => /= hi; last by rewrite W128.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 8 8 i j _ hj; 1: done; rewrite W8u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W2u64_red ws i : 
+  0 <= i < 16 => W2u64.pack2_t ws \bits8 i = ws.[i%/8] \bits8 (i%%8).
+proof. by move=> h;rewrite bits8_W2u64 h. qed.
+
+lemma bits8_W4u64 ws i : 
+  W4u64.pack4_t ws \bits8 i = if 0 <= i < 32 then ws.[i%/8] \bits8 (i%%8) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 32) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack4wE 1:/#; have /= [-> ->] := divmod_mul 8 8 i j _ hj; 1: done; rewrite W8u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W4u64_red ws i : 
+  0 <= i < 32 => W4u64.pack4_t ws \bits8 i = ws.[i%/8] \bits8 (i%%8).
+proof. by move=> h;rewrite bits8_W4u64 h. qed.
+
+hint simplify bits8_W2u64_red, bits8_W4u64_red.
+
+lemma bits8_W2u128 ws i : 
+  W2u128.pack2_t ws \bits8 i = if 0 <= i < 32 then ws.[i%/16] \bits8 (i%%16) else W8.zero.
+proof.
+  apply W8.wordP => j hj; rewrite !bits8iE 1,2://. 
+  case: (0 <= i < 32) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 16 8 i j _ hj; 1: done; rewrite W16u8.bits8iE 1:// /#.
+qed.
+
+lemma bits8_W2u128_red ws i : 
+  0 <= i < 32 => W2u128.pack2_t ws \bits8 i = ws.[i%/16] \bits8 (i%%16).
+proof. by move=> h;rewrite bits8_W2u128 h. qed.
+
+hint simplify bits8_W2u128_red.
+
+lemma W32_bits16_bits8 (w:W32.t) i j: 0 <= j < 2 => w \bits16 i \bits8 j = w \bits8 (2 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits16iE 1:/#; congr; ring.
+qed.
+
+lemma W64_bits16_bits8 (w:W64.t) i j: 0 <= j < 2 => w \bits16 i \bits8 j = w \bits8 (2 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits16iE 1:/#; congr; ring.
+qed.
+
+lemma W128_bits16_bits8 (w:W128.t) i j: 0 <= j < 2 => w \bits16 i \bits8 j = w \bits8 (2 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits16iE 1:/#; congr; ring.
+qed.
+
+lemma W256_bits16_bits8 (w:W256.t) i j: 0 <= j < 2 => w \bits16 i \bits8 j = w \bits8 (2 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits16iE 1:/#; congr; ring.
+qed.
+
+hint simplify W32_bits16_bits8, W64_bits16_bits8, W128_bits16_bits8, W256_bits16_bits8.
+
+lemma W64_bits32_bits8 (w:W64.t) i j: 0 <= j < 4 => w \bits32 i \bits8 j = w \bits8 (4 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits32iE 1:/#; congr; ring.
+qed.
+
+lemma W128_bits32_bits8 (w:W128.t) i j: 0 <= j < 4 => w \bits32 i \bits8 j = w \bits8 (4 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits32iE 1:/#; congr; ring.
+qed.
+
+lemma W256_bits32_bits8 (w:W256.t) i j: 0 <= j < 4 => w \bits32 i \bits8 j = w \bits8 (4 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits32iE 1:/#; congr; ring.
+qed.
+
+hint simplify W64_bits32_bits8, W128_bits32_bits8, W256_bits32_bits8.
+ 
+lemma W128_bits64_bits8 (w:W128.t) i j: 0 <= j < 8 => w \bits64 i \bits8 j = w \bits8 (8 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits64iE 1:/#; congr; ring.
+qed.
+
+lemma W256_bits64_bits8 (w:W256.t) i j: 0 <= j < 8 => w \bits64 i \bits8 j = w \bits8 (8 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits64iE 1:/#; congr; ring.
+qed.
+
+hint simplify W128_bits64_bits8, W256_bits64_bits8.
+
+lemma W256_bits128_bits8 (w:W256.t) i j: 0 <= j < 8 => w \bits128 i \bits8 j = w \bits8 (16 * i + j).
+proof.
+  move=> hj; apply W8.wordP => k hk.
+  by rewrite !bits8iE 1,2:// bits128iE 1:/#; congr; ring.
+qed.
+
+hint simplify W256_bits128_bits8.
+
+(* --------------------------------------------------------------------------------- *)
+(* Lemmas on \bits16                                                                  *)
+(* --------------------------------------------------------------------------------- *)
+  
+lemma bits16_W4u8 ws i : 
+  W4u8.pack4_t ws \bits16 i = if 0 <= i < 2 then W2u8.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W16.zero.
+proof.
+  apply W2u8.wordP => j hj.
+  rewrite W32_bits16_bits8 1://.
+  case: (0 <= i < 2) => hi; last by rewrite W2u8.get_zero W4u8.get_out 1:/#.
+  rewrite /= W2u8.pack2bE 1:// /= W4u8.pack4bE 1:/#.
+  by have []-> : j = 0 \/ j = 1 by smt().
+qed.
+
+lemma bits16_W4u8_red ws i : 
+  0 <= i < 2 => W4u8.pack4_t ws \bits16 i = W2u8.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits16_W4u8 h. qed.
+
+lemma bits16_W8u8 ws i : 
+  W8u8.pack8_t ws \bits16 i = if 0 <= i < 4 then W2u8.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W16.zero.
+proof.
+  apply W2u8.wordP => j hj.
+  rewrite W64_bits16_bits8 1://.
+  case: (0 <= i < 4) => hi; last by rewrite W2u8.get_zero W8u8.get_out 1:/#.
+  rewrite /= W2u8.pack2bE 1:// /= W8u8.pack8bE 1:/#.
+  have []-> //: j = 0 \/ j = 1 by smt().
+qed.
+
+lemma bits16_W8u8_red ws i : 
+  0 <= i < 4 => W8u8.pack8_t ws \bits16 i = W2u8.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits16_W8u8 h. qed.
+
+lemma bits16_W16u8 ws i : 
+  W16u8.pack16_t ws \bits16 i = if 0 <= i < 8 then W2u8.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W16.zero.
+proof.
+  apply W2u8.wordP => j hj.
+  rewrite W128_bits16_bits8 1://.
+  case: (0 <= i < 8) => hi; last by rewrite W2u8.get_zero W16u8.get_out 1:/#.
+  rewrite /= W2u8.pack2bE 1:// /= W16u8.pack16bE 1:/#.
+  have []-> //: j = 0 \/ j = 1 by smt().
+qed.
+
+lemma bits16_W16u8_red ws i : 
+  0 <= i < 8 => W16u8.pack16_t ws \bits16 i = W2u8.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits16_W16u8 h. qed.
+
+lemma bits16_W32u8 ws i : 
+  W32u8.pack32_t ws \bits16 i = if 0 <= i < 16 then W2u8.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W16.zero.
+proof.
+  apply W2u8.wordP => j hj.
+  rewrite W256_bits16_bits8 1://.
+  case: (0 <= i < 16) => hi; last by rewrite W2u8.get_zero W32u8.get_out 1:/#.
+  rewrite /= W2u8.pack2bE 1:// /= W32u8.pack32bE 1:/#.
+  have []-> //: j = 0 \/ j = 1 by smt().
+qed.
+
+lemma bits16_W32u8_red ws i : 
+  0 <= i < 16 => W32u8.pack32_t ws \bits16 i = W2u8.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits16_W32u8 h. qed.
+
+hint simplify bits16_W4u8_red, bits16_W8u8_red, bits16_W16u8_red, bits16_W32u8.
+
+lemma bits16_W2u32 ws i : 
+  W2u32.pack2_t ws \bits16 i = if 0 <= i < 4 then ws.[i%/2] \bits16 (i%%2) else W16.zero.
+proof.
+  apply W16.wordP => j hj; rewrite !bits16iE 1,2://. 
+  case: (0 <= i < 4) => /= hi; last by rewrite W64.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 2 16 i j _ hj; 1: done; rewrite W2u16.bits16iE 1:// /#.
+qed.
+
+lemma bits16_W2u32_red ws i : 
+  0 <= i < 4 => W2u32.pack2_t ws \bits16 i = ws.[i%/2] \bits16 (i%%2).
+proof. by move=> h;rewrite bits16_W2u32 h. qed.
+
+lemma bits16_W4u32 ws i : 
+  W4u32.pack4_t ws \bits16 i = if 0 <= i < 8 then ws.[i%/2] \bits16 (i%%2) else W16.zero.
+proof.
+  apply W16.wordP => j hj; rewrite !bits16iE 1,2://. 
+  case: (0 <= i < 8) => /= hi; last by rewrite W128.get_out 1:/#.
+  rewrite pack4wE 1:/#; have /= [-> ->] := divmod_mul 2 16 i j _ hj; 1: done; rewrite W2u16.bits16iE 1:// /#.
+qed.
+
+lemma bits16_W4u32_red ws i : 
+  0 <= i < 8 => W4u32.pack4_t ws \bits16 i = ws.[i%/2] \bits16 (i%%2).
+proof. by move=> h;rewrite bits16_W4u32 h. qed.
+
+lemma bits16_W8u32 ws i : 
+  W8u32.pack8_t ws \bits16 i = if 0 <= i < 16 then ws.[i%/2] \bits16 (i%%2) else W16.zero.
+proof.
+  apply W16.wordP => j hj; rewrite !bits16iE 1,2://. 
+  case: (0 <= i < 16) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack8wE 1:/#; have /= [-> ->] := divmod_mul 2 16 i j _ hj; 1: done; rewrite W2u16.bits16iE 1:// /#.
+qed.
+
+lemma bits16_W8u32_red ws i : 
+  0 <= i < 16 => W8u32.pack8_t ws \bits16 i = ws.[i%/2] \bits16 (i%%2).
+proof. by move=> h;rewrite bits16_W8u32 h. qed.
+  
+hint simplify bits16_W2u32_red, bits16_W4u32_red, bits16_W8u32_red.
+
+lemma bits16_W2u64 ws i : 
+  W2u64.pack2_t ws \bits16 i = if 0 <= i < 8 then ws.[i%/4] \bits16 (i%%4) else W16.zero.
+proof.
+  apply W16.wordP => j hj; rewrite !bits16iE 1,2://. 
+  case: (0 <= i < 8) => /= hi; last by rewrite W128.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 4 16 i j _ hj; 1: done; rewrite W4u16.bits16iE 1:// /#.
+qed.
+
+lemma bits16_W2u64_red ws i : 
+  0 <= i < 8 => W2u64.pack2_t ws \bits16 i = ws.[i%/4] \bits16 (i%%4).
+proof. by move=> h;rewrite bits16_W2u64 h. qed.
+
+lemma bits16_W4u64 ws i : 
+  W4u64.pack4_t ws \bits16 i = if 0 <= i < 16 then ws.[i%/4] \bits16 (i%%4) else W16.zero.
+proof.
+  apply W16.wordP => j hj; rewrite !bits16iE 1,2://. 
+  case: (0 <= i < 16) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack4wE 1:/#; have /= [-> ->] := divmod_mul 4 16 i j _ hj; 1: done; rewrite W4u16.bits16iE 1:// /#.
+qed.
+
+lemma bits16_W4u64_red ws i : 
+  0 <= i < 16 => W4u64.pack4_t ws \bits16 i = ws.[i%/4] \bits16 (i%%4).
+proof. by move=> h;rewrite bits16_W4u64 h. qed.
+
+hint simplify bits16_W2u64_red, bits16_W4u64_red.
+
+lemma bits16_W2u128 ws i : 
+  W2u128.pack2_t ws \bits16 i = if 0 <= i < 16 then ws.[i%/8] \bits16 (i%%8) else W16.zero.
+proof.
+  apply W16.wordP => j hj; rewrite !bits16iE 1,2://. 
+  case: (0 <= i < 16) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 8 16 i j _ hj; 1: done; rewrite W8u16.bits16iE 1:// /#.
+qed.
+
+lemma bits16_W2u128_red ws i : 
+  0 <= i < 16 => W2u128.pack2_t ws \bits16 i = ws.[i%/8] \bits16 (i%%8).
+proof.  by move=> h;rewrite bits16_W2u128 h. qed.
+
+hint simplify bits16_W2u128_red.
+
+lemma W64_bits32_bits16 (w:W64.t) i j: 0 <= j < 2 => w \bits32 i \bits16 j = w \bits16 (2 * i + j).
+proof.
+  move=> hj; apply W16.wordP => k hk.
+  by rewrite !bits16iE 1,2:// bits32iE 1:/#; congr; ring.
+qed.
+
+lemma W128_bits32_bits16 (w:W128.t) i j: 0 <= j < 2 => w \bits32 i \bits16 j = w \bits16 (2 * i + j).
+proof.
+  move=> hj; apply W16.wordP => k hk.
+  by rewrite !bits16iE 1,2:// bits32iE 1:/#; congr; ring.
+qed.
+
+lemma W256_bits32_bits16 (w:W256.t) i j: 0 <= j < 2 => w \bits32 i \bits16 j = w \bits16 (2 * i + j).
+proof.
+  move=> hj; apply W16.wordP => k hk.
+  by rewrite !bits16iE 1,2:// bits32iE 1:/#; congr; ring.
+qed.
+
+hint simplify W64_bits32_bits16, W128_bits32_bits16, W256_bits32_bits16. 
+
+lemma W128_bits64_bits16 (w:W128.t) i j: 0 <= j < 4 => w \bits64 i \bits16 j = w \bits16 (4 * i + j).
+proof.
+  move=> hj; apply W16.wordP => k hk.
+  by rewrite !bits16iE 1,2:// bits64iE 1:/#; congr; ring.
+qed.
+
+lemma W256_bits64_bits16 (w:W256.t) i j: 0 <= j < 4 => w \bits64 i \bits16 j = w \bits16 (4 * i + j).
+proof.
+  move=> hj; apply W16.wordP => k hk.
+  by rewrite !bits16iE 1,2:// bits64iE 1:/#; congr; ring.
+qed.
+
+lemma W256_bits128_bits16 (w:W256.t) i j: 0 <= j < 8 => w \bits128 i \bits16 j = w \bits16 (8 * i + j).
+proof.
+  move=> hj; apply W16.wordP => k hk.
+  by rewrite !bits16iE 1,2:// bits128iE 1:/#; congr; ring.
+qed.
+
+hint simplify W128_bits64_bits16, W256_bits64_bits16, W256_bits128_bits16.
+
+(* --------------------------------------------------------------------------------- *)
+(* Lemmas on \bits32                                                                  *)
+(* --------------------------------------------------------------------------------- *)
+  
+lemma bits32_W8u8 ws i : 
+  W8u8.pack8_t ws \bits32 i = 
+    if 0 <= i < 2 then W4u8.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ] else W32.zero.
+proof.
+  apply W4u8.wordP => j hj.
+  rewrite W64_bits32_bits8 1://.
+  case: (0 <= i < 2) => hi; last by rewrite W4u8.get_zero W8u8.get_out 1:/#.
+  rewrite /= W4u8.pack4bE 1:// /= W8u8.pack8bE 1:/#.
+  by have [|[|[|]]]-> : j = 0 \/ j = 1 \/ j = 2 \/ j = 3 by smt().
+qed.
+
+lemma bits32_W8u8_red ws i : 
+  0 <= i < 2 =>
+  W8u8.pack8_t ws \bits32 i = 
+    W4u8.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ].
+proof. by move=> h;rewrite bits32_W8u8 h. qed.
+
+lemma bits32_W16u8 ws i : 
+  W16u8.pack16_t ws \bits32 i = 
+    if 0 <= i < 4 then W4u8.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ] else W32.zero.
+proof.
+  apply W4u8.wordP => j hj.
+  rewrite W128_bits32_bits8 1://.
+  case: (0 <= i < 4) => hi; last by rewrite W4u8.get_zero W16u8.get_out 1:/#.
+  rewrite /= W4u8.pack4bE 1:// /= W16u8.pack16bE 1:/#.
+  by have [|[|[|]]]-> : j = 0 \/ j = 1 \/ j = 2 \/ j = 3 by smt().
+qed.
+
+lemma bits32_W16u8_red ws i : 
+  0 <= i < 4 =>
+  W16u8.pack16_t ws \bits32 i = 
+    W4u8.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ].
+proof. by move=> h;rewrite bits32_W16u8 h. qed.
+
+lemma bits32_W32u8 ws i : 
+  W32u8.pack32_t ws \bits32 i = 
+    if 0 <= i < 8 then W4u8.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ] else W32.zero.
+proof.
+  apply W4u8.wordP => j hj.
+  rewrite W256_bits32_bits8 1://.
+  case: (0 <= i < 8) => hi; last by rewrite W4u8.get_zero W32u8.get_out 1:/#.
+  rewrite /= W4u8.pack4bE 1:// /= W32u8.pack32bE 1:/#.
+  by have [|[|[|]]]-> : j = 0 \/ j = 1 \/ j = 2 \/ j = 3 by smt().
+qed.
+
+lemma bits32_W32u8_red ws i : 
+  0 <= i < 8 =>
+  W32u8.pack32_t ws \bits32 i = 
+    W4u8.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ].
+proof. by move=> h;rewrite bits32_W32u8 h. qed.
+
+hint simplify bits32_W8u8_red, bits32_W16u8_red, bits32_W32u8_red.
+
+lemma bits32_W4u16 ws i : 
+  W4u16.pack4_t ws \bits32 i = 
+    if 0 <= i < 2 then W2u16.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W32.zero.
+proof.
+  apply W2u16.wordP => j hj.
+  rewrite W64_bits32_bits16 1://.
+  case: (0 <= i < 2) => hi; last by rewrite W2u16.get_zero W4u16.get_out 1:/#.
+  rewrite /= W2u16.pack2bE 1:// /= W4u16.pack4bE 1:/#.
+  by have []-> : j = 0 \/ j = 1 by smt().
+qed.
+
+lemma bits32_W4u16_red ws i : 
+  0 <= i < 2 => 
+  W4u16.pack4_t ws \bits32 i = W2u16.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits32_W4u16 h. qed.
+
+lemma bits32_W8u16 ws i : 
+  W8u16.pack8_t ws \bits32 i = 
+    if 0 <= i < 4 then W2u16.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W32.zero.
+proof.
+  apply W2u16.wordP => j hj.
+  rewrite W128_bits32_bits16 1://.
+  case: (0 <= i < 4) => hi; last by rewrite W2u16.get_zero W8u16.get_out 1:/#.
+  rewrite /= W2u16.pack2bE 1:// /= W8u16.pack8bE 1:/#.
+  by have []-> : j = 0 \/ j = 1 by smt().
+qed.
+
+lemma bits32_W8u16_red ws i : 
+  0 <= i < 4 =>
+  W8u16.pack8_t ws \bits32 i = W2u16.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits32_W8u16 h. qed.
+
+lemma bits32_W16u16 ws i : 
+  W16u16.pack16_t ws \bits32 i = 
+    if 0 <= i < 8 then W2u16.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W32.zero.
+proof.
+  apply W2u16.wordP => j hj.
+  rewrite W256_bits32_bits16 1://.
+  case: (0 <= i < 8) => hi; last by rewrite W2u16.get_zero W16u16.get_out 1:/#.
+  rewrite /= W2u16.pack2bE 1:// /= W16u16.pack16bE 1:/#.
+  by have []-> : j = 0 \/ j = 1 by smt().
+qed.
+
+lemma bits32_W16u16_red ws i : 
+  0 <= i < 8 => 
+  W16u16.pack16_t ws \bits32 i = W2u16.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits32_W16u16 h. qed.
+
+hint simplify bits32_W4u16_red, bits32_W8u16_red, bits32_W16u16_red.
+
+lemma bits32_W2u64 ws i :
+  W2u64.pack2_t ws \bits32 i = if 0 <= i < 4 then ws.[i%/2] \bits32 (i%%2) else W32.zero.
+proof.
+  apply W32.wordP => j hj; rewrite !bits32iE 1,2://. 
+  case: (0 <= i < 4) => /= hi; last by rewrite W128.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 2 32 i j _ hj; 1: done; rewrite W2u32.bits32iE 1:// /#.
+qed.
+
+lemma bits32_W2u64_red ws i :
+  0 <= i < 4 => W2u64.pack2_t ws \bits32 i = ws.[i%/2] \bits32 (i%%2).
+proof. by move=> h;rewrite bits32_W2u64 h. qed.
+
+lemma bits32_W4u64 ws i :
+  W4u64.pack4_t ws \bits32 i = if 0 <= i < 8 then ws.[i%/2] \bits32 (i%%2) else W32.zero.
+proof.
+  apply W32.wordP => j hj; rewrite !bits32iE 1,2://. 
+  case: (0 <= i < 8) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack4wE 1:/#; have /= [-> ->] := divmod_mul 2 32 i j _ hj; 1: done; rewrite W2u32.bits32iE 1:// /#.
+qed.
+
+lemma bits32_W4u64_red ws i :
+  0 <= i < 8 => W4u64.pack4_t ws \bits32 i = ws.[i%/2] \bits32 (i%%2).
+proof. by move=> h;rewrite bits32_W4u64 h. qed.
+
+hint simplify bits32_W2u64_red, bits32_W4u64_red.
+
+lemma bits32_W2u128 ws i :
+  W2u128.pack2_t ws \bits32 i = if 0 <= i < 8 then ws.[i%/4] \bits32 (i%%4) else W32.zero.
+proof.
+  apply W32.wordP => j hj; rewrite !bits32iE 1,2://. 
+  case: (0 <= i < 8) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 4 32 i j _ hj; 1: done; rewrite W4u32.bits32iE 1:// /#.
+qed.
+
+lemma bits32_W2u128_red ws i :
+  0 <= i < 8 => W2u128.pack2_t ws \bits32 i = ws.[i%/4] \bits32 (i%%4).
+proof. by move=> h;rewrite bits32_W2u128 h. qed.
+
+hint simplify bits32_W2u128_red.
+
+lemma W128_bits64_bits32 (w:W128.t) i j: 0 <= j < 2 => w \bits64 i \bits32 j = w \bits32 (2 * i + j).
+proof.
+  move=> hj; apply W32.wordP => k hk.
+  by rewrite !bits32iE 1,2:// bits64iE 1:/#; congr; ring.
+qed.
+
+lemma W256_bits64_bits32 (w:W256.t) i j: 0 <= j < 2 => w \bits64 i \bits32 j = w \bits32 (2 * i + j).
+proof.
+  move=> hj; apply W32.wordP => k hk.
+  by rewrite !bits32iE 1,2:// bits64iE 1:/#; congr; ring.
+qed.
+
+lemma W256_bits128_bits32 (w:W256.t) i j: 0 <= j < 4 => w \bits128 i \bits32 j = w \bits32 (4 * i + j).
+proof.
+  move=> hj; apply W32.wordP => k hk.
+  by rewrite !bits32iE 1,2:// bits128iE 1:/#; congr; ring.
+qed.
+
+hint simplify W128_bits64_bits32, W256_bits64_bits32, W256_bits128_bits32.
+
+(* --------------------------------------------------------------------------------- *)
+(* Lemmas on \bits64                                                                 *)
+(* --------------------------------------------------------------------------------- *)
+
+lemma bits64_W16u8 ws i : 
+  W16u8.pack16_t ws \bits64 i = 
+    if 0 <= i < 2 then W8u8.pack8 [ws.[8 * i]; ws.[8 * i + 1]; ws.[8 * i + 2]; ws.[8 * i + 3];
+                                   ws.[8 * i + 4]; ws.[8 * i + 5]; ws.[8 * i + 6]; ws.[8 * i + 7]]
+    else W64.zero.
+proof.
+  apply W8u8.wordP => j hj.
+  rewrite W128_bits64_bits8 1://.
+  case: (0 <= i < 2) => hi; last by rewrite W8u8.get_zero W16u8.get_out 1:/#.
+  rewrite /= W8u8.pack8bE 1:// /= W16u8.pack16bE 1:/#.
+  by move: hj; rewrite -(mema_iota 0 8) /= => -[|[|[|[|[|[|[|]]]]]]] ->.
+qed.
+
+lemma bits64_W16u8_red ws i : 
+  0 <= i < 2 =>
+  W16u8.pack16_t ws \bits64 i = 
+    W8u8.pack8 [ws.[8 * i]; ws.[8 * i + 1]; ws.[8 * i + 2]; ws.[8 * i + 3];
+                ws.[8 * i + 4]; ws.[8 * i + 5]; ws.[8 * i + 6]; ws.[8 * i + 7]].
+proof. by move=> h;rewrite bits64_W16u8 h. qed.
+
+lemma bits64_W32u8 ws i : 
+  W32u8.pack32_t ws \bits64 i = 
+    if 0 <= i < 4 then W8u8.pack8 [ws.[8 * i]; ws.[8 * i + 1]; ws.[8 * i + 2]; ws.[8 * i + 3];
+                                   ws.[8 * i + 4]; ws.[8 * i + 5]; ws.[8 * i + 6]; ws.[8 * i + 7]]
+    else W64.zero.
+proof.
+  apply W8u8.wordP => j hj.
+  rewrite W256_bits64_bits8 1://.
+  case: (0 <= i < 4) => hi; last by rewrite W8u8.get_zero W32u8.get_out 1:/#.
+  rewrite /= W8u8.pack8bE 1:// /= W32u8.pack32bE 1:/#.
+  by move: hj; rewrite -(mema_iota 0 8) /= => -[|[|[|[|[|[|[|]]]]]]] ->.
+qed.
+
+lemma bits64_W32u8_red ws i : 
+  0 <= i < 4 =>
+  W32u8.pack32_t ws \bits64 i = 
+    W8u8.pack8 [ws.[8 * i]; ws.[8 * i + 1]; ws.[8 * i + 2]; ws.[8 * i + 3];
+                ws.[8 * i + 4]; ws.[8 * i + 5]; ws.[8 * i + 6]; ws.[8 * i + 7]].
+proof. by move=> h;rewrite bits64_W32u8 h. qed.
+
+hint simplify bits64_W16u8_red, bits64_W32u8_red.
+
+lemma bits64_W8u16 ws i : 
+  W8u16.pack8_t ws \bits64 i = 
+    if 0 <= i < 2 then W4u16.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ] else W64.zero.
+proof.
+  apply W4u16.wordP => j hj.
+  rewrite W128_bits64_bits16 1://.
+  case: (0 <= i < 2) => hi; last by rewrite W4u16.get_zero W8u16.get_out 1:/#.
+  rewrite /= W4u16.pack4bE 1:// /= W8u16.pack8bE 1:/#.
+  by have [|[|[|]]]-> : j = 0 \/ j = 1 \/ j = 2 \/ j = 3 by smt().
+qed.
+
+lemma bits64_W8u16_red ws i : 
+  0 <= i < 2 => 
+  W8u16.pack8_t ws \bits64 i = 
+    W4u16.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ].
+proof. by move=> h;rewrite bits64_W8u16 h. qed.
+
+lemma bits64_W16u16 ws i : 
+  W16u16.pack16_t ws \bits64 i = 
+    if 0 <= i < 4 then W4u16.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ] else W64.zero.
+proof.
+  apply W4u16.wordP => j hj.
+  rewrite W256_bits64_bits16 1://.
+  case: (0 <= i < 4) => hi; last by rewrite W4u16.get_zero W16u16.get_out 1:/#.
+  rewrite /= W4u16.pack4bE 1:// /= W16u16.pack16bE 1:/#.
+  by have [|[|[|]]]-> : j = 0 \/ j = 1 \/ j = 2 \/ j = 3 by smt().
+qed.
+
+lemma bits64_W16u16_red ws i : 
+  0 <= i < 4 => 
+  W16u16.pack16_t ws \bits64 i = 
+    W4u16.pack4 [ws.[4 * i]; ws.[4 * i + 1]; ws.[4 * i + 2]; ws.[4 * i + 3] ].
+proof. by move=> h;rewrite bits64_W16u16 h. qed.
+
+hint simplify bits64_W8u16_red, bits64_W16u16_red.
+
+lemma bits64_W4u32 ws i :
+  W4u32.pack4_t ws \bits64 i = 
+    if 0 <= i < 2 then W2u32.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W64.zero.
+proof.
+  apply W2u32.wordP => j hj.
+  rewrite W128_bits64_bits32 1://.
+  case: (0 <= i < 2) => hi; last by rewrite W2u32.get_zero W4u32.get_out 1:/#.
+  rewrite /= W2u32.pack2bE 1:// /= W4u32.pack4bE 1:/#.
+  by have [|]-> : j = 0 \/ j = 1 by smt().
+qed.  
+
+lemma bits64_W4u32_red ws i :
+  0 <= i < 2 =>
+  W4u32.pack4_t ws \bits64 i = W2u32.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits64_W4u32 h. qed.
+
+lemma bits64_W8u32 ws i :
+  W8u32.pack8_t ws \bits64 i = 
+    if 0 <= i < 4 then W2u32.pack2 [ws.[2 * i]; ws.[2 * i + 1]] else W64.zero.
+proof.
+  apply W2u32.wordP => j hj.
+  rewrite W256_bits64_bits32 1://.
+  case: (0 <= i < 4) => hi; last by rewrite W2u32.get_zero W8u32.get_out 1:/#.
+  rewrite /= W2u32.pack2bE 1:// /= W8u32.pack8bE 1:/#.
+  have [|]-> //= : j = 0 \/ j = 1 by smt().
+qed.  
+
+lemma bits64_W8u32_red ws i :
+  0 <= i < 4 => 
+  W8u32.pack8_t ws \bits64 i = W2u32.pack2 [ws.[2 * i]; ws.[2 * i + 1]].
+proof. by move=> h;rewrite bits64_W8u32 h. qed.
+
+hint simplify bits64_W4u32_red, bits64_W8u32_red.
+
+lemma bits64_W2u128 ws i : 
+  W2u128.pack2_t ws \bits64 i = if 0 <= i < 4 then ws.[i%/2] \bits64 (i%%2) else W64.zero.
+proof.
+  apply W64.wordP => j hj; rewrite !bits64iE 1,2://. 
+  case: (0 <= i < 4) => /= hi; last by rewrite W256.get_out 1:/#.
+  rewrite pack2wE 1:/#; have /= [-> ->] := divmod_mul 2 64 i j _ hj; 1: done; rewrite W2u64.bits64iE 1:// /#.
+qed.
+
+lemma bits64_W2u128_red ws i : 
+  0 <= i < 4 => W2u128.pack2_t ws \bits64 i = ws.[i%/2] \bits64 (i%%2).
+proof. by move=> h;rewrite bits64_W2u128 h. qed.
+
+hint simplify bits64_W2u128_red.
+
+lemma W256_bits128_bits64 (w:W256.t) i j: 0 <= j < 2 => w \bits128 i \bits64 j = w \bits64 (2 * i + j).
+proof.
+  move=> hj; apply W64.wordP => k hk.
+  by rewrite !bits64iE 1,2:// bits128iE 1:/#; congr; ring.
+qed.
+
+hint simplify W256_bits128_bits64.
+
+(* --------------------------------------------------------------------------------- *)
+(* Lemmas on pack                                                                    *)
+(* --------------------------------------------------------------------------------- *)
+
+lemma W2u16_W4u8 ws1 ws2 : 
+  pack2 [W2u8.pack2_t ws1; W2u8.pack2_t ws2] = pack4 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]].
+proof. by apply W4u8.allP => /=. qed.
+
+lemma W4u16_W8u8 ws1 ws2 ws3 ws4 :
+  pack4 [W2u8.pack2_t ws1; W2u8.pack2_t ws2; W2u8.pack2_t ws3; W2u8.pack2_t ws4] = 
+  pack8 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]; ws3.[0]; ws3.[1]; ws4.[0]; ws4.[1]].
+proof. by apply W8u8.allP => /=. qed.
+
+lemma W8u16_W16u8 ws1 ws2 ws3 ws4 ws5 ws6 ws7 ws8:
+  pack8 [W2u8.pack2_t ws1; W2u8.pack2_t ws2; W2u8.pack2_t ws3; W2u8.pack2_t ws4;
+         W2u8.pack2_t ws5; W2u8.pack2_t ws6; W2u8.pack2_t ws7; W2u8.pack2_t ws8 ] = 
+  pack16 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]; ws3.[0]; ws3.[1]; ws4.[0]; ws4.[1];
+         ws5.[0]; ws5.[1]; ws6.[0]; ws6.[1]; ws7.[0]; ws7.[1]; ws8.[0]; ws8.[1]].
+proof. by apply W16u8.allP => /=. qed.
+
+lemma W16u16_W32u8 ws1 ws2 ws3 ws4 ws5 ws6 ws7 ws8 ws9 ws10 ws11 ws12 ws13 ws14 ws15 ws16:
+  pack16 [W2u8.pack2_t ws1; W2u8.pack2_t ws2; W2u8.pack2_t ws3; W2u8.pack2_t ws4;
+          W2u8.pack2_t ws5; W2u8.pack2_t ws6; W2u8.pack2_t ws7; W2u8.pack2_t ws8;
+          W2u8.pack2_t ws9; W2u8.pack2_t ws10; W2u8.pack2_t ws11; W2u8.pack2_t ws12;
+          W2u8.pack2_t ws13; W2u8.pack2_t ws14; W2u8.pack2_t ws15; W2u8.pack2_t ws16] = 
+  pack32 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]; ws3.[0]; ws3.[1]; ws4.[0]; ws4.[1];
+          ws5.[0]; ws5.[1]; ws6.[0]; ws6.[1]; ws7.[0]; ws7.[1]; ws8.[0]; ws8.[1];
+          ws9.[0]; ws9.[1]; ws10.[0]; ws10.[1]; ws11.[0]; ws11.[1]; ws12.[0]; ws12.[1];
+          ws13.[0]; ws13.[1]; ws14.[0]; ws14.[1]; ws15.[0]; ws15.[1]; ws16.[0]; ws16.[1]].
+proof. by apply W32u8.allP => /=. qed.
+
+hint simplify W2u16_W4u8, W4u16_W8u8, W8u16_W16u8, W16u16_W32u8.
+
+lemma W2u32_W8u8 ws1 ws2 : 
+  pack2 [W4u8.pack4_t ws1; W4u8.pack4_t ws2] = 
+  pack8 [ws1.[0]; ws1.[1]; ws1.[2]; ws1.[3]; ws2.[0]; ws2.[1]; ws2.[2]; ws2.[3]].
+proof. by apply W8u8.allP => /=. qed.
+
+lemma W4u32_W16u8 ws1 ws2 ws3 ws4 :
+  pack4 [W4u8.pack4_t ws1; W4u8.pack4_t ws2; W4u8.pack4_t ws3; W4u8.pack4_t ws4] = 
+  pack16 [ws1.[0]; ws1.[1]; ws1.[2]; ws1.[3]; ws2.[0]; ws2.[1]; ws2.[2]; ws2.[3];
+          ws3.[0]; ws3.[1]; ws3.[2]; ws3.[3]; ws4.[0]; ws4.[1]; ws4.[2]; ws4.[3]].
+proof. by apply W16u8.allP => /=. qed.
+
+lemma W8u32_W32u8 ws1 ws2 ws3 ws4 ws5 ws6 ws7 ws8:
+  pack8 [W4u8.pack4_t ws1; W4u8.pack4_t ws2; W4u8.pack4_t ws3; W4u8.pack4_t ws4;
+         W4u8.pack4_t ws5; W4u8.pack4_t ws6; W4u8.pack4_t ws7; W4u8.pack4_t ws8 ] = 
+  pack32 [ws1.[0]; ws1.[1]; ws1.[2]; ws1.[3]; ws2.[0]; ws2.[1]; ws2.[2]; ws2.[3];
+          ws3.[0]; ws3.[1]; ws3.[2]; ws3.[3]; ws4.[0]; ws4.[1]; ws4.[2]; ws4.[3];
+          ws5.[0]; ws5.[1]; ws5.[2]; ws5.[3]; ws6.[0]; ws6.[1]; ws6.[2]; ws6.[3];
+          ws7.[0]; ws7.[1]; ws7.[2]; ws7.[3]; ws8.[0]; ws8.[1]; ws8.[2]; ws8.[3]].
+proof. by apply W32u8.allP => /=. qed.
+
+hint simplify W2u32_W8u8, W4u32_W16u8, W8u32_W32u8.
+
+lemma W2u64_W16u8 ws1 ws2:
+  pack2 [W8u8.pack8_t ws1; W8u8.pack8_t ws2] = 
+  pack16 [ws1.[0]; ws1.[1]; ws1.[2]; ws1.[3]; ws1.[4]; ws1.[5]; ws1.[6]; ws1.[7];
+          ws2.[0]; ws2.[1]; ws2.[2]; ws2.[3]; ws2.[4]; ws2.[5]; ws2.[6]; ws2.[7]].
+proof. by apply W16u8.allP => /=. qed.
+
+lemma W4u64_W32u8 ws1 ws2 ws3 ws4:
+  pack4 [W8u8.pack8_t ws1; W8u8.pack8_t ws2; W8u8.pack8_t ws3; W8u8.pack8_t ws4] = 
+  pack32 [ws1.[0]; ws1.[1]; ws1.[2]; ws1.[3]; ws1.[4]; ws1.[5]; ws1.[6]; ws1.[7];
+          ws2.[0]; ws2.[1]; ws2.[2]; ws2.[3]; ws2.[4]; ws2.[5]; ws2.[6]; ws2.[7];
+          ws3.[0]; ws3.[1]; ws3.[2]; ws3.[3]; ws3.[4]; ws3.[5]; ws3.[6]; ws3.[7];
+          ws4.[0]; ws4.[1]; ws4.[2]; ws4.[3]; ws4.[4]; ws4.[5]; ws4.[6]; ws4.[7]].
+proof. by apply W32u8.allP => /=. qed.
+
+hint simplify W2u64_W16u8, W4u64_W32u8.
+
+lemma W2u128_W32u8 ws1 ws2:
+  pack2 [W16u8.pack16_t ws1; W16u8.pack16_t ws2] = 
+  pack32 [ws1.[0]; ws1.[1]; ws1.[2]; ws1.[3]; ws1.[4]; ws1.[5]; ws1.[6]; ws1.[7];
+          ws1.[8]; ws1.[9]; ws1.[10]; ws1.[11]; ws1.[12]; ws1.[13]; ws1.[14]; ws1.[15];
+          ws2.[0]; ws2.[1]; ws2.[2]; ws2.[3]; ws2.[4]; ws2.[5]; ws2.[6]; ws2.[7];
+          ws2.[8]; ws2.[9]; ws2.[10]; ws2.[11]; ws2.[12]; ws2.[13]; ws2.[14]; ws2.[15]].
+proof. by apply W32u8.allP => /=. qed.
+
+hint simplify W2u128_W32u8.
+
+lemma W2u32_W4u16 ws1 ws2 : 
+  pack2 [W2u16.pack2_t ws1; W2u16.pack2_t ws2] = pack4 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]].
+proof. by apply W4u16.allP => /=. qed.
+
+lemma W4u32_W8u16 ws1 ws2 ws3 ws4 :
+  pack4 [W2u16.pack2_t ws1; W2u16.pack2_t ws2; W2u16.pack2_t ws3; W2u16.pack2_t ws4] = 
+  pack8 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]; ws3.[0]; ws3.[1]; ws4.[0]; ws4.[1]].
+proof. by apply W8u16.allP => /=. qed.
+
+lemma W8u32_W16u16 ws1 ws2 ws3 ws4 ws5 ws6 ws7 ws8:
+  pack8 [W2u16.pack2_t ws1; W2u16.pack2_t ws2; W2u16.pack2_t ws3; W2u16.pack2_t ws4;
+         W2u16.pack2_t ws5; W2u16.pack2_t ws6; W2u16.pack2_t ws7; W2u16.pack2_t ws8 ] = 
+  pack16 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]; ws3.[0]; ws3.[1]; ws4.[0]; ws4.[1];
+         ws5.[0]; ws5.[1]; ws6.[0]; ws6.[1]; ws7.[0]; ws7.[1]; ws8.[0]; ws8.[1]].
+proof. by apply W16u16.allP => /=. qed.
+
+hint simplify W2u32_W4u16, W4u32_W8u16, W8u32_W16u16.
+
+lemma W2u64_W8u16 ws1 ws2:
+  pack2 [W4u16.pack4_t ws1; W4u16.pack4_t ws2] = 
+  pack8 [ws1.[0]; ws1.[1]; ws1.[2]; ws1.[3];
+         ws2.[0]; ws2.[1]; ws2.[2]; ws2.[3]].
+proof. by apply W8u16.allP => /=. qed.
+
+lemma W4u64_W16u16 ws1 ws2 ws3 ws4:
+  pack4 [W4u16.pack4_t ws1; W4u16.pack4_t ws2; W4u16.pack4_t ws3; W4u16.pack4_t ws4] = 
+  pack16 [ws1.[0]; ws1.[1]; ws1.[2]; ws1.[3]; ws2.[0]; ws2.[1]; ws2.[2]; ws2.[3];
+          ws3.[0]; ws3.[1]; ws3.[2]; ws3.[3]; ws4.[0]; ws4.[1]; ws4.[2]; ws4.[3]].
+proof. by apply W16u16.allP => /=. qed.
+
+hint simplify W2u64_W8u16, W4u64_W16u16.
+
+lemma W2u64_W4u32 ws1 ws2:
+  pack2 [W2u32.pack2_t ws1; W2u32.pack2_t ws2] = pack4 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]].
+proof. by apply W4u32.allP => /=. qed.
+
+lemma W4u64_W8u32 ws1 ws2 ws3 ws4 :
+  pack4 [W2u32.pack2_t ws1; W2u32.pack2_t ws2; W2u32.pack2_t ws3; W2u32.pack2_t ws4] = 
+  pack8 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]; ws3.[0]; ws3.[1]; ws4.[0]; ws4.[1]].
+proof. by apply W8u32.allP => /=. qed.
+
+hint simplify W2u64_W4u32, W4u64_W8u32.
+
+lemma W2u128_W4u64 ws1 ws2:
+  pack2 [W2u64.pack2_t ws1; W2u64.pack2_t ws2] = pack4 [ws1.[0]; ws1.[1]; ws2.[0]; ws2.[1]].
+proof. by apply W4u64.allP => /=. qed.
+
+hint simplify W2u128_W4u64.
+
+
+
 

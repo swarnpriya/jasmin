@@ -245,6 +245,18 @@ proof.
   smt (size_ge0).
 qed.
 
+lemma size_map2 (f:'a -> 'b -> 'c) (l1:'a list) l2 : size (map2 f l1 l2) = min (size l1) (size l2).
+proof. by rewrite map2_zip size_map size_zip. qed.
+
+lemma nth_map2 dfla dflb dflc (f:'a -> 'b -> 'c) (l1:'a list) l2 i: 
+  0 <= i < min (size l1) (size l2) => 
+  nth dflc (map2 f l1 l2) i = f (nth dfla l1 i) (nth dflb l2 i).
+proof.
+  elim: l1 l2 i => [ | a l1 hrec] [ | b l2] i /=; 1..3:smt(size_ge0).
+  case: (i=0) => [->> // | hi ?].
+  apply hrec;smt().
+qed.
+
 (* FIXME: we can not do l1 = "[]", l2= _ => l2 *)
 op _interleave (l1 l2: 'a list) = 
  with l1 = "[]", l2= "[]" => []
