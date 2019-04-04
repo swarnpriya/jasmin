@@ -175,10 +175,11 @@ abstract theory MonoArray.
 
   (* -------------------------------------------------------------------- *)
   op map (f: elem -> elem) (t:t) : t = 
-     init (fun i => f t.[i]).
+     init (fun i => f t.[i]) 
+  axiomatized by mapE.
 
   lemma mapiE f t i : 0 <= i < size => (map f t).[i] = f t.[i].
-  proof. by rewrite /map;apply initiE. qed.
+  proof. by rewrite mapE;apply initiE. qed.
 
   lemma map_of_list f ws :
     map f (of_list ws) = of_list (mapN f dfl ws size).
@@ -188,17 +189,18 @@ abstract theory MonoArray.
 
   lemma map_to_list f t :
     map f t = of_list (map f (to_list t)).
-  proof. by rewrite to_listE /map /= -map_comp // init_of_list. qed.
+  proof. by rewrite to_listE mapE /= -map_comp // init_of_list. qed.
   
   hint simplify (mapiE, map_of_list)@0.
 (*  hint simplify map_to_list@1. *)
   
   (* -------------------------------------------------------------------- *)
   op map2 (f: elem -> elem -> elem) (t1 t2:t) : t = 
-    init (fun i => f t1.[i] t2.[i]).
+    init (fun i => f t1.[i] t2.[i])
+  axiomatized by map2E.
 
   lemma map2iE f t1 t2 i : 0 <= i < size => (map2 f t1 t2).[i] = f t1.[i] t2.[i].
-  proof. by rewrite /map2;apply initiE. qed.
+  proof. by rewrite map2E;apply initiE. qed.
 
   lemma map2_of_list f ws1 ws2 :
     map2 f (of_list ws1) (of_list ws2) = of_list (mapN2 f dfl dfl ws1 ws2 size).
@@ -209,7 +211,7 @@ abstract theory MonoArray.
   lemma map2_to_list f t1 t2 :
     map2 f t1 t2 = of_list (map2 f (to_list t1) (to_list t2)).
   proof. 
-    rewrite to_listE /map2 map2_zip init_of_list /=;congr.
+    rewrite to_listE map2E map2_zip init_of_list /=;congr.
     apply (eq_from_nth dfl).   
     + by rewrite !size_map size_zip !size_map min_ler.
     move=> i; rewrite size_map => hi.
