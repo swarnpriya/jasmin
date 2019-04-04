@@ -586,14 +586,14 @@ Definition pexpr_of_lval ii (lv:lval) : ciexec pexpr :=
   end.
 
 Definition get_loarg ii (outx: seq lval) (inx:seq pexpr) (d:source_position) : ciexec pexpr :=
-  let o2e {A} (m: option A) :=
+  let o2e A (m: option A) :=
       match m with
       | Some pe => ok pe
       | None => cierror ii (Cerr_assembler (AsmErr_string "get_loarg"))
       end in
   match d with
-  | InArgs x => o2e (onth inx x)
-  | InRes  x => o2e (onth outx x) >>= pexpr_of_lval ii
+  | InArgs x => o2e _ (onth inx x)
+  | InRes  x => o2e _ (onth outx x) >>= pexpr_of_lval ii
   end.
 
 Definition nmap (T:Type) := nat -> option T.

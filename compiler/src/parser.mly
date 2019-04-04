@@ -24,6 +24,7 @@
 %token T_U8 T_U16 T_U32 T_U64 T_U128 T_U256 T_INT 
 
 %token SHARP
+%token ALIGN
 %token AMP
 %token AMPAMP
 %token BANG
@@ -274,8 +275,11 @@ pinstr_r:
 | FOR v=var EQ ce1=pexpr DOWNTO ce2=pexpr is=pblock
     { PIFor (v, (`Down, ce2, ce1), is) }
 
-| WHILE is1=pblock? LPAREN b=pexpr RPAREN is2=pblock?
-    { PIWhile (is1, b, is2) }
+| a=align WHILE is1=pblock? LPAREN b=pexpr RPAREN is2=pblock?
+    { PIWhile (a,is1, b, is2) }
+
+%inline align:
+| a=ALIGN? { if a = None then `NoAlign else `Align }
 
 pinstr:
 | i=loc(pinstr_r) { i }

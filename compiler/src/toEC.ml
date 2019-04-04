@@ -71,7 +71,7 @@ let rec read_mem_i s i =
   | Cassgn (x, _, _, e) -> read_mem_lval x || read_mem_e e
   | Copn (xs, _, _, es) -> read_mem_lvals xs || read_mem_es es
   | Cif (e, c1, c2)     -> read_mem_e e || read_mem_c s c1 || read_mem_c s c2
-  | Cwhile (c1, e, c2)  -> read_mem_c s c1 || read_mem_e e || read_mem_c s c2
+  | Cwhile (_, c1, e, c2)  -> read_mem_c s c1 || read_mem_e e || read_mem_c s c2
   | Ccall (_, xs, fn, es) -> read_mem_lvals xs || Sf.mem fn s || read_mem_es es
   | Cfor (_, (_, e1, e2), c) -> read_mem_e e1 || read_mem_e e2 || read_mem_c s c
 
@@ -84,7 +84,7 @@ let rec write_mem_i s i =
   | Cassgn (x, _, _, _)  -> write_mem_lval x 
   | Copn (xs, _, _, _)   -> write_mem_lvals xs 
   | Cif (_, c1, c2)      -> write_mem_c s c1 ||write_mem_c s c2
-  | Cwhile (c1, _, c2)   -> write_mem_c s c1 ||write_mem_c s c2
+  | Cwhile (_, c1, _, c2)   -> write_mem_c s c1 ||write_mem_c s c2
   | Ccall (_, xs, fn, _) -> write_mem_lvals xs || Sf.mem fn s 
   | Cfor (_, _, c)       -> write_mem_c s c 
 
@@ -683,7 +683,7 @@ module Normal = struct
   let rec init_aux_i env i = 
     match i.i_desc with
     | Cassgn _ -> env
-    | Cif(_, c1, c2) | Cwhile(c1, _, c2) -> init_aux (init_aux env c1) c2
+    | Cif(_, c1, c2) | Cwhile(_, c1, _, c2) -> init_aux (init_aux env c1) c2
     | Cfor(_,_,c) -> init_aux (add_aux env [tint]) c
     | Copn (lvs, _, op, _) -> 
       if List.length lvs = 1 then env 
@@ -752,7 +752,7 @@ module Normal = struct
       Format.fprintf fmt "@[<v>if (%a) {@   %a@ } else {@   %a@ }@]"
         (pp_expr env) e (pp_cmd env) c1 (pp_cmd env) c2
       
-    | Cwhile(c1, e,c2) ->
+    | Cwhile(_, c1, e,c2) ->
       Format.fprintf fmt "@[<v>%a@ while (%a) {@   %a@ }@]"
         (pp_cmd env) c1 (pp_expr env) e (pp_cmd env) (c2@c1)
       
@@ -953,7 +953,7 @@ module Leak = struct
     | Ccall(_, lvs, _, _) -> 
       if lvs = [] then env 
       else add_aux env (List.map ty_lval lvs)
-    | Cif(_, c1, c2) | Cwhile(c1, _, c2) -> init_aux (init_aux env c1) c2
+    | Cif(_, c1, c2) | Cwhile(_, c1, _, c2) -> init_aux (init_aux env c1) c2
     | Cfor(_,_,c) -> 
       if for_safety env then
         init_aux (add_aux env [tint; tint]) c
@@ -1027,7 +1027,7 @@ module Leak = struct
       Format.fprintf fmt "@[<v>if (%a) {@   %a@ } else {@   %a@ }@]"
         (pp_expr env) e (pp_cmd env) c1 (pp_cmd env) c2
       
-    | Cwhile(c1, e,c2) ->
+    | Cwhile(_, c1, e,c2) ->
       let pp_leak fmt e = 
         Format.fprintf fmt "@ %a" (pp_leaks_if env) e in
       Format.fprintf fmt "@[<v>%a%a@ while (%a) {@   %a%a@ }@]"
@@ -1186,7 +1186,7 @@ and used_func_i used i =
   | Cassgn _ | Copn _ -> used
   | Cif (_,c1,c2)     -> used_func_c (used_func_c used c1) c2
   | Cfor(_,_,c)       -> used_func_c used c
-  | Cwhile(c1,_,c2)   -> used_func_c (used_func_c used c1) c2
+  | Cwhile(_,c1,_,c2)   -> used_func_c (used_func_c used c1) c2
   | Ccall (_,_,f,_)   -> Ss.add f.fn_name used
 
 let extract fmt model ((globs,funcs):'a prog) tokeep = 

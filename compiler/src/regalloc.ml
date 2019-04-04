@@ -25,7 +25,7 @@ let fill_in_missing_names (f: 'info func) : 'info func =
     | Copn (lvs, tg, op, es) -> Copn (fill_lvs lvs, tg, op, es)
     | Cif (e, s1, s2) -> Cif (e, fill_stmt s1, fill_stmt s2)
     | Cfor (i, r, s) -> Cfor (i, r, fill_stmt s)
-    | Cwhile (s, e, s') -> Cwhile (fill_stmt s, e, fill_stmt s')
+    | Cwhile (a, s, e, s') -> Cwhile (a, fill_stmt s, e, fill_stmt s')
     | Ccall (i, lvs, f, es) -> Ccall (i, fill_lvs lvs, f, es)
   and fill_instr i = { i with i_desc = fill_instr_r i.i_desc }
   and fill_stmt s = List.map fill_instr s in
@@ -167,7 +167,7 @@ let collect_equality_constraints
     | Cassgn _
     | Ccall _
       -> ()
-    | Cwhile (s1, _, s2)
+    | Cwhile (_, s1, _, s2)
     | Cif (_, s1, s2) -> collect_stmt s1; collect_stmt s2
   and collect_instr ({ i_desc } as i) = collect_instr_r i i_desc
   and collect_stmt s = List.iter collect_instr s in
@@ -234,7 +234,7 @@ let collect_conflicts (tbl: int Hv.t) (tr: 'info trace) (f: (Sv.t * Sv.t) func) 
     | Copn _
     | Ccall _
       -> c
-    | Cwhile (s1, _, s2)
+    | Cwhile (_, s1, _, s2)
     | Cif (_, s1, s2)
       -> collect_stmt (collect_stmt c s1) s2
   and collect_instr c { i_desc ; i_loc ; i_info } =
@@ -269,7 +269,7 @@ let collect_variables (allvars: bool) (f: 'info func) : int Hv.t * int =
     | Cassgn (lv, _, _, e) -> collect_lv lv; collect_expr e
     | Ccall (_, lvs, _, es)
     | Copn (lvs, _, _, es) -> collect_lvs lvs; collect_exprs es
-    | Cwhile (s1, e, s2)
+    | Cwhile (_, s1, e, s2)
     | Cif (e, s1, s2) -> collect_expr e; collect_stmt s1; collect_stmt s2
     | Cfor _ -> assert false
   and collect_instr { i_desc } = collect_instr_r i_desc
@@ -465,7 +465,7 @@ let allocate_forced_registers translate_var (vars: int Hv.t) (cnf: conflicts)
     | Cfor (_, _, s)
       -> alloc_stmt a s
     | Copn (lvs, _, op, es) -> X64.forced_registers translate_var loc vars cnf lvs op es a
-    | Cwhile (s1, _, s2)
+    | Cwhile (_, s1, _, s2)
     | Cif (_, s1, s2)
         -> alloc_stmt (alloc_stmt a s1) s2
     | Cassgn _

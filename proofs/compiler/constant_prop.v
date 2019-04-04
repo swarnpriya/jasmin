@@ -524,7 +524,7 @@ Fixpoint const_prop_ir (m:cpm) ii (ir:instr_r) : cpm * cmd :=
     let (_,c) := const_prop const_prop_i m c in
     (m, [:: MkI ii (Cfor x (dir, e1, e2) c) ])
 
-  | Cwhile c e c' =>
+  | Cwhile a c e c' =>
     let m := remove_cpm m (write_i ir) in
     let (m',c) := const_prop const_prop_i m c in
     let e := const_prop_e m' e in
@@ -532,7 +532,7 @@ Fixpoint const_prop_ir (m:cpm) ii (ir:instr_r) : cpm * cmd :=
     let cw := 
       match is_bool e with
       | Some false => c
-      | _          => [:: MkI ii (Cwhile c e c')]
+      | _          => [:: MkI ii (Cwhile a c e c')]
       end in
     (m', cw)
   | Ccall fi xs f es =>

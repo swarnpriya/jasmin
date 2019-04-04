@@ -11,9 +11,11 @@ Unset Printing Implicit Defensive.
 Definition assemble_i (i: linstr) : ciexec asm :=
   let '{| li_ii := ii ; li_i := ir |} := i in
   match ir with
-  | Lopn ds op es => assemble_sopn ii ds op es
+  | Lopn ds op es => assemble_sopn ii ds op es 
 
-  | Llabel lbl => ciok (LABEL lbl)
+  | Lalign  => ciok ALIGN
+
+  | Llabel lbl =>  ciok (LABEL lbl)
 
   | Lgoto lbl => ciok (JMP lbl)
 
@@ -74,6 +76,7 @@ rewrite /assemble_i /linear.is_label ; case a =>  ii [] /=.
 - move => lvs op es h.
   have := assemble_sopn_is_sopn h => {h}.
   by case b.
+- by move => [<-].
 - by move => lbl' [<-].
 - by move => lbl' [<-].
 by t_xrbindP => ? ? ? _ [<-].
@@ -113,6 +116,8 @@ case: i => ii [] /=.
   have := assemble_sopn_is_sopn ok_j.
   by case: j {ok_j} => //; (eexists; split; first by reflexivity); constructor => //=;
     rewrite ?to_estate_of_estate ?eqpc.
+- move => [<-] [<-];eexists;split;first by reflexivity.
+  by constructor => //; rewrite /setpc eqpc.
 - move => lbl [<-] [<-]; eexists; split; first by reflexivity.
   constructor => //.
   by rewrite /setpc /= eqpc.

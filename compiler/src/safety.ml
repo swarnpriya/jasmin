@@ -144,8 +144,8 @@ end = struct
       Cfor (mk_v_loc fn v, mk_range fn r, mk_stmt fn st)
     | Ccall (inlinf, lvs, c_fn, es) ->
       Ccall (inlinf, mk_lvals fn lvs, c_fn, mk_exprs fn es)
-    | Cwhile (st1, e, st2) ->
-      Cwhile (mk_stmt fn st1, mk_expr fn e, mk_stmt fn st2)
+    | Cwhile (a, st1, e, st2) ->
+      Cwhile (a, mk_stmt fn st1, mk_expr fn e, mk_stmt fn st2)
 
   and mk_stmt fn instrs = List.map (mk_instr fn) instrs
 
@@ -522,7 +522,7 @@ end = struct
       (* We ignore the loop index, since we do not use widening for loops. *)
       pa_stmt prog st c
 
-    | Cwhile (c1, b, c2) ->
+    | Cwhile (_, c1, b, c2) ->
       let vs,st = expr_vars st b in
 
       let st' =
@@ -3357,7 +3357,7 @@ let rec add_glob_instr s i =
   | Cif(e,c1,c2) -> add_glob_body (add_glob_body (add_glob_expr s e) c1) c2
   | Cfor(x,(_,e1,e2), c) ->
     add_glob_body (add_glob_expr (add_glob_expr (add_glob_var s x) e1) e2) c
-  | Cwhile(c,e,c')    -> add_glob_body (add_glob_expr (add_glob_body s c') e) c
+  | Cwhile(_,c,e,c')    -> add_glob_body (add_glob_expr (add_glob_body s c') e) c
   | Ccall(_,x,_,e) -> add_glob_exprs (add_glob_lvs s x) e
 
 and add_glob_body s c =  List.fold_left add_glob_instr s c
@@ -3516,7 +3516,7 @@ let safe_instr ginstr = match ginstr.i_desc with
   | Cassgn (lv, _, _, e) -> safe_e_rec (safe_lval lv) e
   | Copn (lvs,_,opn,es) -> safe_opn (safe_lvals lvs @ safe_es es) opn es
   | Cif(e, _, _) -> safe_e e
-  | Cwhile(_, _, _) -> []       (* We check the while condition later. *)
+  | Cwhile(_,_, _, _) -> []       (* We check the while condition later. *)
   | Ccall(_, lvs, _, es) -> safe_lvals lvs @ safe_es es
   | Cfor (_, (_, e1, e2), _) -> safe_es [e1;e2]
 
@@ -4816,7 +4816,7 @@ end = struct
         debug (print_if_join cpt_instr ginstr lstate.abs rstate.abs abs_res);
         { rstate with abs = abs_res }
 
-      | Cwhile(c1, e, c2) ->
+      | Cwhile(_,c1, e, c2) ->
         let cpt = ref 0 in
         let state = aeval_gstmt c1 state in
 

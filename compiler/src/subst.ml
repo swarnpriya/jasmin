@@ -38,8 +38,8 @@ let rec gsubst_i fty f i =
     | Cif(e,c1,c2)  -> Cif(gsubst_e fty f e, gsubst_c fty f c1, gsubst_c fty f c2)
     | Cfor(x,(d,e1,e2),c) ->
         Cfor(gsubst_vdest f x, (d, gsubst_e fty f e1, gsubst_e fty f e2), gsubst_c fty f c)
-    | Cwhile(c, e, c') -> 
-      Cwhile(gsubst_c fty f c, gsubst_e fty f e, gsubst_c fty f c')
+    | Cwhile(a, c, e, c') -> 
+      Cwhile(a, gsubst_c fty f c, gsubst_e fty f e, gsubst_c fty f c')
     | Ccall(ii,x,fn,e) -> Ccall(ii, gsubst_lvals fty f x, fn, gsubst_es fty f e) in
   { i with i_desc }
 
@@ -276,8 +276,8 @@ let rec extend_iinfo_i pre i =
       Cif(e, extend_iinfo_c pre c1, extend_iinfo_c pre c2)
     | Cfor(x,r,c) -> 
       Cfor(x,r, extend_iinfo_c pre c)
-    | Cwhile (c1, e, c2) -> 
-      Cwhile(extend_iinfo_c pre c1, e, extend_iinfo_c pre c2) in
+    | Cwhile (a, c1, e, c2) -> 
+      Cwhile(a, extend_iinfo_c pre c1, e, extend_iinfo_c pre c2) in
   let ii, l = i.i_loc in
   let i_loc = ii, (l @ pre) in
   { i with i_desc; i_loc }

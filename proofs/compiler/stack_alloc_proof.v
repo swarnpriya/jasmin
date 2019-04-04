@@ -1002,13 +1002,13 @@ Section PROOF.
 
   Local Lemma Hwhile_true : sem_Ind_while_true P Pc Pi_r.
   Proof.
-    move=> s1 s2 s3 s4 c1 e c2 _ Hc1 Hv ? Hc2 ? Hwhile ii1 ii2 i2 /=.
+    move=> s1 s2 s3 s4 a c1 e c2 _ Hc1 Hv ? Hc2 ? Hwhile ii1 ii2 i2 /=.
     t_xrbindP => i' e'; apply: add_iinfoP => he c1' hc1 c2' hc2 ??? s1' hs1.
     subst i' i2 ii2.
     have [s2' [Hsem' Hvalid']]:= Hc1 _ hc1 _ hs1.
     have [s2'' [Hsem'' Hvalid'']] := Hc2 _ hc2 _ Hvalid'.
     have := Hwhile _.
-    have [|s3' [Hsem''' Hvalid''']] := (Hwhile ii1 ii1 (Cwhile c1' e' c2') _ _ Hvalid'').
+    have [|s3' [Hsem''' Hvalid''']] := (Hwhile ii1 ii1 (Cwhile a c1' e' c2') _ _ Hvalid'').
     + by rewrite /= he hc1 hc2.
     exists s3'; split=> //.
     apply: S.Ewhile_true; eauto.
@@ -1018,7 +1018,7 @@ Section PROOF.
 
   Local Lemma Hwhile_false : sem_Ind_while_false P Pc Pi_r.
   Proof.
-    move=> s1 s2 c e c' _ Hc Hv ii1 ii2 i2 /=.
+    move=> s1 s2 a c e c' _ Hc Hv ii1 ii2 i2 /=.
     t_xrbindP => i' e'; apply: add_iinfoP => he c1' hc1 c2' hc2 ??? s1' hs1.
     subst i' i2 ii2.
     have [s2' [Hsem' Hvalid']]:= Hc _ hc1 _ hs1.

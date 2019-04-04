@@ -241,6 +241,10 @@ let pp_tag = function
   | AT_inline  -> ":i"
   | AT_phinode -> ":φ"
 
+let pp_align fmt = function 
+  | E.Align -> Format.fprintf fmt "align "
+  | E.NoAlign -> ()
+
 let rec pp_gi pp_info pp_ty pp_var fmt i =
   F.fprintf fmt "%a" pp_info i.i_info;
   match i.i_desc with
@@ -271,16 +275,19 @@ let rec pp_gi pp_info pp_ty pp_var fmt i =
       (pp_gvar_i pp_var) i (pp_ge pp_var) e1 dir (pp_ge pp_var) e2
       (pp_gc pp_info pp_ty pp_var) c
 
-  | Cwhile([], e, c) ->
-    F.fprintf fmt "@[<v>while (%a) %a@]"
+  | Cwhile(a, [], e, c) ->
+    F.fprintf fmt "@[<v>%awhile (%a) %a@]"
+      pp_align a
       (pp_ge pp_var) e (pp_cblock pp_info pp_ty pp_var) c
 
-  | Cwhile(c, e, []) ->
-    F.fprintf fmt "@[<v>while %a (%a)@]"
+  | Cwhile(a, c, e, []) ->
+    F.fprintf fmt "@[<v>%awhile %a (%a)@]"
+      pp_align a
       (pp_cblock pp_info pp_ty pp_var) c (pp_ge pp_var) e
 
-  | Cwhile(c, e, c') ->
-    F.fprintf fmt "@[<v>while %a %a %a@]"
+  | Cwhile(a, c, e, c') ->
+    F.fprintf fmt "@[<v>%awhile %a %a %a@]"
+      pp_align a
       (pp_cblock pp_info pp_ty pp_var) c (pp_ge pp_var) e
       (pp_cblock pp_info pp_ty pp_var) c'
 

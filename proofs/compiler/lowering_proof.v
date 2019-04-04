@@ -2084,8 +2084,8 @@ Section PROOF.
     exact: Hs3'1.
   Qed.
 
-  Lemma vars_I_while ii c e c':
-    Sv.Equal (vars_I (MkI ii (Cwhile c e c'))) (Sv.union (read_e e) (Sv.union (vars_c c) (vars_c c'))).
+  Lemma vars_I_while ii a c e c':
+    Sv.Equal (vars_I (MkI ii (Cwhile a c e c'))) (Sv.union (read_e e) (Sv.union (vars_c c) (vars_c c'))).
   Proof.
     rewrite /vars_I read_Ii write_Ii read_i_while write_i_while /vars_c.
     SvD.fsetdec.
@@ -2093,7 +2093,7 @@ Section PROOF.
 
   Local Lemma Hwhile_true : sem_Ind_while_true p Pc Pi_r.
   Proof.
-    move=> s1 s2 s3 s4 c e c' _ Hc Hz _ Hc' _ Hwhile ii Hdisj s1' Hs1' /=.
+    move=> s1 s2 s3 s4 a c e c' _ Hc Hz _ Hc' _ Hwhile ii Hdisj s1' Hs1' /=.
     have := Hdisj; rewrite /disj_fvars /lowering.disj_fvars vars_I_while=> /disj_fvars_union [Hdisje /disj_fvars_union [Hc1 Hc2]].
     set x := lower_condition _ _ _.
     have Hcond: x = lower_condition fv xH e by [].
@@ -2114,7 +2114,7 @@ Section PROOF.
 
   Local Lemma Hwhile_false : sem_Ind_while_false p Pc Pi_r.
   Proof.
-    move=> s1 s2 c e c' _ Hc Hz ii Hdisj s1' Hs1' /=.
+    move=> s1 s2 a c e c' _ Hc Hz ii Hdisj s1' Hs1' /=.
     move: Hdisj; rewrite /disj_fvars /lowering.disj_fvars vars_I_while=> /disj_fvars_union [Hdisje /disj_fvars_union [Hc1 Hc2]].
     set x := lower_condition _ _ _.
     have Hcond: x = lower_condition fv xH e by [].

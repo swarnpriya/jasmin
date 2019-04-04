@@ -134,6 +134,7 @@ Coercion rm128_of_m128 mo : rm128 :=
 
 (* -------------------------------------------------------------------- *)
 Variant asm : Type :=
+| ALIGN
 | LABEL of label
 
   (* Data transfert *)
@@ -1373,6 +1374,7 @@ Definition eval_VPERMQ (dst: xmm_register) (src: rm128) (i: u8) s : x86_result :
 (* -------------------------------------------------------------------- *)
 Definition eval_instr_mem (i : asm) s : x86_result :=
   match i with
+  | ALIGN
   | JMP    _
   | Jcc    _ _
   | LABEL  _           => ok s

@@ -314,6 +314,9 @@ let pp_xxri name sz dst src1 src2 mask =
 (* -------------------------------------------------------------------- *)
 let pp_instr name (i : X86_sem.asm) =
   match i with
+  | ALIGN ->
+    `Instr (".p2align", ["5"])
+    
   | LABEL lbl ->
       `Label (pp_label name lbl)
 
@@ -540,7 +543,7 @@ let reg_of_oprd (op : X86_sem.oprd) =
 (* TODO: generate from instr_desc *)
 let wregs_of_instr (c : rset) (i : X86_sem.asm) =
   match i with
-  | LABEL _ | Jcc  _ | JMP _
+  | ALIGN | LABEL _ | Jcc  _ | JMP _
   | CMP   _ | TEST _ | BT _
   | MOVD _
   | VMOVDQU _

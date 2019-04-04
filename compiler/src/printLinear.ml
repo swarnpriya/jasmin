@@ -57,6 +57,7 @@ let pp_instr tbl fmt i =
       (Pr.pp_list ",@ " (pp_lval tbl)) lvs
       Pr.pp_string0 (E.string_of_sopn op)
       (Pr.pp_list ",@ " (pp_expr tbl)) es
+  | Lalign     -> F.fprintf fmt "Align"
   | Llabel lbl -> F.fprintf fmt "Label %a" pp_label lbl
   | Lgoto lbl -> F.fprintf fmt "Goto %a" pp_label lbl
   | Lcond (e, lbl) -> F.fprintf fmt "If %a goto %a" (pp_expr tbl) e pp_label lbl

@@ -74,8 +74,8 @@ let rec arrexp_i tbl i =
     | Cif(e,c1,c2)  -> Cif(arrexp_e tbl e, arrexp_c tbl c1, arrexp_c tbl c2)
     | Cfor(i,(d,e1,e2),c) ->
       Cfor(i, (d, arrexp_e tbl e1, arrexp_e tbl e2), arrexp_c tbl c)
-    | Cwhile(c, e, c') ->
-      Cwhile(arrexp_c tbl c, arrexp_e tbl e, arrexp_c tbl c')
+    | Cwhile(a, c, e, c') ->
+      Cwhile(a, arrexp_c tbl c, arrexp_e tbl e, arrexp_c tbl c')
     | Ccall(ii,x,f,e) -> Ccall(ii, arrexp_lvs tbl x, f, arrexp_es tbl e)
   in
   { i with i_desc }
@@ -124,7 +124,7 @@ let rec array_acces_i tbl i =
   | Cassgn (x, _, _, e) -> array_access_lv (array_access_e tbl e) x
   | Copn(xs,_,_,es) | Ccall(_,xs,_,es) -> 
     array_access_lvs (array_access_es tbl es) xs
-  | Cif(e, c1, c2) | Cwhile(c1,e,c2)  -> 
+  | Cif(e, c1, c2) | Cwhile(_, c1, e, c2)  -> 
     array_access_c (array_access_c (array_access_e tbl e) c1) c2
   | Cfor(_,(_,e1,e2), c) ->
     array_access_c (array_access_e (array_access_e tbl e1) e2) c

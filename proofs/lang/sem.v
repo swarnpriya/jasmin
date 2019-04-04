@@ -1588,17 +1588,17 @@ with sem_i : estate -> instr_r -> estate -> Prop :=
     sem s1 c2 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
-| Ewhile_true s1 s2 s3 s4 c e c' :
+| Ewhile_true s1 s2 s3 s4 a c e c' :
     sem s1 c s2 ->
     sem_pexpr gd s2 e = ok (Vbool true) ->
     sem s2 c' s3 ->
-    sem_i s3 (Cwhile c e c') s4 ->
-    sem_i s1 (Cwhile c e c') s4
+    sem_i s3 (Cwhile a c e c') s4 ->
+    sem_i s1 (Cwhile a c e c') s4
 
-| Ewhile_false s1 s2 c e c' :
+| Ewhile_false s1 s2 a c e c' :
     sem s1 c s2 ->
     sem_pexpr gd s2 e = ok (Vbool false) ->
-    sem_i s1 (Cwhile c e c') s2
+    sem_i s1 (Cwhile a c e c') s2
 
 | Efor s1 s2 (i:var_i) d lo hi c vlo vhi :
     sem_pexpr gd s1 lo = ok (Vint vlo) ->
@@ -1691,17 +1691,17 @@ Section SEM_IND.
       sem s1 c2 s2 -> Pc s1 c2 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
   Definition sem_Ind_while_true : Prop :=
-    forall (s1 s2 s3 s4 : estate) (c : cmd) (e : pexpr) (c' : cmd),
+    forall (s1 s2 s3 s4 : estate) a (c : cmd) (e : pexpr) (c' : cmd),
       sem s1 c s2 -> Pc s1 c s2 ->
       sem_pexpr gd s2 e = ok (Vbool true) ->
       sem s2 c' s3 -> Pc s2 c' s3 ->
-      sem_i s3 (Cwhile c e c') s4 -> Pi_r s3 (Cwhile c e c') s4 -> Pi_r s1 (Cwhile c e c') s4.
+      sem_i s3 (Cwhile a c e c') s4 -> Pi_r s3 (Cwhile a c e c') s4 -> Pi_r s1 (Cwhile a c e c') s4.
 
   Definition sem_Ind_while_false : Prop :=
-    forall (s1 s2 : estate) (c : cmd) (e : pexpr) (c' : cmd),
+    forall (s1 s2 : estate) a (c : cmd) (e : pexpr) (c' : cmd),
       sem s1 c s2 -> Pc s1 c s2 ->
       sem_pexpr gd s2 e = ok (Vbool false) ->
-      Pi_r s1 (Cwhile c e c') s2.
+      Pi_r s1 (Cwhile a c e c') s2.
 
   Hypotheses
     (Hasgn: sem_Ind_assgn)
@@ -1778,11 +1778,11 @@ Section SEM_IND.
       @Hif_true s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c1 s2 s0)
     | @Eif_false s1 s2 e1 c1 c2 e2 s0 =>
       @Hif_false s1 s2 e1 c1 c2 e2 s0 (@sem_Ind s1 c2 s2 s0)
-    | @Ewhile_true s1 s2 s3 s4 c e1 c' h1 h2 h3 h4 =>
-      @Hwhile_true s1 s2 s3 s4 c e1 c' h1 (@sem_Ind s1 c s2 h1) h2 h3 (@sem_Ind s2 c' s3 h3) 
-          h4 (@sem_i_Ind s3 (Cwhile c e1 c') s4 h4)
-    | @Ewhile_false s1 s2 c e1 c' s0 e2 =>
-      @Hwhile_false s1 s2 c e1 c' s0 (@sem_Ind s1 c s2 s0) e2
+    | @Ewhile_true s1 s2 s3 s4 a c e1 c' h1 h2 h3 h4 =>
+      @Hwhile_true s1 s2 s3 s4 a c e1 c' h1 (@sem_Ind s1 c s2 h1) h2 h3 (@sem_Ind s2 c' s3 h3) 
+          h4 (@sem_i_Ind s3 (Cwhile a c e1 c') s4 h4)
+    | @Ewhile_false s1 s2 a c e1 c' s0 e2 =>
+      @Hwhile_false s1 s2 a c e1 c' s0 (@sem_Ind s1 c s2 s0) e2
     | @Efor s1 s2 i0 d lo hi c vlo vhi e1 e2 s0 =>
       @Hfor s1 s2 i0 d lo hi c vlo vhi e1 e2 s0
         (@sem_for_Ind i0 (wrange d vlo vhi) s1 c s2 s0)
@@ -1814,7 +1814,6 @@ Section SEM_IND.
     end.
 
 End SEM_IND.
-
 
 Lemma of_val_undef t t':
   of_val t (Vundef t') =

@@ -158,7 +158,7 @@ Fixpoint check_i iinfo i1 i2 r :=
           fold2 (iinfo,cmd2_error) check_I c1 c2 in
       loop iinfo check_c Loop.nb rhi 
     else cierror iinfo (Cerr_neqdir salloc)
-  | Cwhile c1 e1 c1', Cwhile c2 e2 c2' =>
+  | Cwhile a1 c1 e1 c1', Cwhile a2 c2 e2 c2' =>
     let check_c r :=
       Let r := fold2 (iinfo,cmd2_error) check_I c1 c2 r in
       Let re := add_iinfo iinfo (check_e e1 e2 r) in
@@ -369,8 +369,8 @@ Section PROOF.
     
   Local Lemma Hwhile_true : sem_Ind_while_true p1 Pc Pi_r.
   Proof.
-    move => s1 s2 s3 s4 c e c'.
-    case: s2 => sm2 svm2 _ Hc Hse _ Hc' _ Hw ii r1 [] //= c2 e2 c2' r2 vm1 Hvm1.
+    move => s1 s2 s3 s4 a c e c'.
+    case: s2 => sm2 svm2 _ Hc Hse _ Hc' _ Hw ii r1 [] //= a2 c2 e2 c2' r2 vm1 Hvm1.
     apply: rbindP => r /loop2P [r2' [r3 [H Hir1 Hir3]]] [?];subst r.
     have Hvmr2' := eq_alloc_incl Hir1 Hvm1.
     apply: rbindP H=> r0 Cc2; move /Hc: (Hvmr2') (Cc2) => H /H {H} [vm2 [Hvm2 /= Hc2]]. 
@@ -380,7 +380,7 @@ Section PROOF.
     apply: rbindP => r' Cc2' [??];subst r2 r3.
     move /Hc': (Hrevm2) (Cc2')=> H /H {H} [vm3 [Hvm3 /= Hc2']]. 
     have /(Hw ii) {Hw} Hw:= eq_alloc_incl Hir3 Hvm3.
-    have : check_i ii (Cwhile c e c') (Cwhile c2 e2 c2') r2' = ok re.
+    have : check_i ii (Cwhile a c e c') (Cwhile a2 c2 e2 c2') r2' = ok re.
     + by rewrite /= Loop.nbP /= Cc2 /= Hadd /= Cc2' /= Hir3 /=. 
     move=> /Hw [vm4 [Hvm4 Hsw]];exists vm4;split => //.
     by apply: Ewhile_true Hsw;eauto;rewrite -eq_globs Hse2.
@@ -388,8 +388,8 @@ Section PROOF.
 
   Local Lemma Hwhile_false : sem_Ind_while_false p1 Pc Pi_r.
   Proof.
-    move => s1 s2 c e c'.
-    case: s2 => sm2 svm2 _ Hc Hse ii r1 [] //= c2 e2 c2' r2 vm1 Hvm1.
+    move => s1 s2 a c e c'.
+    case: s2 => sm2 svm2 _ Hc Hse ii r1 [] //= a2 c2 e2 c2' r2 vm1 Hvm1.
     apply: rbindP => r /loop2P [r2' [r3 [H Hir1 Hir3]]] [?];subst r.
     have Hvmr2' := eq_alloc_incl Hir1 Hvm1.
     apply: rbindP H=> r0 Cc2; move /Hc: (Hvmr2') (Cc2) => H /H {H} [vm2 [Hvm2 /= Hc2]]. 

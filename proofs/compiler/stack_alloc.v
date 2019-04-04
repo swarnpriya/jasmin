@@ -273,11 +273,11 @@ Fixpoint alloc_i (m: map) (i: instr) :=
       Let c2 := mapM (alloc_i m) c2 in
       ok (Cif e c1 c2)
   
-    | Cwhile c1 e c2 => 
+    | Cwhile a c1 e c2 => 
       Let e := add_iinfo ii (alloc_e m e) in
       Let c1 := mapM (alloc_i m) c1 in
       Let c2 := mapM (alloc_i m) c2 in
-      ok (Cwhile c1 e c2)
+      ok (Cwhile a c1 e c2)
   
     | Cfor _ _ _  => cierror ii (Cerr_stk_alloc "don't deal with for loop")
     | Ccall _ _ _ _ => cierror ii (Cerr_stk_alloc "don't deal with call")

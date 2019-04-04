@@ -255,7 +255,7 @@ let rec pp_instr depth fmt p =
       kw (match d with `Down -> "downto" | `Up -> "to")
       pp_expr hi
       (pp_inbraces depth (pp_list eol (pp_instr (depth + 1)))) (L.unloc body)
-  | PIWhile (pre, b, body) ->
+  | PIWhile (_, pre, b, body) ->
     F.fprintf fmt "%a %a (%a) %a"
       kw "while"
       (pp_opt (pp_block depth)) pre

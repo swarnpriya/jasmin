@@ -34,7 +34,7 @@ and iac_instr_r ir =
     end
   | Cif (b, th, el) -> Cif (b, iac_stmt th, iac_stmt el)
   | Cfor (i, r, s) -> Cfor (i, r, iac_stmt s)
-  | Cwhile (a, b, c) -> Cwhile (iac_stmt a, b, iac_stmt c)
+  | Cwhile (a, c1, t, c2) -> Cwhile (a, iac_stmt c1, t, iac_stmt c2)
   | (Copn _ | Ccall _) -> ir
 
 let iac_func f =

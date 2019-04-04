@@ -177,7 +177,7 @@ let small_step1 s =
         {s with s_cmd = []; s_stk = Sfor(ii, i, rng, body, c, s.s_stk) } in
       return s
  
-    | Cwhile (c1, e, c2) ->
+    | Cwhile (_, c1, e, c2) ->
       { s with s_cmd = c1 @ MkI(ii, Cif(e, c2@[i],[])) :: c }
 
     | Ccall(_,xs,fn,es) ->

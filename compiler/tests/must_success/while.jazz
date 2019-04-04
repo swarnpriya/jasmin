@@ -4,11 +4,12 @@ export fn test_while(reg u64 x) -> reg u64 {
 
   i = 10;
   r = 0;
-  while {
+  align while {
    r += 1;
-   zf, _, i = #x86_DEC(i);} 
-   (!zf) 
-  {r += 2;}
+   zf, _, i = #x86_DEC(i);
+  } (!zf) { 
+   r += 2; 
+  }
 
   r = r + x;
   return r;
