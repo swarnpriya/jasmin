@@ -1,0 +1,15 @@
+export fn test_while(reg u64 x) -> reg u64 {
+  reg bool zf;
+  reg u64 i, r;
+
+  i = 10;
+  r = 0;
+  while {
+   r += 1;
+   zf, _, i = #x86_DEC(i);} 
+   (!zf) 
+  {r += 2;}
+
+  r = r + x;
+  return r;
+}  
