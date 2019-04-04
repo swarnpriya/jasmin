@@ -1073,7 +1073,7 @@ Qed.
 Definition fundef_eqMixin     := Equality.Mixin fundef_eq_axiom.
 Canonical  fundef_eqType      := Eval hnf in EqType fundef fundef_eqMixin.
 
-Definition prog_beq p1 p2 := (p_globs p1 == p_globs p2) && (p_funcs p1 == p_funcs p2).
+(*Definition prog_beq p1 p2 := (p_globs p1 == p_globs p2) && (p_funcs p1 == p_funcs p2).
 
 Lemma prog_eq_axiom : Equality.axiom prog_beq.
 Proof.
@@ -1084,7 +1084,7 @@ Qed.
 
 Definition prog_eqMixin     := Equality.Mixin prog_eq_axiom.
 Canonical  prog_eqType      := Eval hnf in EqType prog prog_eqMixin.
-
+*)
 Definition get_fundef {T} (p: seq (funname * T)) (f: funname) :=
   assoc p f.
 
