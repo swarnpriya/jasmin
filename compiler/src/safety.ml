@@ -2737,6 +2737,17 @@ module Map2 (M : Map.S) = struct
           let b = M.find k map_b in
           f a b)
         map_a
+
+  let merge2 : (unit -> 'a) -> (unit -> 'b) -> 'a M.t -> 'b M.t -> ('a M.t * 'b M.t)=
+    fun fa fb mapa mapb ->
+      (M.merge (fun _ aopt _ -> match aopt with
+           | None -> fa () |> some
+           | Some a -> Some a)
+          mapa mapb,
+       M.merge (fun _ _ bopt -> match bopt with
+           | None -> fb () |> some
+           | Some b -> Some b)
+         mapa mapb)
 end
 
 module type EqMap = sig
@@ -2951,11 +2962,20 @@ module AbsBoolNoRel (AbsNum : AbsNumT) (Pt : PointsTo)
 
   (* <Ms.find s init> is an over-approximation of the program state where s
      is *not* initialized.
-     Remark: we lazily populate init *)
+     Remark: we lazily populate init and bool*)
   type t = { bool : AbsNum.NR.t Ms.t;
              init : AbsNum.NR.t EMs.t;
              num : AbsNum.R.t;
              points_to : Pt.t }
+
+  module Ms2 = Map2(Ms)
+
+  let merge_bool_dom t t' =
+    let eb,eb' = Ms2.merge2
+        (fun () -> AbsNum.downgrade t.num)
+        (fun () -> AbsNum.downgrade t'.num)
+        t.bool t'.bool in
+    ({ t with bool = eb }, { t' with bool = eb' })
 
   let merge_init_dom t t' =
     let eb = EMs.vmerge (fun x _ -> match x with
@@ -2971,11 +2991,10 @@ module AbsBoolNoRel (AbsNum : AbsNumT) (Pt : PointsTo)
                            num = f t.num;
                            points_to = fpt t.points_to }
 
-  module Ms2 = Map2(Ms)
-
-  (* Since init is lazily populated, we merge the domains before applying f *)
+  (* Since init and bool are lazily populated, we merge the domains before applying f *)
   let apply2 f df fpt t t' =
     let t, t' = merge_init_dom t t' in
+    let t, t' = merge_bool_dom t t' in
     { bool = Ms2.map2 df t.bool t'.bool;
       init = EMs.map2 df t.init t'.init;
       num = f t.num t'.num;
@@ -3035,6 +3054,7 @@ module AbsBoolNoRel (AbsNum : AbsNumT) (Pt : PointsTo)
       EMs.map2 AbsNum.NR.unify eb eb'
 
   let meet : t -> t -> t = fun t t' ->
+    let t,t' = merge_bool_dom t t' in
     { bool = Ms2.map2 AbsNum.NR.meet t.bool t'.bool;
       init = eunify_map t.init t'.init;
       num = AbsNum.R.meet t.num t'.num;
@@ -3570,7 +3590,6 @@ let rec add_offsets3 assigns = match assigns with
     :: (ty, MvarOffset v,es)
     :: add_offsets3 tail
   | u :: tail -> u :: add_offsets3 tail
-
 
 let fun_locals f_decl =
   let locals = Sv.elements (locals f_decl) in
@@ -4606,7 +4625,7 @@ end = struct
 
   (* Prepare a function call. Returns the state where:
      - The arguments of f have been evaluated.
-     - The variables of the caller's caller have been forgotten.
+     - The variables of the caller's caller have been *removed*.
      - s_effects is empty. *)
   let prepare_call state f es =
     let (assign_vars,state) = aeval_f_args f es state in
@@ -4668,7 +4687,7 @@ end = struct
     let state = { state with abs = aeval_f_return state.abs r_assgns } in
 
     (* We forget the variables of f to get a smaller abstract element,
-       and we know that variables in in lvs are initialized *)
+       and we know that variables in lvs are initialized *)
     forget_f_vars fname state
     |> init_lvs lvs
 
