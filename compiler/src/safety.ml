@@ -5211,5 +5211,8 @@ module AbsAnalyzer (EW : ExportWrap) = struct
         (pp_list print_mvar_interval) npt
         (pp_list (fun fmt (_,f,_) -> f fmt ())) l_res;
 
-      assert (violations = [])
+      if violations <> [] then begin
+        Format.eprintf "@[<v>Program is not safe!@;@]@.";
+        exit(2)
+      end;
 end
