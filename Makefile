@@ -6,12 +6,14 @@ UNAME_S := $(shell uname -s)
 SED     ?= sed
 
 # --------------------------------------------------------------------
-.PHONY: all clean dist distcheck
+.PHONY: all check clean dist distcheck
 
 all:
 	$(MAKE) -C proofs all
 	$(MAKE) -C compiler CIL
 	$(MAKE) -C compiler all
+
+check:
 	$(MAKE) -C eclib check
 
 clean:

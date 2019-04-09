@@ -1,4 +1,3 @@
-*~
 _build
 _c_build
 *.native
@@ -6,4 +5,3 @@ _c_build
 *.exe
 lib*.a
 /jasmin.mlpack
-/jasminc

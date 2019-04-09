@@ -3,7 +3,7 @@
 set -e
 
 ARGS=$@
-JASMINC=./jasminc.native
+JASMINC=$(dirname $0)/../jasminc.native
 
 ASM=$(mktemp jasminXXXXX.s)
 OBJ=$(mktemp jasminXXXXX.o)
