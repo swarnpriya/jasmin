@@ -4,4 +4,6 @@ _c_build
 *.byte
 *.exe
 lib*.a
+report.log
 /jasmin.mlpack
+/jasminc
