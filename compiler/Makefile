@@ -16,7 +16,7 @@ OCAMLBUILD := $(OCAMLBUILD_BIN) $(OCAMLBUILD_OPTS)
 INSTALL    := scripts/install-sh
 
 # --------------------------------------------------------------------
-JSJOBS    ?= 1
+JSJOBS    ?= 2
 CHECKPY   ?=
 CHECK     := $(CHECKPY) scripts/runtest --jobs="$(JSJOBS)"
 CHECK     += config/tests.config
@@ -66,7 +66,7 @@ CIL:
 check: build
 	$(CHECK) --report=report.log $(CHECKCATS)
 
-tests-ci: build
+check-ci: build
 	$(CHECK) --report=- $(CHECKCATS)
 
 clean:
