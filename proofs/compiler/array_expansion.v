@@ -413,20 +413,26 @@ Module CBEA.
 
   Definition check_var m (x1 x2:var) := 
     (x1 == x2) && ~~Sv.mem x1 (M.allocated m).
-    
+
+  Definition check_gvar m (x1 x2 : gvar) := 
+    (x1.(gk) == x2.(gk)) &&
+      if is_lvar x1 then check_var m x1.(gv) x2.(gv) 
+      else x1.(gv).(v_var) == x2.(gv).(v_var).
+ 
   Fixpoint check_eb m (e1 e2:pexpr) : bool := 
     match e1, e2 with
     | Pconst   n1, Pconst   n2 => n1 == n2
     | Pbool    b1, Pbool    b2 => b1 == b2
     | Parr_init n1, Parr_init n2 => n1 == n2
-    | Pvar     x1, Pvar     x2 => check_var m x1 x2
-    | Pglobal g1, Pglobal g2 => g1 == g2
-    | Pget wz1 x1 e1, Pget wz2 x2 e2 => (wz1 == wz2) && check_var m x1 x2 && check_eb m e1 e2
+    | Pvar     x1, Pvar     x2 => check_gvar m x1 x2
+    | Pget wz1 x1 e1, Pget wz2 x2 e2 => (wz1 == wz2) && check_gvar m x1 x2 && check_eb m e1 e2
     | Pget wz1 x1 e1, Pvar  x2    => 
-      match is_const e1 with
-      | Some n1 => (M.get m x1.(v_var) n1 == Some (wz1, vname x2)) && (vtype x2 == sword wz1)
-      | _ => false
-      end
+      is_lvar x1 && is_lvar x2 &&
+        match is_const e1 with
+        | Some n1 =>  
+                     (M.get m x1.(gv).(v_var) n1 == Some (wz1, vname x2.(gv))) && (vtype x2.(gv) == sword wz1)
+        | _ => false
+        end
     | Pload sw1 x1 e1, Pload sw2 x2 e2 => (sw1 == sw2) && check_var m x1 x2 && check_eb m e1 e2
     | Papp1 o1 e1, Papp1 o2 e2 => (o1 == o2) && check_eb m e1 e2
     | Papp2 o1 e11 e12, Papp2 o2 e21 e22 =>    
@@ -477,6 +483,17 @@ Module CBEA.
     by case: vm2.[x1] => //= a Ha; eauto.
   Qed.
 
+  Lemma check_gvarP r gd vm1 vm2 x1 x2 v1 : 
+    eq_alloc r vm1 vm2 ->
+    check_gvar r x1 x2 ->
+    get_gvar gd vm1 x1 = ok v1 ->
+    exists2 v2, get_gvar gd vm2 x2 = ok v2 & value_uincl v1 v2.
+  Proof.
+    rewrite /check_gvar /get_gvar /is_lvar; case: eqP => //= ->.
+    case: ifP => hgv; first by apply: check_varP.
+    by move=> heq /eqP -> ->;eauto.
+  Qed.
+
   Section CHECK_EBP.
 
     Context (gd: glob_decls) (r: M.expansion) (m: mem) (vm1 vm2: vmap)
@@ -506,22 +523,21 @@ Module CBEA.
       - by move => z1 [] // z2 _ /eqP <- [<-] /=; exists z1.
       - by move => z1 [] // z2 _ /eqP <- [<-] /=; exists z1.
       - by move => n1 [] // n2 _ /eqP <- [<-] /=; eexists => //=.
-      - by move => x1 [] // x2 v; exact: check_varP.
-      - by move => g1 [] // g2 v /eqP <- /= ->; eauto.
-      - move => sz1 [[ty1 x1] ii1] e1 ih1 [] //.
-        + move=> [[ty2 x2] ii2] v1.
+      - by move => x1 [] // x2 v; exact: check_gvarP.
+      - move => sz1 x1 e1 ih1 [] //.
+        + case: x1 => -[[ty1 x1] ii1] [] //= [[[ty2 x2] ii2] []] //= v1.
           case: is_constP => //= ze /andP [] /eqP hget /eqP ?;subst ty2.
+          rewrite /get_gvar /=.
           apply: on_arr_varP => n t Htx1.
           rewrite /get_var /=; apply: on_vuP => //= x1t.
           have [_ /(_ _ _ _ _ hget) {hget}] := Hrn. 
           case: ty1 Htx1 x1t => //= n' hle x1t [x1t' [->]].
           move=> h [] ? /Varr_inj [en];subst n' x1t' => /= ?; subst x1t.
           t_xrbindP => w hg ?;subst v1.
-          (move: h;rewrite hg /= => <- /=; eexists; first reflexivity) => /=.
-          by apply word_uincl_refl.
+          by (move: h;rewrite hg /= => <- /=; eexists; first reflexivity) => /=.
         move=> ws v p v1 /andP[] /andP[] /eqP ?;subst ws.
-        move=> /(check_varP Hrn) /= hget /ih1 hrec {ih1}.
-        apply: on_arr_varP => n t /= Htx1 /hget [v2 hget2 hincl].
+        move=> /(check_gvarP Hrn) /= hget /ih1 hrec {ih1}.
+        apply: on_arr_gvarP => n t /= Htx1 /hget [v2 hget2 hincl].
         t_xrbindP => n1 v3 /hrec [v4 -> hv3].   
         move=> /(value_uincl_int hv3) [??];subst v3 v4.
         rewrite /on_arr_var hget2 /= => w1.

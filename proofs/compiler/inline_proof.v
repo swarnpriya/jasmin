@@ -250,7 +250,7 @@ Proof.
 Qed.
 
 Lemma assgn_tuple_Pvar p ii xs flag tys rxs vs vs' s s' :
-  let es := map Pvar rxs in
+  let es := map Plvar rxs in
   disjoint (vrvs xs) (read_es es) -> 
   mapM (fun x : var_i => get_var (evm s) x) rxs = ok vs ->
   mapM2 ErrType truncate_val tys vs = ok vs' ->
@@ -267,10 +267,11 @@ Proof.
   + by move=> _ _ _;t_xrbindP => ?????????? <-.
   + by move=> _ _ _ _ [<-].
   + by move=> _ _ _ _ [<-].
-  rewrite vrvs_cons read_es_cons read_e_var => Hsub Heqe Hempty.
+  rewrite vrvs_cons read_es_cons read_e_var /read_gvar /mk_lvar /= => Hsub Heqe Hempty.
   t_xrbindP => ve Hse vz Hses ?? v1 vs1 htr htrs ?; subst ve vz vs'.
   t_xrbindP => s1 Hw Hws; apply Eseq with s1. 
   + constructor;econstructor;rewrite /=;eauto.
+    rewrite /get_gvar /mk_lvar /=.
     have /get_var_eq_on <- //: evm s0 =[Sv.singleton rx] evm s. 
     + by move=> y ?;apply: Heqe;SvD.fsetdec.
     by SvD.fsetdec.
@@ -752,7 +753,7 @@ Section PROOF.
       by apply sem_seq1;constructor;eapply Ecall;eauto;rewrite -eq_globs.
     apply: rbindP => fd' /get_funP Hfd'.
     have [fd [Hfd Hinline]] := inline_progP uniq_funname Hp Hfd'.
-    apply: rbindP => -[];apply:rbindP => -[];apply: add_infunP => Hcheckf /=.
+    apply: rbindP => -[];apply:rbindP => -[]; apply: add_infunP => Hcheckf /=.
     case:ifP => // Hdisj _ [] ??;subst X1 c' => vm1 Hwf1 Hvm1.
     have /(_ Sv.empty vm1) [|vargs' /= Hvargs' Huargs]:= sem_pexprs_uincl_on _ Hes.
     + by apply: vm_uincl_onI Hvm1;rewrite read_i_call;SvD.fsetdec.

@@ -55,7 +55,6 @@ Arguments x86_mem_equiv_refl [_].
 Definition arg_of_oprd_sz sz o :=
   match o with
   | Imm_op x => Aimm x
-  | Glo_op x => Aglob x
   | Reg_op x => Areg x
   | Adr_op x => Aaddr sz x
   end.
@@ -64,14 +63,13 @@ Lemma arg_of_oprdE sz o :
   arg_of_oprd (Some sz) o = Some (arg_of_oprd_sz sz o).
 Proof. by case: o. Qed.
 
-Lemma eval_low_read gd m sz sz' (w: word sz') x :
+Lemma eval_low_read m sz sz' (w: word sz') x :
   (sz ≤ sz')%CMP →
-  eval_low gd m (arg_of_oprd_sz sz x) = ok (Vword w) →
-  read_oprd gd sz x m = ok (zero_extend sz w) (* ∧ (sz ≤ U64)%CMP *).
+  eval_low m (arg_of_oprd_sz sz x) = ok (Vword w) →
+  read_oprd sz x m = ok (zero_extend sz w) (* ∧ (sz ≤ U64)%CMP *).
 Proof.
 move => hle; case: x => /=.
 - by move => n /ok_word_inj [??]; subst.
-- by rewrite /get_global => g; case: get_global_value => // z /ok_word_inj [??];subst.
 - by move => r /ok_word_inj [??]; subst.
 by move => a; apply: rbindP => ? -> /ok_word_inj [??]; subst; rewrite /= zero_extend_u.
 Qed.
@@ -80,7 +78,7 @@ Qed.
 Lemma MOV_gsc sz :
   gen_sem_correct [:: TYoprd; TYoprd] (Ox86_MOV sz) [:: E sz 0] [:: E sz 1] [::] (MOV sz).
 Proof.
-move => /= x y; split => // gd m m'.
+move => /= x y; split => // m m'.
 rewrite /low_sem_aux /= arg_of_oprdE /= /sets_low /eval_MOV /eval_MOV_nocheck /x86_MOV.
 case: x => // [ x | x ]; t_xrbindP => ??? h <-; t_xrbindP => w' /of_val_word [sz'] [w] [hle ??] ?; subst => -> <- /=; rewrite ?truncate_word_u /=; [ case | ]; rewrite (eval_low_read _ h) //= => ->; eexists; split; reflexivity.
 Qed.
@@ -91,7 +89,7 @@ Definition MOV_desc sz := make_instr_desc (MOV_gsc sz).
 Lemma MOVSX_gsc sz sz' :
   gen_sem_correct [:: TYreg; TYoprd] (Ox86_MOVSX sz sz') [:: E sz 0] [:: E sz' 1] [::] (MOVSX sz sz').
 Proof.
-move => /= x y; split => // gd m m'.
+move => /= x y; split => // m m'.
 rewrite /low_sem_aux /= arg_of_oprdE /= /sets_low /eval_MOVSX /x86_MOVSX.
 t_xrbindP => ??? h <-; t_xrbindP => w' /of_val_word [szw] [w] [hle ??] ? -> <- [<-] /=; subst.
 rewrite (eval_low_read _ h) //=.
@@ -104,7 +102,7 @@ Definition MOVSX_desc sz sz' := make_instr_desc (MOVSX_gsc sz sz').
 Lemma MOVZX_gsc sz sz' :
   gen_sem_correct [:: TYreg; TYoprd] (Ox86_MOVZX sz sz') [:: E sz 0] [:: E sz' 1] [::] (MOVZX sz sz').
 Proof.
-move => /= x y; split => // gd m m'.
+move => /= x y; split => // m m'.
 rewrite /low_sem_aux /= arg_of_oprdE /= /sets_low /eval_MOVZX /x86_MOVZX.
 t_xrbindP => ??? h <-; t_xrbindP => w' /of_val_word [szw] [w] [hle ??] ? -> <- [<-] /=; subst.
 rewrite (eval_low_read _ h) //=.
@@ -117,7 +115,7 @@ Lemma MOVZX32_gsc :
   gen_sem_correct [:: TYreg; TYoprd ] Ox86_MOVZX32
     [:: E U32 0 ] [:: E U32 1 ] [::] (λ d, MOV U32 (Reg_op d)).
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /= arg_of_oprdE /=.
 t_xrbindP => ??? h <-; t_xrbindP => ? /to_wordI [szw] [w] [hle ??];
 subst => <- /= [<-].
@@ -134,7 +132,7 @@ Lemma MOVD_gsc sz :
   gen_sem_correct' [:: TYxreg ; TYoprd ] MSB_MERGE (Ox86_MOVD sz)
                   [:: E U128 0 ] [:: E sz 1 ] [::] (MOVD sz).
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /= arg_of_oprdE /= /sets_low /eval_MOVD /x86_movd.
 t_xrbindP => ??? h <-; t_xrbindP => w' /of_val_word [szw] [w] [hle ??] _ -> <- /= [<-]; subst.
 rewrite (eval_low_read _ h) //=.
@@ -147,19 +145,14 @@ Definition MOVD_desc sz := make_instr_desc (MOVD_gsc sz).
 Lemma VMOVDQU_gsc sz :
   gen_sem_correct [:: TYrm128; TYrm128] (Ox86_VMOVDQU sz) [:: E sz 0] [:: E sz 1] [::] (VMOVDQU sz).
 Proof.
-move => /= x y; split => // gd m m'.
+move => /= x y; split => // m m'.
 rewrite /low_sem_aux /=.
-case: y => [ y | y | y ]; rewrite /low_sem_aux /sets_low /eval_VMOV /read_rm128 /=.
+case: y => [ y | y ]; rewrite /low_sem_aux /sets_low /eval_VMOV /read_rm128 /=.
 + case: x => //= x; t_xrbindP => ? ? /truncate_wordP [_] <- ? -> <- /=;
   [ case | rewrite truncate_word_u ] => /= ->;
   eexists; split; reflexivity.
-+ case: x => //= x; t_xrbindP => ???? h <- <- /=; rewrite truncate_word_u /= h;
-  t_xrbindP => _ -> /= <- /=;
-  [ case | rewrite truncate_word_u ] => /= ->;
-  eexists; split; reflexivity.
-case: eqP => // - [<-]{sz}.
-case: x => //= x; t_xrbindP => ??? /get_globalI /= [w];rewrite /get_global => -> -> /= <- /=;
-rewrite truncate_word_u /= eq_dec_refl; t_xrbindP => _ -> /= <- /=;
+case: x => //= x; t_xrbindP => ???? h <- <- /=; rewrite truncate_word_u /= h;
+t_xrbindP => _ -> /= <- /=;
 [ case | rewrite truncate_word_u ] => /= ->;
 eexists; split; reflexivity.
 Qed.
@@ -189,7 +182,7 @@ Lemma CMOVcc_gsc sz :
      (Ox86_CMOVcc sz) [:: E sz 1] [:: Eb 0; E sz 2; E sz 1] [::] (CMOVcc sz).
 Proof.
 
-move => ct x y; split => // gd m m'.
+move => ct x y; split => // m m'.
 rewrite /low_sem_aux /= !arg_of_oprdE /eval_CMOVcc /eval_MOV_nocheck.
 case: x => //= [x | x]; t_xrbindP => vs ?? hb ?? hv ; [ | move => ??? hm <- <- ] => <- <- /= ; t_xrbindP => _ -> /=;
 move => vb /to_boolI => ? ; subst => h2 /to_wordI [x0] [x1] [] ??? ; subst => h4 /truncate_wordP [] ?? ; subst;
@@ -211,7 +204,7 @@ Lemma ADD_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [:: E sz 0; E sz 1] [::] (ADD sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_add /eval_ADD.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_add /eval_ADD.
 case: x => // [ x | x ] /=; t_xrbindP => ???? h <-; [ | move => ?? h' <- ] => <-; t_xrbindP => ? /truncate_wordP [hle ->] ? /of_val_word [sz'] [?] [hle' ??]; subst => _ -> /= [<-].
 + by case => <-; rewrite (eval_low_read _ h) //; update_set.
 apply: rbindP => /= m'' [<-] {m''}; rewrite truncate_word_u /= h (eval_low_read _ h') //= !zero_extend_u.
@@ -225,7 +218,7 @@ Lemma SUB_gsc sz :
    gen_sem_correct [:: TYoprd; TYoprd] (Ox86_SUB sz)
       (implicit_flags ++ [:: E sz 0]) [:: E sz 0; E sz 1] [::] (SUB sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_sub /eval_SUB.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_sub /eval_SUB.
 case: x => // [ x | x ] /=; t_xrbindP => ???? h <-; [ | move => ?? h' <- ] => <-; t_xrbindP => ? /truncate_wordP [hle ->] ? /of_val_word [sz'] [?] [hle' ??]; subst => _ -> /= [<-].
 + by case => <-; rewrite (eval_low_read _ h) //; update_set.
 apply: rbindP => /= m'' [<-] {m''}; rewrite truncate_word_u /= h (eval_low_read _ h') //= !zero_extend_u.
@@ -240,7 +233,7 @@ Lemma MUL_gsc sz :
       (implicit_flags ++ [:: R RDX; R RAX])
       [:: R RAX; E sz 0] [::] (MUL sz).
 Proof.
-  rewrite /= /low_sem_aux /= /eval_MUL /x86_mul => x; split => // gd m m'.
+  rewrite /= /low_sem_aux /= /eval_MUL /x86_mul => x; split => // m m'.
   rewrite arg_of_oprdE /=; t_xrbindP => vs ? ? vx ok_vx <- <- /=; t_xrbindP => wa /truncate_wordP [ha ->] {wa}.
   move => wx /of_val_word [sx] [?] [hx ??]; subst => /= _ -> /= <- [<-]; rewrite (eval_low_read _ ok_vx) {ok_vx} //; update_set.
 Qed.
@@ -252,7 +245,7 @@ Lemma IMUL_gsc sz :
   gen_sem_correct [:: TYoprd ] (Ox86_IMUL sz) (implicit_flags ++ [:: R RDX; R RAX])
                    [:: R RAX; E sz 0] [::] (λ x, IMUL sz x None).
 Proof.
-  rewrite /= /low_sem_aux /= /eval_IMUL /x86_imul => x; split => // gd m m'.
+  rewrite /= /low_sem_aux /= /eval_IMUL /x86_imul => x; split => // m m'.
   rewrite arg_of_oprdE /=; t_xrbindP => vs ? ? vx ok_vx <- <- /=; t_xrbindP => wa /truncate_wordP [ha ->] {wa}.
   move => wx /of_val_word [sx] [?] [hx ??]; subst => /= _ -> /= <- [<-]; rewrite (eval_low_read _ ok_vx) {ok_vx} //=.
   update_set.
@@ -266,7 +259,7 @@ Lemma IMULt_gsc sz :
                    (implicit_flags ++ [:: E sz 0]) [:: E sz 0; E sz 1] [::]
                    (λ x y, IMUL sz x (Some (y, None))).
 Proof.
-  rewrite /= /low_sem_aux /= /eval_IMUL /x86_imult => x; split => // gd m m'.
+  rewrite /= /low_sem_aux /= /eval_IMUL /x86_imult => x; split => // m m'.
   rewrite !arg_of_oprdE /=.
   case: x => // [ x | x ] /=; t_xrbindP => vs ???; [ | move => -> <- ??] => hx <- <-; t_xrbindP => /= w /truncate_wordP [hsz] -> {w} w /of_val_word [?] [?] [hle ??]; subst => _ -> /= <-; rewrite (eval_low_read _ hx) ?zero_extend_u //=.
   + case => <-; update_set.
@@ -282,7 +275,7 @@ Lemma IMULtimm_gsc sz :
                    (implicit_flags ++ [:: E sz 0]) [:: E sz 1; E U32 2] [::]
     (λ (x y : interp_ty TYoprd) (z : interp_ty (TYimm U32)), IMUL sz x (Some (y, Some z))).
 Proof.
-  rewrite /= /low_sem_aux /= /eval_IMUL /x86_imult => x; split => // gd m m'.
+  rewrite /= /low_sem_aux /= /eval_IMUL /x86_imult => x; split => // m m'.
   rewrite arg_of_oprdE /=.
   case: x => // [ x | x ] /=;
     t_xrbindP => ??? h <-;
@@ -302,7 +295,7 @@ Lemma DIV_gsc sz :
       (implicit_flags ++ [:: R RAX; R RDX])
       [:: R RDX; R RAX; E sz 0] [::] (DIV sz).
 Proof.
-  rewrite /= /low_sem_aux /= /eval_DIV /x86_div => x; split => // gd m m'.
+  rewrite /= /low_sem_aux /= /eval_DIV /x86_div => x; split => // m m'.
   rewrite arg_of_oprdE /=; t_xrbindP => vs ???? h <- <- <-; t_xrbindP => ? /of_val_word [?] [?] [hle /Vword_inj [??] ?]; subst => /=.
   move => ? ; rewrite /truncate_word hle => - [<-] ? /of_val_word [?] [?] [hle' ??]; subst => _ -> /=.
   rewrite (eval_low_read _ h) //=.
@@ -317,7 +310,7 @@ Lemma IDIV_gsc sz :
       (implicit_flags ++ [:: R RAX; R RDX])
       [:: R RDX; R RAX; E sz 0] [::] (IDIV sz).
 Proof.
-  rewrite /= /low_sem_aux /= /eval_IDIV /x86_idiv => x; split => // gd m m'.
+  rewrite /= /low_sem_aux /= /eval_IDIV /x86_idiv => x; split => // m m'.
   rewrite arg_of_oprdE /=; t_xrbindP => vs ???? hx <- <- <- /=.
   apply: rbindP => ? /truncate_wordP [hle <-].
   rewrite /truncate_word hle /=; t_xrbindP => ? /of_val_word [?][?][hle' ??]; subst => _ -> /=.
@@ -332,7 +325,7 @@ Definition IDIV_desc sz := make_instr_desc (IDIV_gsc sz).
 Lemma CQO_gsc sz :
   gen_sem_correct [::] (Ox86_CQO sz) [:: R RDX] [:: R RAX] [::] (CQO sz).
 Proof.
-  rewrite /= /low_sem_aux /= /eval_CQO /x86_cqo; split => // gd m m'.
+  rewrite /= /low_sem_aux /= /eval_CQO /x86_cqo; split => // m m'.
    t_xrbindP => vs ? /truncate_wordP [ ? -> ] _ -> <- /= [<-].
    eexists;split;reflexivity.
 Qed.
@@ -351,7 +344,7 @@ Lemma ADC_gsc sz :
        (implicit_flags ++ [:: E sz 0])
        [:: E sz 0; E sz 1; F CF] [::] (ADC sz).
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /= /eval_ADC /x86_adc !arg_of_oprdE /=.
 case: x => //= [ x | x ]; t_xrbindP => ???? hx; [ | move => <- ?? hy ] => ?? hb <- <- <- /=;
 t_xrbindP => ? /truncate_wordP [hle ->] ? /of_val_word [?] [?] [hle' ??]; subst;
@@ -370,7 +363,7 @@ Lemma ADCX_gsc sz :
        ([::F CF; E sz 0])
        [:: E sz 0; E sz 1; F CF] [::] (ADCX sz).
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /= /eval_ADCX /x86_adcx !arg_of_oprdE /=.
 t_xrbindP=> ???? hy ?? hc <- <- <- /=. 
 t_xrbindP => ? hx ? /to_wordI [sz' [w' [hsz ??]]] ? /to_boolI ?; subst => ? -> ?; subst => /= -[] <-.
@@ -387,7 +380,7 @@ Lemma ADOX_gsc sz :
        ([::F OF; E sz 0])
        [:: E sz 0; E sz 1; F OF] [::] (ADOX sz).
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /= /eval_ADOX /x86_adox /x86_adcx !arg_of_oprdE /=.
 t_xrbindP=> ???? hy ?? hc <- <- <- /=. 
 t_xrbindP => ? hx ? /to_wordI [sz' [w' [hsz ??]]] ? /to_boolI ?; subst => ? -> ?; subst => /= -[] <-.
@@ -404,7 +397,7 @@ Lemma MULX_gsc sz :
        ([::E sz 0; E sz 1])
         [:: R RDX; E sz 2] [::] (MULX sz).
 Proof.
-move=> x y z; split => // gd m m'.
+move=> x y z; split => // m m'.
 rewrite /low_sem_aux /= /eval_MULX /x86_mulx !arg_of_oprdE /=.
 t_xrbindP=> ???? hz <- <-. 
 t_xrbindP=> ? /to_wordI  [sz' [w' [hsz /Vword_inj [?]]]]. 
@@ -419,7 +412,7 @@ Lemma SBB_gsc sz :
        (implicit_flags ++ [:: E sz 0])
        [:: E sz 0; E sz 1; F CF] [::] (SBB sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /eval_SBB /x86_sbb /=.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /eval_SBB /x86_sbb /=.
 case: x => //= [ x | x ]; t_xrbindP => ???; [ | move => ? hptr <- ? ] => ? hy ?? hb <- <- <- /=;
 t_xrbindP => ? /truncate_wordP [hle ->] ? /of_val_word [?] [?] [hle' ??];
 subst => b /to_boolI ? _ -> /=; subst => - [<-]; rewrite (value_of_boolI hb) {hb} (eval_low_read _ hy) //= !(word_of_b2z sz) /sub_borrow !wrepr_sub !wrepr_unsigned Z.sub_add_distr.
@@ -437,7 +430,7 @@ Lemma NEG_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [:: E sz 0] [::] (NEG sz).
 Proof.
-move => x; split => // gd m m'; rewrite /low_sem_aux /= arg_of_oprdE /eval_NEG /x86_neg /=.
+move => x; split => // m m'; rewrite /low_sem_aux /= arg_of_oprdE /eval_NEG /x86_neg /=.
 case: x => //= [ x | x ].
 - t_xrbindP => ?? /truncate_wordP [hle ->] _ -> /= [<-] [<-]; update_set.
 t_xrbindP => ???? hx <- <-; rewrite /= truncate_word_u /=.
@@ -453,7 +446,7 @@ Lemma INC_gsc sz :
      (implicit_flags_noCF ++ [:: E sz 0])
      [:: E sz 0] [::] (INC sz).
 Proof.
-move => x; split => // gd m m'; rewrite /low_sem_aux /= arg_of_oprdE /eval_INC /x86_inc /=.
+move => x; split => // m m'; rewrite /low_sem_aux /= arg_of_oprdE /eval_INC /x86_inc /=.
 case: x => //= [ x | x ].
 - t_xrbindP => ?? /truncate_wordP [hle ->] _ -> /= [<-] [<-]; update_set.
 t_xrbindP => ???? hx <- <-; rewrite /= truncate_word_u /=.
@@ -469,7 +462,7 @@ Lemma DEC_gsc sz :
      (implicit_flags_noCF ++ [:: E sz 0])
      [:: E sz 0] [::] (DEC sz).
 Proof.
-move => x; split => // gd m m'; rewrite /low_sem_aux /= arg_of_oprdE /eval_DEC /x86_dec.
+move => x; split => // m m'; rewrite /low_sem_aux /= arg_of_oprdE /eval_DEC /x86_dec.
 case: x => //= [ x | x ].
 - t_xrbindP => ?? /truncate_wordP [? ->] _ -> /= [<-] [<-]; update_set.
 t_xrbindP => ???? hx <- <-; rewrite /= truncate_word_u /=.
@@ -485,7 +478,7 @@ Lemma SETcc_gsc :
      [:: E U8 1]
      [:: Eb 0] [::] SETcc.
 Proof.
-move => ct x; split => // gd m m'; rewrite /low_sem_aux /= /eval_SETcc /x86_setcc.
+move => ct x; split => // m m'; rewrite /low_sem_aux /= /eval_SETcc /x86_setcc.
 case: x => //= [ x | x ]; t_xrbindP => ??? hb <-; t_xrbindP => b /to_boolI ? ?; subst.
 - case => <-; rewrite (value_of_boolI hb) {hb} /=; case: b; update_set.
 rewrite /sets_low /= zero_extend_u (value_of_boolI hb) {hb}.
@@ -503,7 +496,7 @@ Lemma BT_gsc sz :
      [:: F CF]
      [:: E sz 0; E sz 1] [::] (BT sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /eval_BT /x86_bt /=.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /eval_BT /x86_bt /=.
 t_xrbindP => ??? hx ?? hy <- <-; t_xrbindP => ? /of_val_word [?] [?] [hle ??];
 subst => ? /of_val_word [?] [?] [hle' ??] _ -> /=; subst => <- [<-].
 rewrite (eval_low_read _ hx) //=.
@@ -539,8 +532,8 @@ Definition mk_LEA sz (dest:register) (disp: pointer) (base:ireg) (scale: pointer
     {| ad_disp := disp; ad_base := base; ad_scale := scale; ad_offset := offset |} in
   LEA sz dest (Adr_op addr).
 
-Lemma eval_low_ireg gd m sz y :
-  eval_low gd m (arg_of_oprd_sz sz match y with
+Lemma eval_low_ireg m sz y :
+  eval_low m (arg_of_oprd_sz sz match y with
                                    | Imm_ir i => Imm_op i
                                    | Reg_ir r => Reg_op r
                                    end) = ok (Vword match y with Imm_ir i => i | Reg_ir r => xreg m r end).
@@ -559,7 +552,7 @@ Lemma LEA_gsc sz :
      [:: E sz 0]
      [:: E Uptr 1; E sz 2; E Uptr 3; E sz 4] [::] (mk_LEA sz).
 Proof.
-move => x /= disp base scale offset; split => // gd m m'.
+move => x /= disp base scale offset; split => // m m'.
 rewrite /low_sem_aux /= !arg_of_oprdE /= !eval_low_ireg /= /eval_LEA /x86_lea !sign_extend_u.
 t_xrbindP => ? _ /truncate_wordP [hle] ->.
 rewrite /truncate_word hle => _ [<-] _ [<-] _ [<-] _ -> /=.
@@ -580,7 +573,7 @@ Lemma TEST_gsc sz :
      implicit_flags
      [:: E sz 0; E sz 1] [::] (TEST sz).
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /= !arg_of_oprdE /eval_TEST /x86_test /=; t_xrbindP => ??? hx ?? hy <- <-;
 t_xrbindP => ? /of_val_word [?] [?] [hle??]; subst => ? /of_val_word [?] [?] [hle' ??]; subst => _ -> /=.
 case => <- [<-]; rewrite (eval_low_read _ hx) // (eval_low_read _ hy) //; update_set.
@@ -594,7 +587,7 @@ Lemma CMP_gsc sz :
      implicit_flags
      [:: E sz 0; E sz 1] [::] (CMP sz).
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /= !arg_of_oprdE /eval_CMP /x86_cmp /=; t_xrbindP => ??? hx ?? hy <- <-;
 t_xrbindP => ? /of_val_word [?] [?] [hle??]; subst => ? /of_val_word [?] [?] [hle' ??]; subst => _ -> /=.
 case => <- [<-]; rewrite (eval_low_read _ hx) // (eval_low_read _ hy) //; update_set.
@@ -608,7 +601,7 @@ Lemma AND_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [:: E sz 0; E sz 1] [::] (AND sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_and /eval_AND.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_and /eval_AND.
 case: x => // [ x | x ] /=; t_xrbindP => ???? h <-; [ | move => ?? h' <- ] => <-; t_xrbindP => ? /truncate_wordP [hle ->] ? /of_val_word [sz'] [?] [hle' ??]; subst => _ -> /= [<-].
 + by case => <-; rewrite (eval_low_read _ h) //; update_set.
 apply: rbindP => /= m'' [<-] {m''}; rewrite truncate_word_u /= h (eval_low_read _ h') //= !zero_extend_u.
@@ -623,11 +616,9 @@ Lemma ANDN_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [:: E sz 1; E sz 2] [::] (ANDN sz).
 Proof.
-move => dst x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_andn /eval_ANDN.
-case: y => [ y | y | y | y ] /=.
-1,3: t_xrbindP => ?? /truncate_wordP [hle] -> ? /truncate_wordP [hle'] -> _ -> /= <- [<-]; update_set.
-- t_xrbindP => ???? -> <- <- /=.
-  t_xrbindP => ? /truncate_wordP [hle] -> ? /to_wordI [sz'] [w'] [hle' -> ->] _ -> /= <- [<-]; update_set.
+move => dst x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_andn /eval_ANDN.
+case: y => [ y | y | y ] /=.
+1,2: t_xrbindP => ?? /truncate_wordP [hle] -> ? /truncate_wordP [hle'] -> _ -> /= <- [<-]; update_set.
 t_xrbindP => ????? h <- <- <- /=.
 t_xrbindP => ? /truncate_wordP [hle] -> ?; rewrite truncate_word_u h => - [<-] _ -> /= <- [<-]; update_set.
 Qed.
@@ -640,7 +631,7 @@ Lemma OR_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [:: E sz 0; E sz 1] [::] (OR sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_or /eval_OR.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_or /eval_OR.
 case: x => // [ x | x ] /=; t_xrbindP => ???? h <-; [ | move => ?? h' <- ] => <-; t_xrbindP => ? /truncate_wordP [hle ->] ? /of_val_word [sz'] [?] [hle' ??]; subst => _ -> /= [<-].
 + by case => <-; rewrite (eval_low_read _ h) //; update_set.
 apply: rbindP => /= m'' [<-] {m''}; rewrite truncate_word_u /= h (eval_low_read _ h') //= !zero_extend_u.
@@ -655,7 +646,7 @@ Lemma XOR_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [:: E sz 0; E sz 1] [::] (XOR sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_xor /eval_XOR.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_xor /eval_XOR.
 case: x => // [ x | x ] /=; t_xrbindP => ???? h <-; [ | move => ?? h' <- ] => <-; t_xrbindP => ? /truncate_wordP [hle ->] ? /of_val_word [sz'] [?] [hle' ??]; subst => _ -> /= [<-].
 + by case => <-; rewrite (eval_low_read _ h) //; update_set.
 apply: rbindP => /= m'' [<-] {m''}; rewrite truncate_word_u /= h (eval_low_read _ h') //= !zero_extend_u.
@@ -670,7 +661,7 @@ Lemma NOT_gsc sz :
      [:: E sz 0]
      [:: E sz 0] [::] (NOT sz).
 Proof.
-move => x; split => // gd m m'; rewrite /low_sem_aux /= arg_of_oprdE /eval_NOT /x86_not /=.
+move => x; split => // m m'; rewrite /low_sem_aux /= arg_of_oprdE /eval_NOT /x86_not /=.
 case: x => //= [ x | x ].
 - t_xrbindP => ?? /truncate_wordP [hle ->] _ -> /= <- [<-]; update_set.
 t_xrbindP => ???? hx <- <-; rewrite /= truncate_word_u /=.
@@ -691,7 +682,7 @@ Lemma ROL_gsc sz :
     [:: E sz 0 ; ADExplicit (Some sz) 1 (Some RCX) ]
     [::] (ROL sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /eval_ROL /x86_rol.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /eval_ROL /x86_rol.
 case: y => //= [ y | y ].
 - case: x => //= [ x | x ].
   + t_xrbindP => ? _ /truncate_wordP [hle] -> _ -> /=.
@@ -734,7 +725,7 @@ Lemma ROR_gsc sz :
     [:: E sz 0 ; ADExplicit (Some sz) 1 (Some RCX) ]
     [::] (ROR sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /eval_ROR /x86_ror.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /eval_ROR /x86_ror.
 case: y => //= [ y | y ].
 - case: x => //= [ x | x ].
   + t_xrbindP => ? _ /truncate_wordP [hle] -> _ -> /=.
@@ -778,7 +769,7 @@ Lemma SHL_gsc sz :
      [:: E sz 0; ADExplicit (Some sz) 1 (Some RCX)]
      [::] (SHL sz).
 Proof.
-move => x y; split => // gd m m'. rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_shl /eval_SHL.
+move => x y; split => // m m'. rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_shl /eval_SHL.
 case: y => //= [ y | y ].
 case: x => //= [ x | x ]; t_xrbindP => ?;
 [ move => ? /truncate_wordP [hle] ->
@@ -825,7 +816,7 @@ Lemma SHR_gsc sz :
      [:: E sz 0; ADExplicit (Some sz) 1 (Some RCX)]
      [::] (SHR sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_shr /eval_SHR.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_shr /eval_SHR.
 case: y => //= [ y | y ].
 case: x => //= [ x | x ]; t_xrbindP => ?;
 [ move => ? /truncate_wordP [hle] ->
@@ -872,7 +863,7 @@ Lemma SAR_gsc sz :
      [:: E sz 0; ADExplicit (Some sz) 1 (Some RCX)]
      [::] (SAR sz).
 Proof.
-move => x y; split => // gd m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_sar /eval_SAR.
+move => x y; split => // m m'; rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_sar /eval_SAR.
 case: y => //= [ y | y ].
 case: x => //= [ x | x ]; t_xrbindP => ?;
 [ move => ? /truncate_wordP [hle] ->
@@ -918,7 +909,7 @@ Lemma SHLD_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [:: E sz 0; E sz 1; ADExplicit (Some U8) 2 (Some RCX)] [::] (SHLD sz).
 Proof.
-move => x y z; split => // gd m m'.
+move => x y z; split => // m m'.
 rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_shld /eval_SHLD.
 case: z => // [ z | z ].
 case: x => //= [ x | x ]; t_xrbindP => ?;
@@ -964,7 +955,7 @@ Lemma SHRD_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [:: E sz 0; E sz 1; ADExplicit (Some U8) 2 (Some RCX)] [::] (SHRD sz).
 Proof.
-move => x y z; split => // gd m m'.
+move => x y z; split => // m m'.
 rewrite /low_sem_aux /= !arg_of_oprdE /= /x86_shrd /eval_SHRD.
 case: z => // [ z | z ].
 case: x => //= [ x | x ]; t_xrbindP => ?;
@@ -1017,7 +1008,7 @@ Lemma Set0_gsc sz :
      (implicit_flags ++ [:: E sz 0])
      [::] [::] (SET0 sz).
 Proof.
-move => x; split => // gd m m'; rewrite /low_sem_aux /= /eval_XOR.
+move => x; split => // m m'; rewrite /low_sem_aux /= /eval_XOR.
 have ok_sz : ∀ u, check_size_8_64 sz = ok u → check_size_8_64 (if x is Reg_op _ then cmp_min U32 sz else sz) = ok tt.
 + by case: x => //; case: sz.
 case: x ok_sz => //= [ x | x ] ok_sz; t_xrbindP => vs _ /(ok_sz) {ok_sz} -> /= <-.
@@ -1038,7 +1029,7 @@ Lemma BSWAP_gsc sz :
   gen_sem_correct [:: TYreg ] (Ox86_BSWAP sz)
      [:: E sz 0] [:: E sz 0] [::] (BSWAP sz).
 Proof.
-move => x; split => // gd m m'; rewrite /low_sem_aux /= /eval_BSWAP /x86_bswap.
+move => x; split => // m m'; rewrite /low_sem_aux /= /eval_BSWAP /x86_bswap.
 t_xrbindP => _ _ /truncate_wordP [hle ->] _ -> /= <- [<-].
 eexists; split; reflexivity.
 Qed.
@@ -1046,25 +1037,21 @@ Qed.
 Definition BSWAP_desc sz := make_instr_desc (BSWAP_gsc sz).
 
 (* ----------------------------------------------------------------------------- *)
-Lemma eval_low_rm128_nocheck gd s m x y sz (v: word sz) :
+Lemma eval_low_rm128_nocheck s m x y sz (v: word sz) :
   arg_of_rm128 (Some s) x = Some y →
-  eval_low gd m y = ok (Vword v) →
-  read_rm128_nocheck gd s x m = ok (zero_extend _ v).
+  eval_low m y = ok (Vword v) →
+  read_rm128_nocheck s x m = ok (zero_extend _ v).
 Proof.
-  case: x => [ r | a | g ] /=.
-  1-2: case => <- {y} /=.
+  case: x => [ r | a ] /= [<-] {y} /=.
   2: apply: rbindP => ??.
   1-2: by move => /ok_word_inj [?]; subst => /= <-; rewrite /read_rm128_nocheck /= ?zero_extend_u.
-  case: eqP => // - [<-] {s} [<-] {y} /= h; rewrite h /=.
-  case/get_globalI: h => w h /Vword_inj [?]; subst => /= -> {v}.
-  by rewrite eq_dec_refl zero_extend_u.
 Qed.
 
-Lemma eval_low_rm128 gd s u m x y sz (v: word sz) :
+Lemma eval_low_rm128 s u m x y sz (v: word sz) :
   check_size_128_256 s = ok u →
   arg_of_rm128 (Some s) x = Some y →
-  eval_low gd m y = ok (Vword v) →
-  read_rm128 gd s x m = ok (zero_extend _ v).
+  eval_low m y = ok (Vword v) →
+  read_rm128 s x m = ok (zero_extend _ v).
 Proof.
   move => ok_s ok_y ok_v.
   rewrite /read_rm128 ok_s /=.
@@ -1075,11 +1062,11 @@ Qed.
 Lemma x86_rm128_binop_gsc sz op i sem :
   (∀ d x y, is_sopn (i sz d x y)) →
   (exec_sopn (op sz) = app_ww sz (@x86_u128_binop sz sem)) →
-  (∀ d x y gd m, eval_instr_mem gd (i sz d x y) m = eval_rm128_binop gd MSB_CLEAR sem d x y m) →
+  (∀ d x y m, eval_instr_mem (i sz d x y) m = eval_rm128_binop MSB_CLEAR sem d x y m) →
   gen_sem_correct [:: TYrm128 ; TYrm128 ; TYrm128 ] (op sz)
                   [:: E sz 0 ] [:: E sz 1 ; E sz 2 ] [::] (i sz).
 Proof.
-move => ok_sopn hsem lsem d x y; split => // gd m m'.
+move => ok_sopn hsem lsem d x y; split => // m m'.
 rewrite /low_sem_aux /= lsem /eval_rm128_binop hsem /x86_u128_binop /=.
 case hx: (arg_of_rm128 _ x) => [ x' | ] //.
 case hy: (arg_of_rm128 _ y) => [ y' | ] //=.
@@ -1096,30 +1083,30 @@ Arguments x86_rm128_binop_gsc : clear implicits.
 
 Definition VPAND_desc sz := make_instr_desc
     (x86_rm128_binop_gsc sz Ox86_VPAND VPAND wand
-    (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+    (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 Definition VPOR_desc sz := make_instr_desc
     (x86_rm128_binop_gsc sz Ox86_VPOR VPOR wor
-    (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+    (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 Definition VPXOR_desc sz := make_instr_desc
     (x86_rm128_binop_gsc sz Ox86_VPXOR VPXOR wxor
-    (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+    (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 Definition VPADD_desc ve sz := make_instr_desc
     (x86_rm128_binop_gsc sz (Ox86_VPADD ve) (VPADD ve) (lift2_vec ve +%R sz)
-    (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+    (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 Definition VPSUB_desc ve sz := make_instr_desc
     (x86_rm128_binop_gsc sz (Ox86_VPSUB ve) (VPSUB ve) (lift2_vec ve (fun x y => x - y)%R sz)
-    (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+    (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma VPMULL_gsc ve sz: 
    gen_sem_correct [:: TYrm128 ; TYrm128 ; TYrm128 ] (Ox86_VPMULL ve sz)
                    [:: E sz 0 ] [:: E sz 1 ; E sz 2 ] [::] (VPMULL ve sz).
 Proof.
-  move=> d x y;split => // gd m m'.
+  move=> d x y;split => // m m'.
   rewrite /low_sem_aux /= /x86_vpmull /eval_VPMULL /= /x86_u128_binop /= /eval_rm128_binop.
   case hx: (arg_of_rm128 _ x) => [ x' | ] //.
   case hy: (arg_of_rm128 _ y) => [ y' | ] //=.
@@ -1138,7 +1125,7 @@ Lemma VPEXTR_gsc ve :
   gen_sem_correct [:: TYoprd ; TYxreg ; TYimm U8 ] (Ox86_VPEXTR ve)
       [:: E ve 0 ] [:: E U128 1 ; E U8 2 ] [::] (VPEXTR ve).
 Proof.
-move => x y z; split => // gd m m'.
+move => x y z; split => // m m'.
 rewrite /low_sem_aux /= /x86_vpextr /eval_VPEXTR.
 case: x => //= [ x | x ]; t_xrbindP => ?? hve <-; rewrite /sets_low /=;
 [ case | rewrite truncate_word_u/= ];
@@ -1159,7 +1146,7 @@ Definition VPINSR_gsc ve :
     [:: E U128 0 ] [:: E U128 1 ; E ve 2 ; E U8 3 ] [::]
     (VPINSR ve).
 Proof.
-move => d x y i; split => // gd m m'.
+move => d x y i; split => // m m'.
 rewrite /low_sem_aux/= arg_of_oprdE /= /x86_vpinsr /eval_VPINSR.
 t_xrbindP => ???? h <- <- /=; t_xrbindP => w' /to_wordI [sz'] [w] [hle ??].
 subst => <- [<-].
@@ -1173,11 +1160,11 @@ Definition VPINSR_desc ve := make_instr_desc (VPINSR_gsc ve).
 Lemma x86_rm128_shift_gsc ve sz op i sem :
   (∀ d x y, is_sopn (i sz d x y)) →
   (exec_sopn (op sz) = app_w8 sz (x86_u128_shift ve sz sem)) →
-  (∀ d x y gd m, eval_instr_mem gd (i sz d x y) m = eval_rm128_shift gd MSB_CLEAR sz sem d x y m) →
+  (∀ d x y m, eval_instr_mem (i sz d x y) m = eval_rm128_shift MSB_CLEAR sz sem d x y m) →
   gen_sem_correct [:: TYrm128 ; TYrm128 ; TYimm U8 ] (op sz)
                   [:: E sz 0 ] [:: E sz 1 ; E U8 2 ] [::] (i sz).
 Proof.
-move => ok_sopn hsem lsem d x y; split => // gd m m'.
+move => ok_sopn hsem lsem d x y; split => // m m'.
 rewrite /low_sem_aux /= lsem /eval_rm128_shift hsem /x86_u128_shift /=.
 case hx: arg_of_rm128 => [ x' | ] //.
 case: d => d //=;
@@ -1191,20 +1178,20 @@ Qed.
 
 Arguments x86_rm128_shift_gsc : clear implicits.
 
-Definition VPSLL_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_gsc ve sz (Ox86_VPSLL ve) (VPSLL ve) _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
-Definition VPSRL_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_gsc ve sz (Ox86_VPSRL ve) (VPSRL ve) _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+Definition VPSLL_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_gsc ve sz (Ox86_VPSLL ve) (VPSLL ve) _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
+Definition VPSRL_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_gsc ve sz (Ox86_VPSRL ve) (VPSRL ve) _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
-Definition VPSRA_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_gsc ve sz (Ox86_VPSRA ve) (VPSRA ve) _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+Definition VPSRA_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_gsc ve sz (Ox86_VPSRA ve) (VPSRA ve) _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma x86_rm128_shift_variable_gsc ve sz op i sem :
   (∀ d x y, is_sopn (i sz d x y)) →
   (exec_sopn (op sz) = app_ww sz (x86_u128_shift_variable ve sz sem)) →
-  (∀ d x y gd m, eval_instr_mem gd (i sz d x y) m = eval_rm128_shift_variable gd sz sem d x y m) →
+  (∀ d x y m, eval_instr_mem (i sz d x y) m = eval_rm128_shift_variable sz sem d x y m) →
   gen_sem_correct [:: TYxreg ; TYxreg ; TYrm128 ] (op sz)
                   [:: E sz 0 ] [:: E sz 1 ; E sz 2 ] [::] (i sz).
 Proof.
-move => ok_sopn hsem lsem d x y; split => // gd m m'.
+move => ok_sopn hsem lsem d x y; split => // m m'.
 rewrite /low_sem_aux /= lsem /eval_rm128_shift_variable hsem /x86_u128_shift_variable /=.
 case hy: arg_of_rm128 => [ y' | ] //=.
 t_xrbindP => ???? hy' <- <- /=.
@@ -1216,18 +1203,18 @@ Qed.
 
 Arguments x86_rm128_shift_variable_gsc : clear implicits.
 
-Definition VPSLLV_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_variable_gsc ve sz (Ox86_VPSLLV ve) (VPSLLV ve) _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
-Definition VPSRLV_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_variable_gsc ve sz (Ox86_VPSRLV ve) (VPSRLV ve) _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+Definition VPSLLV_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_variable_gsc ve sz (Ox86_VPSLLV ve) (VPSLLV ve) _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
+Definition VPSRLV_desc (ve: velem) sz := make_instr_desc (x86_rm128_shift_variable_gsc ve sz (Ox86_VPSRLV ve) (VPSRLV ve) _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma x86_shift_double_quadword_gsc sz op i sem :
   (∀ d x y, is_sopn (i sz d x y)) →
   (exec_sopn (op sz) = app_w8 sz (x86_vpsxldq sem)) →
-  (∀ d x y gd m, eval_instr_mem gd (i sz d x y) m = eval_shift_double_quadword sem d x y m) →
+  (∀ d x y m, eval_instr_mem (i sz d x y) m = eval_shift_double_quadword sem d x y m) →
   gen_sem_correct [:: TYxreg ; TYxreg ; TYimm U8 ] (op sz)
                   [:: E sz 0 ] [:: E sz 1 ; E sz 2 ] [::] (i sz).
 Proof.
-move => ok_sopn hsem lsem d x y; split => // gd m m'.
+move => ok_sopn hsem lsem d x y; split => // m m'.
 rewrite /low_sem_aux /= lsem /eval_shift_double_quadword hsem /x86_vpsxldq /=.
 t_xrbindP => ?? /truncate_wordP [_ ->] ? ok_sz /= <- [<-].
 rewrite ok_sz /=; know_it; do 3 f_equal.
@@ -1236,18 +1223,18 @@ Qed.
 
 Arguments x86_shift_double_quadword_gsc : clear implicits.
 
-Definition VPSLLDQ_desc sz := make_instr_desc (x86_shift_double_quadword_gsc sz Ox86_VPSLLDQ VPSLLDQ _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
-Definition VPSRLDQ_desc sz := make_instr_desc (x86_shift_double_quadword_gsc sz Ox86_VPSRLDQ VPSRLDQ _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+Definition VPSLLDQ_desc sz := make_instr_desc (x86_shift_double_quadword_gsc sz Ox86_VPSLLDQ VPSLLDQ _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
+Definition VPSRLDQ_desc sz := make_instr_desc (x86_shift_double_quadword_gsc sz Ox86_VPSRLDQ VPSRLDQ _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma x86_xmm_binop_gsc sz op i sem :
   (∀ d x y, is_sopn (i sz d x y)) →
   (exec_sopn (op sz) = app_ww sz (@x86_u128_binop sz sem)) →
-  (∀ d x y gd m, eval_instr_mem gd (i sz d x y) m = eval_xmm_binop gd sem d x y m) →
+  (∀ d x y m, eval_instr_mem (i sz d x y) m = eval_xmm_binop sem d x y m) →
   gen_sem_correct [:: TYxreg ; TYxreg ; TYrm128 ] (op sz)
                   [:: E sz 0 ] [:: E sz 1 ; E sz 2 ] [::] (i sz).
 Proof.
-move => ok_sopn hsem lsem d x y; split => // gd m m'.
+move => ok_sopn hsem lsem d x y; split => // m m'.
 rewrite /low_sem_aux /= lsem /eval_xmm_binop hsem /x86_u128_binop /=.
 case hy: (arg_of_rm128 _ y) => [ y' | ] //=.
 t_xrbindP => ???? h <- <- /=; rewrite /truncate_word wsize_le_U256 /=.
@@ -1259,20 +1246,20 @@ Qed.
 
 Arguments x86_xmm_binop_gsc : clear implicits.
 
-Definition VPMULU_desc sz := make_instr_desc (x86_xmm_binop_gsc sz Ox86_VPMULU VPMULU _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
-Definition VPANDN_desc sz := make_instr_desc (x86_xmm_binop_gsc sz Ox86_VPANDN VPANDN _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
-Definition VPSHUFB_desc sz := make_instr_desc (x86_xmm_binop_gsc sz Ox86_VPSHUFB VPSHUFB _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+Definition VPMULU_desc sz := make_instr_desc (x86_xmm_binop_gsc sz Ox86_VPMULU VPMULU _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
+Definition VPANDN_desc sz := make_instr_desc (x86_xmm_binop_gsc sz Ox86_VPANDN VPANDN _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
+Definition VPSHUFB_desc sz := make_instr_desc (x86_xmm_binop_gsc sz Ox86_VPSHUFB VPSHUFB _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma vpshuf_gsc sz op i sem :
   (∀ d x y, is_sopn (i sz d x y)) →
   (exec_sopn (op sz) = app_w8 sz (x86_vpshuf sz sem)) →
-  (∀ d x y gd m, eval_instr_mem gd (i sz d x y) m = eval_vpshuf gd sem d x y m) →
+  (∀ d x y m, eval_instr_mem (i sz d x y) m = eval_vpshuf sem d x y m) →
   gen_sem_correct [:: TYxreg ; TYrm128 ; TYimm U8 ]
     (op sz) [:: E sz 0 ] [:: E sz 1 ; E U8 2 ] [::]
     (i sz).
 Proof.
-move => ok_sopn hsem lsem x y z; split => // gd m m'.
+move => ok_sopn hsem lsem x y z; split => // m m'.
 rewrite /low_sem_aux /= lsem /eval_vpshuf hsem /x86_vpshuf /=.
 case hz: arg_of_rm128 => [ z' | ] //=.
 t_xrbindP => ??? h <-; t_xrbindP => w /to_wordI [sz'] [w'] [hle ??].
@@ -1286,19 +1273,19 @@ Qed.
 
 Arguments vpshuf_gsc : clear implicits.
 
-Definition VPSHUFHW_desc sz := make_instr_desc (vpshuf_gsc sz Ox86_VPSHUFHW VPSHUFHW _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
-Definition VPSHUFLW_desc sz := make_instr_desc (vpshuf_gsc sz Ox86_VPSHUFLW VPSHUFLW _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
-Definition VPSHUFD_desc sz := make_instr_desc (vpshuf_gsc sz Ox86_VPSHUFD VPSHUFD _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+Definition VPSHUFHW_desc sz := make_instr_desc (vpshuf_gsc sz Ox86_VPSHUFHW VPSHUFHW _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
+Definition VPSHUFLW_desc sz := make_instr_desc (vpshuf_gsc sz Ox86_VPSHUFLW VPSHUFLW _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
+Definition VPSHUFD_desc sz := make_instr_desc (vpshuf_gsc sz Ox86_VPSHUFD VPSHUFD _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma vpunpck_gsc (ve: velem) sz op i sem :
   (∀ d x y, is_sopn (i ve sz d x y)) →
   (exec_sopn (op ve sz) = app_ww sz (x86_u128_binop sem)) →
-  (∀ d x y gd m, eval_instr_mem gd (i ve sz d x y) m = eval_vpunpck gd sem d x y m) →
+  (∀ d x y m, eval_instr_mem (i ve sz d x y) m = eval_vpunpck sem d x y m) →
   gen_sem_correct [:: TYxreg ; TYxreg ; TYrm128 ]
     (op ve sz) [:: E sz 0 ] [:: E sz 1 ; E sz 2 ] [::] (i ve sz).
 Proof.
-move => ok_sopn hsem lsem x y z; split => // gd m m'.
+move => ok_sopn hsem lsem x y z; split => // m m'.
 rewrite /low_sem_aux /= lsem /eval_vpunpck hsem /x86_u128_binop /=.
 case hz: arg_of_rm128 => [ z' | ] //=.
 t_xrbindP => ???? h <- <- /=; rewrite /truncate_word wsize_le_U256 /=.
@@ -1311,8 +1298,8 @@ Qed.
 
 Arguments vpunpck_gsc : clear implicits.
 
-Definition VPUNPCKH_desc ve sz := make_instr_desc (vpunpck_gsc ve sz Ox86_VPUNPCKH VPUNPCKH _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
-Definition VPUNPCKL_desc ve sz := make_instr_desc (vpunpck_gsc ve sz Ox86_VPUNPCKL VPUNPCKL _ (λ d x y, erefl) erefl (λ d x y gd m, erefl)).
+Definition VPUNPCKH_desc ve sz := make_instr_desc (vpunpck_gsc ve sz Ox86_VPUNPCKH VPUNPCKH _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
+Definition VPUNPCKL_desc ve sz := make_instr_desc (vpunpck_gsc ve sz Ox86_VPUNPCKL VPUNPCKL _ (λ d x y, erefl) erefl (λ d x y m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma VPBLENDD_gsc sz :
@@ -1321,7 +1308,7 @@ Lemma VPBLENDD_gsc sz :
     [:: E sz 0 ] [:: E sz 1 ; E sz 2 ; E U8 3 ] [::]
     (VPBLENDD sz).
 Proof.
-move => x y z k; split => // gd m m'.
+move => x y z k; split => // m m'.
 rewrite /low_sem_aux /=.
 case hz: arg_of_rm128 => [ z' | ] //=.
 t_xrbindP => ???? h <- <-; t_xrbindP => w1 /to_wordI [sz1] [w1'] [_ /Vword_inj [?]].
@@ -1342,7 +1329,7 @@ Lemma VPBROADCAST_gsc ve sz :
     [:: E sz 0 ] [:: E ve 1 ] [::]
     (VPBROADCAST ve sz).
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /=.
 case hy: arg_of_rm128 => [ y' | ] //=.
 t_xrbindP => ??? h <-; t_xrbindP => w' /to_wordI [sz'] [w] [hle ??]; subst.
@@ -1360,7 +1347,7 @@ Lemma VBROADCASTI128_gsc :
     [:: E U256 0 ] [:: E U128 1 ] [::]
     VBROADCASTI128.
 Proof.
-move => x y; split => // gd m m'.
+move => x y; split => // m m'.
 rewrite /low_sem_aux /=.
 case hy: arg_of_rm128 => [ y' | ] //=.
 t_xrbindP => ??? h <-; t_xrbindP => w' /to_wordI [sz'] [w] [hle ??]; subst.
@@ -1378,7 +1365,7 @@ Lemma VEXTRACTI128_gsc :
     [:: E U128 0 ] [:: E U256 1 ; E U8 2 ] [::]
     VEXTRACTI128.
 Proof.
-move => x y z; split => // gd m m'.
+move => x y z; split => // m m'.
 rewrite /low_sem_aux /=.
 rewrite zero_extend_u zero_extend_sign_extend //.
 case: x => // [ x | x ]; [ case | ];
@@ -1395,13 +1382,13 @@ Lemma i128_terop_gsc sz op i sem :
   (check_size_128_256 sz = ok tt) →
   (∀ d x y n, is_sopn (i d x y n)) →
   (exec_sopn op = app_sopn [:: sword256 ; sword sz ; sword8 ] (λ x y n, ok [:: Vword (sem x y n)])) →
-  (∀ d x y n gd m, eval_instr_mem gd (i d x y n) m = eval_i128_terop gd sem d x y n m) →
+  (∀ d x y n m, eval_instr_mem (i d x y n) m = eval_i128_terop sem d x y n m) →
   gen_sem_correct [:: TYxreg ; TYxreg ; TYrm128 ; TYimm U8 ]
     op
     [:: E U256 0 ] [:: E U256 1 ; E sz 2 ; E U8 3 ] [::]
     i.
 Proof.
-move => ok_sz ok_sopn hsem lsem x y z k; split => // gd m m'.
+move => ok_sz ok_sopn hsem lsem x y z k; split => // m m'.
 rewrite /low_sem_aux /=.
 case hz: arg_of_rm128 => [ z' | ] //=.
 rewrite hsem lsem /=.
@@ -1415,15 +1402,15 @@ Qed.
 
 Arguments i128_terop_gsc : clear implicits.
 
-Definition VINSERTI128_desc := make_instr_desc (i128_terop_gsc U128 Ox86_VINSERTI128 VINSERTI128 winserti128 erefl (λ d x y n, erefl) erefl (λ d x y n gd m, erefl)).
-Definition VPERM2I128_desc := make_instr_desc (i128_terop_gsc U256 Ox86_VPERM2I128 VPERM2I128 wperm2i128 erefl (λ d x y n, erefl) erefl (λ d x y n gd m, erefl)).
+Definition VINSERTI128_desc := make_instr_desc (i128_terop_gsc U128 Ox86_VINSERTI128 VINSERTI128 winserti128 erefl (λ d x y n, erefl) erefl (λ d x y n m, erefl)).
+Definition VPERM2I128_desc := make_instr_desc (i128_terop_gsc U256 Ox86_VPERM2I128 VPERM2I128 wperm2i128 erefl (λ d x y n, erefl) erefl (λ d x y n m, erefl)).
 
 (* ----------------------------------------------------------------------------- *)
 Lemma VPERMQ_gsc :
   gen_sem_correct [:: TYxreg ; TYrm128 ; TYimm U8 ]
     Ox86_VPERMQ [:: E U256 0 ] [:: E U256 1 ; E U8 2 ] [::] VPERMQ.
 Proof.
-move => dst src imm; split => // gd m m'.
+move => dst src imm; split => // m m'.
 rewrite /low_sem_aux /= /eval_VPERMQ /x86_vpermq /=.
 case hsrc: arg_of_rm128 => [ src' | ] //=.
 t_xrbindP => ??? h <-; t_xrbindP => w /to_wordI [sz'] [w'] [hle ??].
@@ -1581,19 +1568,19 @@ case: (rf1 _) v => [ b | ] [] //=.
 - by rewrite type_of_rbool.
 Qed.
 
-Theorem assemble_sopnP gd ii out op args i s1 m1 s2 :
+Theorem assemble_sopnP ii out op args i s1 m1 s2 :
   lom_eqv s1 m1 →
   assemble_sopn ii out op args = ok i →
-  sem_sopn gd op s1 out args = ok s2 →
+  sem_sopn [::] op s1 out args = ok s2 →
   ∃ m2,
-    eval_instr_mem gd i m1 = ok m2
+    eval_instr_mem i m1 = ok m2
     ∧ lom_eqv s2 m2.
 Proof.
   rewrite /assemble_sopn.
   t_xrbindP => eqm id hid hiargs ok_hi loargs ok_lo ok_i h.
   have hm := compile_hi_sopnP (sopn_desc_name hid) ok_hi h.
   have [m2 [ok_m2 hm2]] := mixed_to_low eqm ok_lo hm.
-  suff : ∃ m0, eval_instr_mem gd i m1 = ok m0 ∧ x86_mem_equiv m2 m0.
+  suff : ∃ m0, eval_instr_mem i m1 = ok m0 ∧ x86_mem_equiv m2 m0.
   - case => m0 [hm0 eqm0].
     exists m0; split => //; exact: (lom_eqv_mem_equiv_trans hm2 eqm0).
   have := id_gen_sem id.
@@ -1601,7 +1588,7 @@ Proof.
   rewrite -(cat0s loargs); move: [::] loargs ok_i.
   elim: (id_tys id) (id_in id) (id_out id) (id_name id) (id_instr id).
   - move => ins outs op i'.
-    by move => acc [] // - [->] {i'} /=; rewrite cats0 => h [] _ /(_ gd m1 m2 h).
+    by move => acc [] // - [->] {i'} /=; rewrite cats0 => h [] _ /(_ m1 m2 h).
   move => ty tys ih ins outs op i' acc [] // g loargs /=; t_xrbindP => x ok_x hi /= h.
   have := ih ins outs op _ (acc ++ [:: g]) loargs hi.
   rewrite -catA => /(_ h) rec x0; apply: rec.

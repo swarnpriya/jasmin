@@ -129,6 +129,10 @@ Definition vmap0 : vmap :=
 Definition get_var (m:vmap) x :=
   on_vu (@pto_val (vtype x)) undef_error (m.[x]%vmap).
 
+Definition get_gvar (gd: glob_decls) (vm: vmap) (x:gvar) :=
+  if is_lvar x then get_var vm x.(gv)
+  else get_global gd x.(gv).
+
 (* Assigning undefined value is allowed only for bool *)
 Definition set_var (m:vmap) x v : exec vmap :=
   on_vu (fun v => m.[x<-ok v]%vmap)
@@ -154,16 +158,11 @@ Record estate := Estate {
   evm  : vmap
 }.
 
-Definition on_arr_var A (s:estate) (x:var) (f:forall n, WArray.array n-> exec A) :=
-  Let v := get_var s.(evm) x in
-  match v with
-  | Varr n t => f n t
-  | _ => type_error
-  end.
+Notation "'Let' ( n , t ) ':=' s '.[' v ']' 'in' body" :=
+  (@on_arr_var _ (get_var s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, s at level 0).
 
-Notation "'Let' ( n , t ) ':=' s '.[' x ']' 'in' body" :=
-  (@on_arr_var _ s x (fun n (t:WArray.array n) => body))
-  (at level 25, s at level 0).
+Notation "'Let' ( n , t ) ':=' gd ',' s '.[' v ']' 'in' body" :=
+  (@on_arr_var _ (get_gvar gd s.(evm) v) (fun n (t:WArray.array n) => body)) (at level 25, gd at level 0, s at level 0).
 
 Section SEM_PEXPR.
 
@@ -174,10 +173,9 @@ Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
   | Pconst z => ok (Vint z)
   | Pbool b  => ok (Vbool b)
   | Parr_init n => ok (Varr (WArray.empty n))
-  | Pvar v => get_var s.(evm) v
-  | Pglobal g => get_global gd g
+  | Pvar v => get_gvar gd s.(evm) v
   | Pget ws x e =>
-      Let (n, t) := s.[x] in
+      Let (n, t) := gd , s.[x] in
       Let i := sem_pexpr s e >>= to_int in
       Let w := WArray.get ws t i in
       ok (Vword w)
@@ -664,21 +662,33 @@ end;
 trivial.
 Qed.
 
-Lemma on_arr_varP A (f : forall n, WArray.array n -> exec A) v s x P0:
-  (forall n t, subtype (sarr n) (vtype x) ->
-       get_var (evm s) x = ok (@Varr n t) ->
-       f n t = ok v -> P0) ->
-  on_arr_var s x f = ok v -> P0.
+Lemma on_arr_varP A (f : forall n, WArray.array n -> exec A) v vm x P:
+  (forall n t, subtype (sarr n) (vtype x) -> 
+               get_var vm x = ok (@Varr n t) ->
+               f n t = ok v -> P) ->
+  on_arr_var (get_var vm x) f = ok v -> P.
 Proof.
   rewrite /on_arr_var /= => H;apply: rbindP => vx.
   case: x H => -[ | | n | sz ] /= nx;rewrite /get_var => H;
-    case Heq : ((evm s).[_])%vmap => [v' | e] //=; rewrite /= in H.
+    case Heq : (vm.[_])%vmap => [v' | e] //=; rewrite /= in H.
   + by move=> [<-]. + by case: (e) => // -[<-].
   + by move=> [<-]. + by case: (e) => // -[<-].
   + move=> [<-]; apply: H => /=; first by apply Z.leb_refl.
     by rewrite Heq /=.
   + by case: (e) => // -[<-].
-  + by move=> [<-]. + by case: (e) => // -[<-].
+  by move=> [<-]. + by case: (e) => // -[<-].
+Qed.
+
+Lemma on_arr_gvarP A (f : forall n, WArray.array n -> exec A) v gd vm x P0:
+  (forall n t, subtype (sarr n) (vtype x.(gv)) ->
+       get_gvar gd vm x = ok (@Varr n t) ->
+       f n t = ok v -> P0) ->
+  on_arr_var (get_gvar gd vm x) f = ok v -> P0.
+Proof.
+  rewrite /get_gvar; case: ifP => heq; first by apply: on_arr_varP.
+  move=> H; apply: rbindP => vx hx.
+  have h := type_of_get_global hx; case: vx h hx => // len t h.
+  by apply: H;rewrite -h.
 Qed.
 
 Definition Varr_inj := Varr_inj.
@@ -1004,11 +1014,25 @@ Qed.
 Lemma get_var_eq_on s vm' vm v: Sv.In v s -> vm =[s]  vm' -> get_var vm v = get_var vm' v.
 Proof. by move=> Hin Hvm;rewrite /get_var Hvm. Qed.
 
+Lemma get_gvar_eq_on s gd vm' vm v: Sv.Subset (read_gvar v) s -> vm =[s]  vm' -> get_gvar gd vm v = get_gvar gd vm' v.
+Proof. 
+  rewrite /read_gvar /get_gvar; case: ifP => // _ Hin.
+  by apply: get_var_eq_on; SvD.fsetdec.
+Qed.
+
 Lemma on_arr_var_eq_on s' X s A x (f: ∀ n, WArray.array n → exec A) :
    evm s =[X] evm s' -> Sv.In x X ->
-   on_arr_var s x f = on_arr_var s' x f.
+   on_arr_var (get_var (evm s) x) f = on_arr_var (get_var (evm s') x) f.
 Proof.
   by move=> Heq Hin;rewrite /on_arr_var;rewrite (get_var_eq_on Hin Heq).
+Qed.
+
+Lemma on_arr_gvar_eq_on s' gd X s A x (f: ∀ n, WArray.array n → exec A) :
+   evm s =[X] evm s' -> Sv.Subset (read_gvar x) X ->
+   on_arr_var (get_gvar gd (evm s) x) f = on_arr_var (get_gvar gd (evm s') x) f.
+Proof.
+  move=> Heq; rewrite /get_gvar /read_gvar;case:ifP => _ Hin //.
+  by apply: (@on_arr_var_eq_on _ X) => //; SvD.fsetdec.
 Qed.
 
 Section READ_E_ES_EQ_ON.
@@ -1031,11 +1055,11 @@ Section READ_E_ES_EQ_ON.
       move: rec => /(_ _ Heq') ->.
       case: (sem_pexpr _ _ e) => //= v.
       by move: ih => /(_ _ Heq) ->.
-    - by move=> x s /get_var_eq_on -> //; SvD.fsetdec.
+    - by move=> x s /get_gvar_eq_on -> //; SvD.fsetdec.
     - move=> sz x e He s Heq; rewrite (He _ Heq) => {He}.
-      rewrite (@on_arr_var_eq_on
-          {| emem := m; evm := vm' |} _ {| emem := m; evm := vm |} _ _ _ Heq) ?read_eE //.
-        by SvD.fsetdec.
+      rewrite (@on_arr_gvar_eq_on
+          {| emem := m; evm := vm' |} gd _ {| emem := m; evm := vm |} _ _ _ Heq) ?read_eE //.
+      by SvD.fsetdec.
     - by move=> sz x e He s Hvm; rewrite (get_var_eq_on _ Hvm) ?(He _ Hvm) // read_eE;SvD.fsetdec.
     - by move=> op e He s /He ->.
     - move => op e1 He1 e2 He2 s Heq; rewrite (He1 _ Heq) (He2 s) //.
@@ -1140,23 +1164,6 @@ Notation "vm1 = vm2 [\ s ]" := (vmap_eq_except s vm1 vm2) (at level 70, vm2 at n
 Notation "vm1 '=[' s ']' vm2" := (eq_on s vm1 vm2) (at level 70, vm2 at next level,
   format "'[hv ' vm1  =[ s ]  '/'  vm2 ']'").
 
-Definition word_uincl sz1 sz2 (w1:word sz1) (w2:word sz2) :=
-  (sz1 <= sz2)%CMP && (w1 == zero_extend sz1 w2).
-
-Lemma word_uincl_refl s (w : word s): word_uincl w w.
-Proof. by rewrite /word_uincl zero_extend_u cmp_le_refl eqxx. Qed.
-Hint Resolve word_uincl_refl.
-
-Lemma word_uincl_eq s (w w': word s):
-  word_uincl w w' → w = w'.
-Proof. by move=> /andP [] _ /eqP; rewrite zero_extend_u. Qed.
-
-Lemma word_uincl_trans s2 w2 s1 s3 w1 w3 :
-   @word_uincl s1 s2 w1 w2 -> @word_uincl s2 s3 w2 w3 -> word_uincl w1 w3.
-Proof.
-  rewrite /word_uincl => /andP [hle1 /eqP ->] /andP [hle2 /eqP ->].
-  by rewrite (cmp_le_trans hle1 hle2) zero_extend_idem // eqxx.
-Qed.
 
 (* ------------------------------------------ *)
 
@@ -1513,15 +1520,6 @@ Proof.
   by rewrite /= zero_extend_idem // (sumbool_of_boolEF hnle).
 Qed.
 
-(*
-Lemma subtype_eq_vundef_type t t': subtype t t' -> vundef_type t = vundef_type t'.
-Proof.
-  move=> hsub.
-  apply subtype_vundef_type_eq.
-  apply: subtype_trans hsub;apply subtype_vundef_type.
-Qed.
-*)
-
 Lemma get_var_uincl x vm1 vm2 v1:
   vm_uincl vm1 vm2 ->
   get_var vm1 x = ok v1 ->
@@ -1532,6 +1530,16 @@ Proof.
   move: H;rewrite Heq1=> {Heq1}.
   case: (vm2.[x])%vmap => //= z2 Hz2.
   by exists (pto_val z2) => //;apply pval_uinclP.
+Qed.
+
+Lemma get_gvar_uincl x gd vm1 vm2 v1:
+  vm_uincl vm1 vm2 ->
+  get_gvar gd vm1 x = ok v1 ->
+  exists2 v2, get_gvar gd vm2 x = ok v2 & value_uincl v1 v2.
+Proof.
+  rewrite /get_gvar; case:ifP => _.
+  + by apply: get_var_uincl.
+  by move=> ? ->;exists v1.
 Qed.
 
 Lemma  get_vars_uincl (xs:seq var_i) vm1 vm2 vs1:
@@ -1665,13 +1673,12 @@ Lemma sem_pexpr_uincl gd s1 vm2 e v1 :
   sem_pexpr gd s1 e = ok v1 →
   exists2 v2, sem_pexpr gd (Estate s1.(emem) vm2) e = ok v2 & value_uincl v1 v2.
 Proof.
-  move=> Hu; elim: e v1=>//=[z|b|n|x|g|ws x p Hp|sz x p Hp|o e He|o e1 He1 e2 He2 | op es Hes | t e He e1 He1 e2 He2 ] v1.
+  move=> Hu; elim: e v1=>//=[z|b|n|x|ws x p Hp|sz x p Hp|o e He|o e1 He1 e2 He2 | op es Hes | t e He e1 He1 e2 He2 ] v1.
   + by move=> [] <-;exists z.
   + by move=> [] <-;exists b.
   + by case => <-; eauto.
-  + by apply get_var_uincl.
-  + by eauto.
-  + apply on_arr_varP => n t Htx;rewrite /on_arr_var=> /(get_var_uincl Hu) [v2 ->].
+  + by apply get_gvar_uincl.
+  + apply on_arr_gvarP => n t Htx;rewrite /on_arr_var=> /(get_gvar_uincl Hu) [v2 ->].
     case: v2 => //= n' t' hu.
     apply: rbindP => z;apply: rbindP => vp /Hp [] vp' -> /= Hvu Hto.
     case: (value_uincl_int Hvu Hto) => ??;subst.
@@ -2126,9 +2133,10 @@ Proof.
 Qed.
 
 Lemma sem_pexprs_get_var gd s xs :
-  sem_pexprs gd s [seq Pvar i | i <- xs] = mapM (fun x : var_i => get_var (evm s) x) xs.
+  sem_pexprs gd s [seq Pvar (mk_lvar i) | i <- xs] = mapM (fun x : var_i => get_var (evm s) x) xs.
 Proof.
   rewrite /sem_pexprs;elim: xs=> //= x xs Hrec.
+  rewrite {1}/get_gvar /mk_lvar /=.
   by case: get_var => //= v;rewrite Hrec.
 Qed.
 
@@ -2356,13 +2364,16 @@ Proof.
   by apply: rec => //; rewrite in_cons hq orbT.
 Qed.
 
+Lemma eq_gvarP gd vm x x' : eq_gvar x x' → get_gvar gd vm x = get_gvar gd vm x'.
+Proof. by rewrite /eq_gvar /get_gvar /is_lvar => /andP [] /eqP -> /eqP ->. Qed.
+
 Lemma eq_exprP gd s e1 e2 : eq_expr e1 e2 -> sem_pexpr gd s e1 = sem_pexpr gd s e2.
 Proof.
-  elim: e1 e2=> [z  | b | n | x | g | sz x e He | sz x e He | o e  He | o e1 He1 e2 He2 | o es Hes | t e He e1 He1 e2 He2]
-                [z' | b' | n' | x' | g' | sz' x' e'  | sz' x' e'  | o' e' | o' e1' e2' | o' es' | t' e' e1' e2'] //=.
-  + by move=> /eqP ->.   + by move=> /eqP ->.
+  elim: e1 e2=> [z  | b | n | x | sz x e He | sz x e He | o e  He | o e1 He1 e2 He2 | o es Hes | t e He e1 He1 e2 He2]
+                [z' | b' | n' | x' | sz' x' e'  | sz' x' e'  | o' e' | o' e1' e2' | o' es' | t' e' e1' e2'] //=.
   + by move=> /eqP ->.   + by move=> /eqP ->.  + by move=> /eqP ->.
-  + by move=> /andP []/andP [] /eqP -> /eqP -> /He ->.
+  + by apply: eq_gvarP.
+  + by move=> /andP []/andP [] /eqP -> /eq_gvarP -> /He ->.
   + by case/andP => /andP [] /eqP -> /eqP -> /He ->.
   + by move=> /andP[]/eqP -> /He ->.
   + by move=> /andP[]/andP[] /eqP -> /He1 -> /He2 ->.

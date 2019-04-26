@@ -17,7 +17,9 @@ Definition label := positive.
 (* -------------------------------------------------------------------- *)
 Variant register : Type :=
   | RAX | RCX | RDX | RBX | RSP | RBP | RSI | RDI
-  | R8  | R9  | R10 | R11 | R12 | R13 | R14 | R15.
+  | R8  | R9  | R10 | R11 | R12 | R13 | R14 | R15
+  | RIP (* This is special here is stand for RIP + label_data *)
+  .
 
 (* -------------------------------------------------------------------- *)
 Variant xmm_register : Type :=
@@ -45,14 +47,12 @@ Record address : Type := mkAddress {
 (* -------------------------------------------------------------------- *)
 Variant oprd : Type :=
 | Imm_op     of u64
-| Glo_op     of global
 | Reg_op     of register
 | Adr_op     of address.
 
 Definition string_of_oprd (o: oprd) : string :=
   match o with
   | Imm_op x => "Imm"
-  | Glo_op x => "Glo"
   | Reg_op x => "Reg"
   | Adr_op x => "Adr"
   end.
@@ -105,31 +105,26 @@ Definition string_of_condt (c: condt) : string :=
 Variant rm128 :=
 | RM128_reg of xmm_register
 | RM128_mem of address
-| RM128_glo of global
 .
 
 Definition string_of_rm128 rm : string :=
   match rm with
   | RM128_reg r => "RM128_reg"
   | RM128_mem x => "RM128_mem"
-  | RM128_glo g => "RM128_glo"
   end.
 
 (* -------------------------------------------------------------------- *)
 Variant m128 :=
-| M128_mem of address
-| M128_glo of global.
+| M128_mem of address.
 
 Definition string_of_m128 mo : string :=
   match mo with
   | M128_mem a => "M128_mem"
-  | M128_glo g => "M128_glo"
   end.
 
 Coercion rm128_of_m128 mo : rm128 :=
   match mo with
   | M128_mem a => RM128_mem a
-  | M128_glo g => RM128_glo g
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -271,7 +266,6 @@ Canonical address_eqType := EqType address address_eqMixin.
 Definition oprd_beq (op1 op2 : oprd) :=
   match op1, op2 with
   | Imm_op w1, Imm_op w2 => w1 == w2
-  | Glo_op g1, Glo_op g2 => g1 == g2
   | Reg_op r1, Reg_op r2 => r1 == r2
   | Adr_op a1, Adr_op a2 => a1 == a2
   | _        , _         => false
@@ -279,7 +273,7 @@ Definition oprd_beq (op1 op2 : oprd) :=
 
 Lemma oprd_eq_axiom : Equality.axiom oprd_beq.
 Proof.
-case=> [w1| g1 |r1|a1] [w2| g2 |r2|a2] /=; try constructor => //;
+case=> [w1|r1|a1] [w2|r2|a2] /=; try constructor => //;
   by apply (equivP eqP); split=> [->|[]].
 Qed.
 
@@ -293,13 +287,12 @@ Definition rm128_beq (rm1 rm2: rm128) : bool :=
   match rm1, rm2 with
   | RM128_reg r1, RM128_reg r2 => r1 == r2
   | RM128_mem a1, RM128_mem a2 => a1 == a2
-  | RM128_glo g1, RM128_glo g2 => g1 == g2
   | _, _ => false
   end.
 
 Lemma rm128_eq_axiom : Equality.axiom rm128_beq.
 Proof.
-  case => [ r | a | g ] [ r' | a' | g' ] /=; (try by constructor);
+  case => [ r | a ] [ r' | a' ] /=; (try by constructor);
   case: eqP => h; constructor; congruence.
 Qed.
 
@@ -309,7 +302,7 @@ Canonical rm128_eqType := EqType rm128 rm128_eqMixin.
 (* -------------------------------------------------------------------- *)
 Definition registers :=
   [:: RAX; RCX; RDX; RBX; RSP; RBP; RSI; RDI ;
-      R8 ; R9 ; R10; R11; R12; R13; R14; R15 ].
+      R8 ; R9 ; R10; R11; R12; R13; R14; R15; RIP ].
 
 Lemma registers_fin_axiom : Finite.axiom registers.
 Proof. by case. Qed.
@@ -440,8 +433,6 @@ Notation x86_result_state := (result error x86_state).
 (* -------------------------------------------------------------------- *)
 Section GLOB_DEFS.
 
-Context (gd: glob_decls).
-
 (* -------------------------------------------------------------------- *)
 
 Definition word_extend_reg (r: register) sz (w: word sz) (m: x86_mem) := 
@@ -536,7 +527,6 @@ Definition decode_addr (s : x86_mem) (a : address) : pointer := nosimpl (
 (* -------------------------------------------------------------------- *)
 Definition write_oprd (o : oprd) sz (w : word sz) (s : x86_mem) :=
   match o with
-  | Glo_op _
   | Imm_op _ => type_error
   | Reg_op r => ok (mem_write_reg r w s)
   | Adr_op a => mem_write_mem (decode_addr s a) w s
@@ -546,7 +536,6 @@ Definition write_oprd (o : oprd) sz (w : word sz) (s : x86_mem) :=
 Definition read_oprd sz (o : oprd) (s : x86_mem) :=
   match o with
   | Imm_op v => ok (zero_extend sz v)
-  | Glo_op g => if get_global gd g is Ok (Vword sz' v) then ok (zero_extend sz v) else type_error
   | Reg_op r => ok (zero_extend sz (s.(xreg) r))
   | Adr_op a => read_mem s.(xmem) (decode_addr s a) sz
   end.
@@ -699,7 +688,6 @@ Definition read_rm128_nocheck (sz: wsize) (rm: rm128) (m: x86_mem) : exec (word 
   match rm with
   | RM128_reg r => ok (zero_extend sz (m.(xxreg) r))
   | RM128_mem a => read_mem m.(xmem) (decode_addr m a) sz
-  | RM128_glo g => get_global gd g >>= get_word sz
   end.
 
 Definition read_rm128 (sz: wsize) (rm: rm128) (m: x86_mem) : exec (word sz) :=
@@ -733,7 +721,6 @@ Definition write_rm128 (f: msb_flag) (sz: wsize) (rm: rm128) (w: word sz) (m: x8
   match rm with
   | RM128_reg r => ok (mem_update_xreg f r w m)
   | RM128_mem a => mem_write_mem (decode_addr m a) w m
-  | RM128_glo _ => type_error
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -1484,27 +1471,32 @@ End GLOB_DEFS.
 (* -------------------------------------------------------------------- *)
 Record xfundef := XFundef {
  xfd_stk_size : Z;
- xfd_nstk : register;
  xfd_arg  : seq register;
  xfd_body : seq asm;
  xfd_res  : seq register;
 }.
 
-Definition xprog : Type :=
-  seq (funname * xfundef).
+Record xprog : Type :=
+  { xp_glob : seq u8;
+    xp_funcs : seq (funname * xfundef) }.
 
 (* TODO: flags may be preserved *)
 (* TODO: restore stack pointer of caller? *)
-Variant x86sem_fd (P: xprog) (gd: glob_decls) fn st st' : Prop :=
+Variant x86sem_fd (P: xprog) (wrip: u64) fn st st' : Prop :=
 | X86Sem_fd fd mp st2
-   `(get_fundef P fn = Some fd)
+   `(get_fundef (xp_funcs P) fn = Some fd)
    `(alloc_stack st.(xmem) fd.(xfd_stk_size) = ok mp)
-    (st1 := mem_write_reg fd.(xfd_nstk) (top_stack mp) {| xmem := mp ; xreg := st.(xreg) ; xxreg := st.(xxreg) ; xrf := rflagmap0 |})
+    
+    (st0 := 
+       mem_write_reg RSP (top_stack mp) 
+        {| xmem := mp ; xreg := st.(xreg) ; xxreg := st.(xxreg) ; xrf := rflagmap0 |})
+    (st1 :=
+       mem_write_reg RIP wrip st0)
     (c := fd.(xfd_body))
-    `(x86sem gd {| xm := st1 ; xc := c ; xip := 0 |} {| xm := st2; xc := c; xip := size c |})
+    `(x86sem {| xm := st1 ; xc := c ; xip := 0 |} {| xm := st2; xc := c; xip := size c |})
     `(st' = {| xmem := free_stack st2.(xmem) fd.(xfd_stk_size) ; xreg := st2.(xreg) ; xxreg := st2.(xxreg) ; xrf := rflagmap0 |})
     .
 
-Definition x86sem_trans gd s2 s1 s3 :
-  x86sem gd s1 s2 -> x86sem gd s2 s3 -> x86sem gd s1 s3 :=
+Definition x86sem_trans s2 s1 s3 :
+  x86sem s1 s2 -> x86sem s2 s3 -> x86sem s1 s3 :=
   rt_trans _ _ s1 s2 s3.

@@ -67,9 +67,16 @@ Qed.
 Definition sfundef_eqMixin   := Equality.Mixin sfundef_eq_axiom.
 Canonical  sfundef_eqType      := Eval hnf in EqType sfundef sfundef_eqMixin.
 
-Definition sprog := seq (funname * sfundef).
+Record sprog := 
+  { sp_rip   : Ident.ident;
+    sp_globs : seq u8;
+    sp_funcs : seq (funname * sfundef) }.
 
-Definition map := (Mvar.t Z * Ident.ident)%type.
+Record map := MkMap
+  { mstk : Mvar.t Z;
+    rsp : Ident.ident;
+    mglob: Mvar.t Z;
+    rip : Ident.ident; }.
 
 Definition size_of (t:stype) := 
   match t with
@@ -85,7 +92,7 @@ Definition aligned_for (ty: stype) (ofs: Z) : bool :=
   | sbool | sint => false
   end.
 
-Definition init_map (sz:Z) (nstk:Ident.ident) (l:list (var * Z)):=
+Definition init_map (sz:Z) (l:list (var * Z)):=
   let add (vp:var*Z) (mp:Mvar.t Z * Z) :=
       let '(v, p) := vp in
     if (mp.2 <=? p)%Z then
@@ -96,22 +103,27 @@ Definition init_map (sz:Z) (nstk:Ident.ident) (l:list (var * Z)):=
     else cerror (Cerr_stk_alloc "not aligned")
     else cerror (Cerr_stk_alloc "overlap") in
   Let mp := foldM add (Mvar.empty Z, 0%Z) l in 
-  if (mp.2 <=? sz)%Z then cok (mp.1, nstk)
+  if (mp.2 <=? sz)%Z then cok mp.1
   else cerror (Cerr_stk_alloc "stack size").
 
 Definition is_in_stk (m:map) (x:var) :=
-  match Mvar.get m.1 x with 
+  match Mvar.get m.(mstk) x with 
   | Some _ => true
   | None   => false
   end.
 
-Definition vstk (m:map) :=  {|vtype := sword Uptr; vname := m.2|}.
+Definition vrsp (m:map) :=  {|vtype := sword Uptr; vname := m.(rsp)|}.
 
-Definition is_vstk (m:map) (x:var) :=
-  x == (vstk m).
+Definition is_vrsp (m:map) (x:var) :=
+  x == (vrsp m).
+
+Definition vrip (m:map) :=  {|vtype := sword Uptr; vname := m.(rip)|}.
+
+Definition is_vrip (m:map) (x:var) :=
+  x == (vrip m).
 
 Definition check_var m (x:var_i) := 
-  ~~ is_in_stk m x && ~~is_vstk m x.
+  ~~ is_in_stk m x && ~~is_vrsp m x && ~~is_vrip m x.
 
 (* TODO: move *)
 Definition is_word_type (t:stype) :=
@@ -134,17 +146,20 @@ Definition cast_word e :=
 
 (* End TODO *)
 
-Definition stk_not_fresh {A} := 
-  @cerror (Cerr_stk_alloc "the stack variable is not fresh") A.
-
-Definition not_a_word_v {A} := 
-  @cerror (Cerr_stk_alloc "not a word variable") A.
+Definition check_vfresh m x := 
+  if is_glob x then cerror (Cerr_stk_alloc "global variable remain")
+  else if is_vrsp m x.(gv) then cerror (Cerr_stk_alloc "the stack variable is not fresh")
+  else if is_vrip m x.(gv) then cerror (Cerr_stk_alloc "the instruction pointer variable is not fresh")
+  else ok tt.
 
 Definition not_aligned {A} := 
   @cerror (Cerr_stk_alloc "array variable not aligned") A.
 
 Definition invalid_var {A} := 
   @cerror (Cerr_stk_alloc "invalid variable") A.
+
+Definition not_a_word_v {A} := 
+  @cerror (Cerr_stk_alloc "not a word variable") A.
 
 Definition mk_ofs ws e1 ofs := 
   let sz := wsize_size ws in
@@ -153,34 +168,44 @@ Definition mk_ofs ws e1 ofs :=
   else 
     add (mul (cast_const sz) (cast_word e1)) (cast_const ofs).
 
+Definition find_gvar (m:map) (x:gvar) := 
+  let m := if is_lvar x then m.(mstk) else m.(mglob) in
+  match Mvar.get m x.(gv) with
+  | Some ofs => Some ofs
+  | None     => None
+  end.
+
+Definition vptr m (x:gvar) := if is_lvar x then vrsp m else vrip m.
+   
 Fixpoint alloc_e (m:map) (e: pexpr) := 
   match e with
-  | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ => ok e
+  | Pconst _ | Pbool _ | Parr_init _ => ok e
   | Pvar   x =>
-    match Mvar.get m.1 x with 
+    match find_gvar m x with 
     | Some ofs =>
-      if is_word_type (vtype x) is Some ws then
+      let xv := x.(gv) in
+      if is_word_type (vtype xv) is Some ws then
         let ofs := cast_const ofs in
-        let stk := {| v_var := vstk m; v_info := x.(v_info) |} in
+        let stk := {| v_var := vptr m x; v_info := xv.(v_info) |} in
         ok (Pload ws stk ofs)
       else not_a_word_v 
     | None     =>
-      if is_vstk m x then stk_not_fresh 
-      else ok e 
+      Let _ := check_vfresh m x in
+      ok e
     end
   | Pget ws x e1 =>
     Let e1 := alloc_e m e1 in
-    match Mvar.get m.1 x with 
+    match find_gvar m x with 
     | Some ofs =>
       if is_align (wrepr _ ofs) ws then 
-        let stk := {| v_var := vstk m; v_info := x.(v_info) |} in
+        let stk := {| v_var := vptr m x; v_info := x.(gv).(v_info) |} in
         let ofs := mk_ofs ws e1 ofs in
         ok (Pload ws stk ofs)
       else not_aligned
 
     | None =>
-      if is_vstk m x then stk_not_fresh 
-      else ok (Pget ws x e1)
+      Let _ := check_vfresh m x in
+      ok (Pget ws x e1)
     end
 
   | Pload ws x e1 =>
@@ -214,18 +239,18 @@ Definition alloc_lval (m:map) (r:lval) ty :=
   | Lnone _ _ => ok r
 
   | Lvar x =>
-    match Mvar.get m.1 x with 
+    match Mvar.get m.(mstk) x with 
     | Some ofs =>
       if is_word_type (vtype x) is Some ws then
         if ty == sword ws then  
           let ofs := cast_const ofs in
-          let stk := {| v_var := vstk m; v_info := x.(v_info) |} in
+          let stk := {| v_var := vrsp m; v_info := x.(v_info) |} in
           ok (Lmem ws stk ofs)
         else cerror (Cerr_stk_alloc "invalid type for Lvar")
       else not_a_word_v 
     | None     =>
-      if is_vstk m x then stk_not_fresh 
-      else ok r
+      Let _ := check_vfresh m (mk_lvar x) in
+      ok r
     end
 
   | Lmem ws x e1 =>
@@ -236,17 +261,17 @@ Definition alloc_lval (m:map) (r:lval) ty :=
     
   | Laset ws x e1 =>
     Let e1 := alloc_e m e1 in
-    match Mvar.get m.1 x with 
+    match Mvar.get m.(mstk) x with 
     | Some ofs =>
       if is_align (wrepr _ ofs) ws then
-        let stk := {| v_var := vstk m; v_info := x.(v_info) |} in
+        let stk := {| v_var := vrsp m; v_info := x.(v_info) |} in
         let ofs := mk_ofs ws e1 ofs in
         ok (Lmem ws stk ofs)
       else not_aligned
 
     | None =>
-      if is_vstk m x then stk_not_fresh 
-      else ok (Laset ws x e1)
+      Let _ := check_vfresh m (mk_lvar x) in
+      ok (Laset ws x e1)
     end
 
   end.
@@ -291,18 +316,23 @@ Definition add_err_fun (A : Type) (f : funname) (r : cexec A) :=
   | Error e => Error (Ferr_fun f e)
   end.
 
-Definition alloc_fd (stk_alloc_fd : fun_decl -> Z * Ident.ident * list (var * Z))
+Definition alloc_fd rip mglob (stk_alloc_fd : fun_decl -> Z * Ident.ident * list (var * Z))
     (f: fun_decl) :=
   let info := stk_alloc_fd f in
   let (fn, fd) := f in
   Let sfd :=  
-    let: ((size, stkid), l) := info in 
-    Let m := add_err_fun fn (init_map size stkid l) in
+    let: ((size, rsp), l) := info in 
+    Let mstk := add_err_fun fn (init_map size l) in
+    let m :=  
+        {| mstk  := mstk;
+           rsp   := rsp;
+           mglob := mglob;
+           rip   := rip |} in
     Let body := add_finfo fn fn (mapM (alloc_i m) fd.(f_body)) in
-    if all (check_var m) fd.(f_params) && all (check_var m) fd.(f_res) then
+    if (rsp != rip) && all (check_var m) fd.(f_params) && all (check_var m) fd.(f_res) then
       ok {| sf_iinfo  := fd.(f_iinfo);
             sf_stk_sz := size;
-            sf_stk_id := stkid;
+            sf_stk_id := rsp;
             sf_tyin   := fd.(f_tyin);
             sf_params := fd.(f_params);
             sf_body   := body;
@@ -311,8 +341,43 @@ Definition alloc_fd (stk_alloc_fd : fun_decl -> Z * Ident.ident * list (var * Z)
     else add_err_fun fn invalid_var in
   ok (fn, sfd).
 
-Definition alloc_prog stk_alloc_fd P := 
-  mapM (alloc_fd stk_alloc_fd) P.(p_funcs).
+Definition check_glob (m: Mvar.t Z) (data:seq u8) (gd:glob_decl) := 
+  let x := gd.1 in
+  match Mvar.get m x with
+  | None => false 
+  | Some z =>
+    let n := Z.to_nat z in
+    let data := drop n data in
+    match gd.2 with
+    | @Gword ws w =>
+      let s := Z.to_nat (wsize_size ws) in 
+      (s <= size data) && 
+      (LE.decode ws (take s data) == w)
+    | @Garr p t =>
+      let s := Z.to_nat p in
+      (s <= size data) &&
+      all (fun i => 
+             match WArray.get U8 t (Z.of_nat i) with
+             | Ok w => nth 0%R data i == w
+             | _    => false
+             end) (iota 0 s)
+     end
+  end.
+
+Definition check_globs (gd:glob_decls) (m:Mvar.t Z) (data:seq u8) := 
+  all (check_glob m data) gd.
+
+Definition alloc_prog stk_alloc_fd (glob_alloc_p : prog -> seq u8 * Ident.ident * list (var * Z) ) P := 
+  let: ((data, rip), l) := glob_alloc_p P in 
+  Let mglob := add_err_msg (init_map (Z.of_nat (size data)) l) in
+  if check_globs P.(p_globs) mglob data then
+    Let p_funs := mapM (alloc_fd rip mglob stk_alloc_fd) P.(p_funcs) in
+    ok  {| sp_rip   := rip; 
+           sp_globs := data; 
+           sp_funcs := p_funs |}
+  else 
+     Error (Ferr_msg (Cerr_stk_alloc "invalid data: please report")).
+    
 
 
 
