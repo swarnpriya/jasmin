@@ -13,6 +13,14 @@ op x86_ROL_32 (x : W32.t) (cnt : W8.t) =
   (CF, OF, result)
   axiomatized by x86_ROL_32_E.
 
+op x86_ROL_64 (x : W64.t) (cnt : W8.t) =
+  let result = W64.rol x (to_uint cnt) in
+  let CF = result.[0] in
+  let OF = Logic.(^) CF result.[63] in
+  (CF, OF, result)
+  axiomatized by x86_ROL_64_E.
+
+
 (* -------------------------------------------------------------------- *)
 op x86_SHLD_32 :
   W32.t -> W32.t -> W8.t -> (bool * bool * bool * bool * bool * W32.t).
@@ -25,6 +33,54 @@ op x86_SHLD_64 :
 
 op x86_SHRD_64 :
   W64.t -> W64.t -> W8.t -> (bool * bool * bool * bool * bool * W64.t).
+
+(* -------------------------------------------------------------------- *)
+
+op SF_of_w32 (w : W32.t) =
+  w.[31].
+
+op PF_of_w32 (w : W32.t) =
+  w.[0].
+
+op ZF_of_w32 (w : W32.t) =
+  w = W32.zero.
+
+op rflags_of_aluop_nocf32 (w : W32.t) (vs : int) =
+  let OF = W32.to_sint w <> vs in
+  let SF = SF_of_w32 w in 
+  let PF = PF_of_w32 w in 
+  let ZF = ZF_of_w32 w in
+  (OF, SF, PF, ZF).
+
+op x86_DEC_32 (w:W32.t) =
+  let v  = w - W32.of_int 1 in
+  let vs = W32.to_sint w - 1 in
+  let (OF, SF, PF, SZ) = rflags_of_aluop_nocf32 v vs in
+  (OF,SF,PF,SF,v).
+
+(* -------------------------------------------------------------------- *)
+
+op SF_of_w8 (w : W8.t) =
+  w.[7].
+
+op PF_of_w8 (w : W8.t) =
+  w.[0].
+
+op ZF_of_w8 (w : W8.t) =
+  w = W8.zero.
+
+op rflags_of_bwop8 (w : W8.t) =
+  let OF = false in
+  let CF = false in
+  let SF = SF_of_w8 w in
+  let PF = PF_of_w8 w in
+  let ZF = ZF_of_w8 w in
+  (OF, CF, SF, PF, ZF).
+
+op x86_TEST_8 (x y:W8.t) = 
+  rflags_of_bwop8 (x `&` y).
+
+  
 
 (* -------------------------------------------------------------------- *)
 
@@ -193,9 +249,14 @@ abbrev [-printing] x86_VPAND_128 = W128.(`&`).
 abbrev [-printing] x86_VPOR_128 = W128.(`|`).
 abbrev [-printing] x86_VPXOR_128 = W128.(`^`).
 
+op x86_VPANDN_128 (x y:W128.t) = W128.invw x `&` y.
+
 abbrev [-printing] x86_VPAND_256 = W256.(`&`).
 abbrev [-printing] x86_VPOR_256  = W256.(`|`).
 abbrev [-printing] x86_VPXOR_256 = W256.(`^`).
+
+op x86_VPANDN_256 (x y:W256.t) = W256.invw x `&` y.
+
 
 op x86_VPMULU_128 (w1 w2: W128.t) = 
   map2 mulu64 w1 w2.
@@ -294,6 +355,16 @@ op x86_VPSRLDQ_128 (w1:W128.t) (w2:W8.t) =
 
 op x86_VPSRLDQ_256 (w1:W256.t) (w2:W8.t) = 
   map (fun w => x86_VPSRLDQ_128 w w2) w1.
+
+(* ------------------------------------------------------------------- *)
+op x86_VPSLLV_4u64 (w1:W256.t) (w2:W256.t) =
+  let sll = fun (x1 x2:W64.t) => x1 `<<<` W64.to_uint x2 in
+  map2 sll w1 w2.
+
+op x86_VPSRLV_4u64 (w1:W256.t) (w2:W256.t) =
+  let srl = fun (x1 x2:W64.t) => x1 `>>>` W64.to_uint x2 in
+  map2 srl w1 w2.
+
 (* ------------------------------------------------------------------- *)
 abbrev [-printing] (\vshr32u128) (w1:W128.t) (w2:W8.t) = x86_VPSRL_4u32 w1 w2.
 abbrev [-printing] (\vshl32u128) (w1:W128.t) (w2:W8.t) = x86_VPSLL_4u32 w1 w2.
