@@ -4,6 +4,7 @@ val fill_in_missing_names : 'info Prog.func -> 'info Prog.func
 
 module X64 : sig
   val rsp : var
+  val rip : var
   val all_registers : var list
 end
 

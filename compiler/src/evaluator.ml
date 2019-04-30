@@ -3,6 +3,7 @@ open Utils0
 open Type
 open Var0
 open Low_memory
+open Warray
 open Expr
 open Sem
          

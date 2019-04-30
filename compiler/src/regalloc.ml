@@ -65,7 +65,7 @@ let find_equality_constraints (id: instr_desc) : arg_position list list =
 let find_var outs ins ap : _ option =
   match ap with
   | APout n -> (List.nth outs n |> function Lvar v -> Some v | _ -> None)
-  | APin n -> (List.nth ins n |> function Pvar v -> Some v | _ -> None)
+  | APin n -> (List.nth ins n |> function Pvar v -> Some v.gv | _ -> None)
 
 let desc_of_op op =
   X86_instr.sopn_desc BinNums.Coq_xH op
@@ -81,9 +81,11 @@ let x86_equality_constraints (tbl: int Hv.t) (k: int -> int -> unit)
     with Not_found -> ()
   in
   begin match op, lvs, es with
-  | (Oaddcarry _ | Osubcarry _), [ _ ; Lvar v ], Pvar w :: _ -> merge k v w
-  | Ox86_MOV _, [ Lvar x ], [ Pvar y ] when kind_i x = kind_i y ->
-    merge k' x y
+  | (Oaddcarry _ | Osubcarry _), [ _ ; Lvar v ], Pvar w :: _ when is_gkvar w ->
+     merge k v w.gv
+  | Ox86_MOV _, [ Lvar x ], [ Pvar y ] when 
+        is_gkvar y && kind_i x = kind_i y.gv ->
+    merge k' x y.gv
   | _, _, _ ->
     begin match desc_of_op op with
     | Ok id ->
@@ -148,19 +150,20 @@ let collect_equality_constraints
     | Cfor (_, _, s)
       -> collect_stmt s
     | Copn (lvs, _, op, es) -> copn_constraints tbl (add ii) addf lvs op es
-    | Cassgn (Lvar x, (AT_rename | AT_phinode), _, Pvar y) ->
+    | Cassgn (Lvar x, (AT_rename | AT_phinode), _, Pvar y) when 
+          is_gkvar y ->
       let i = try Hv.find tbl (L.unloc x) with
         Not_found ->
           hierror "%s: unknown variable %a"
             msg
             (Printer.pp_var ~debug:true) (L.unloc x)
       in
-      let j = Hv.find tbl (L.unloc y) in
+      let j = Hv.find tbl (L.unloc y.gv) in
       add ii  i j
-    | Cassgn (Lvar x, _, _, Pvar y) when kind_i x = kind_i y ->
+    | Cassgn (Lvar x, _, _, Pvar y) when is_gkvar y && kind_i x = kind_i y.gv ->
       begin try
         let i = Hv.find tbl (L.unloc x) in
-        let j = Hv.find tbl (L.unloc y) in
+        let j = Hv.find tbl (L.unloc y.gv) in
         fr := set_friend i j !fr
       with Not_found -> ()
     end
@@ -324,6 +327,8 @@ struct
   let r14 = V.mk "R14" Reg (Bty (U U64)) L._dummy
   let r15 = V.mk "R15" Reg (Bty (U U64)) L._dummy
 
+  let rip = V.mk "RIP" Reg (Bty (U U64)) L._dummy
+
   let xmm0 = V.mk "XMM0" Reg (Bty (U U256)) L._dummy
   let xmm1 = V.mk "XMM1" Reg (Bty (U U256)) L._dummy
   let xmm2 = V.mk "XMM2" Reg (Bty (U U256)) L._dummy
@@ -373,7 +378,7 @@ struct
   ]
 
   let reserved = [
-    rsp
+    rsp; rip
   ]
 
   let f_c = V.mk "CF" Reg (Bty Bool) L._dummy
@@ -402,7 +407,7 @@ struct
       allocate_one loc (L.unloc x) i y a
     in
     let mallocate_one x y a =
-      match x with Pvar x -> allocate_one x y a | _ -> a
+      match x with Pvar x when is_gkvar x -> allocate_one x.gv y a | _ -> a
     in
     begin match desc_of_op op with
       | Ok id ->
@@ -535,7 +540,7 @@ let subst_of_allocation (vars: int Hv.t)
     (a: allocation) (v: var_i) : expr =
   let m = L.loc v in
   let v = L.unloc v in
-  let q x = L.mk_loc m x in
+  let q x = gkvar (L.mk_loc m x) in
   try
     let i = Hv.find vars v in
     let w = IntMap.find i a in
@@ -555,7 +560,7 @@ let regalloc translate_var (f: 'info func) : unit func =
     allocate_forced_registers translate_var vars conflicts f IntMap.empty |>
     greedy_allocation vars nv conflicts fr |>
     subst_of_allocation vars
-  in Subst.gsubst_func (fun ty -> ty) a f
+  in Subst.subst_func a f
    |> Ssa.remove_phi_nodes
 
 let reverse_varmap (vars: int Hv.t) : var IntMap.t =
@@ -572,5 +577,5 @@ let split_live_ranges (f: 'info func) : unit func =
   let a =
     reverse_varmap vars |>
     subst_of_allocation vars
-  in Subst.gsubst_func (fun ty -> ty) a f
+  in Subst.subst_func a f
    |> Ssa.remove_phi_nodes

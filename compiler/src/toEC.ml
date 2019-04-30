@@ -32,7 +32,6 @@ type env = {
     model : model;
     alls : Ss.t;
     vars : (string * bool) Mv.t;  (* true means option type *)
-    glob : (string * ty) Ms.t;
     funs : (string * (ty list * ty list)) Mf.t;  
     arrsz  : Sint.t;
     warrsz : Sint.t;
@@ -45,7 +44,7 @@ let for_safety    env = env.model = Utils.Safety
 (* --------------------------------------------------------------- *)
 
 let rec read_mem_e = function
-  | Pconst _ | Pbool _ | Parr_init _ |Pvar _ | Pglobal _ -> false
+  | Pconst _ | Pbool _ | Parr_init _ |Pvar _ -> false
   | Pload _ -> true
   | Papp1 (_, e) | Pget (_, _, e) -> read_mem_e e
   | Papp2 (_, e1, e2) -> read_mem_e e1 || read_mem_e e2
@@ -107,8 +106,8 @@ let int_of_word ws e =
 
 let rec leaks_e_rec leaks e =
   match e with
-  | Pconst _ | Pbool _ | Parr_init _ |Pvar _ | Pglobal _ -> leaks
-  | Pload (_,x,e) -> leaks_e_rec (int_of_word U64 (snd (add64 x e)) :: leaks) e
+  | Pconst _ | Pbool _ | Parr_init _ |Pvar _  -> leaks
+  | Pload (_,x,e) -> leaks_e_rec (int_of_word U64 (snd (add64 (gkvar x) e)) :: leaks) e
   | Pget (_,_, e) -> leaks_e_rec (e::leaks) e 
   | Papp1 (_, e) -> leaks_e_rec leaks e
   | Papp2 (_, e1, e2) -> leaks_e_rec (leaks_e_rec leaks e1) e2
@@ -122,7 +121,7 @@ let leaks_es es = leaks_es_rec [] es
 let leaks_lval = function
   | Lnone _ | Lvar _ -> []
   | Laset (_,_, e) -> leaks_e_rec [e] e
-  | Lmem (_, x,e) -> leaks_e_rec [int_of_word U64 (snd (add64 x e))] e
+  | Lmem (_, x,e) -> leaks_e_rec [int_of_word U64 (snd (add64 (gkvar x) e))] e
 
 (* FIXME: generate this list automatically *)
 let ec_keyword = 
@@ -300,7 +299,6 @@ let empty_env model fds =
     model;
     alls = keywords;
     vars = Mv.empty;
-    glob = Ms.empty;
     funs = Mf.empty;
     arrsz = Sint.empty;
     warrsz = Sint.empty;
@@ -365,12 +363,9 @@ let add_var option env x =
   let s = create_name env x.v_name in
   set_var env x option s
 
-let add_glob env x ws = 
-  let s = create_name env x in
-  let ty = Bty (U ws) in
-  { env with
-    alls = Ss.add s env.alls;
-    glob = Ms.add x (s, ty) env.glob }
+let add_glob env x = 
+  let s = create_name env x.v_name in
+  set_var env x false s 
 
 let pp_oget option pp = 
   pp_maybe option (pp_enclose ~pre:"(oget " ~post:")") pp
@@ -390,11 +385,6 @@ let pp_ovar env fmt (x:var) =
       Format.fprintf fmt "(Array%i.map oget %s)" n s
     else pp_oget true pp_string fmt s
   else pp_string fmt s
-
-let pp_glob env fmt x = 
-  Format.fprintf fmt "%s" (fst (Ms.find x env.glob))
-
-let ty_glob env x = snd (Ms.find x env.glob)
 
 let pp_zeroext fmt (szi, szo) = 
   let io, ii = int_of_ws szo, int_of_ws szi in
@@ -479,8 +469,7 @@ let rec ty_expr = function
   | Pconst _       -> tint 
   | Pbool _        -> tbool
   | Parr_init _    -> assert false 
-  | Pvar x         -> x.L.pl_desc.v_ty
-  | Pglobal (sz,_) -> tu sz
+  | Pvar x         -> x.gv.L.pl_desc.v_ty
   | Pload (sz,_,_) -> tu sz
   | Pget  (sz,_,_) -> tu sz
   | Papp1 (op,_)   -> out_ty_op1 op
@@ -526,14 +515,12 @@ let rec pp_expr env fmt (e:expr) =
       (pp_oarray env) B.pp_print n pp_init U8 *)
 
   | Pvar x ->
-    pp_ovar env fmt (L.unloc x)
-
-  | Pglobal(sz, x) -> 
-    pp_cast (pp_glob env) fmt (tu sz, ty_glob env x, x)
+    pp_ovar env fmt (L.unloc x.gv)
 
   | Pget(ws, x, e) -> 
-    assert (check_array env x);
+    assert (check_array env x.gv);
     let pp fmt (x,e) = 
+      let x = x.gv in
       let x = L.unloc x in
       let (xws,n) = array_kind x.v_ty in
       if ws = xws then
@@ -542,12 +529,12 @@ let rec pp_expr env fmt (e:expr) =
         Format.fprintf fmt "@[(get%i@ %a@ %a)@]" 
           (int_of_ws ws) (pp_initi env) (x, n, xws) (pp_expr env) e in
     let option = 
-      for_safety env &&  snd (Mv.find (L.unloc x) env.vars) in
+      for_safety env &&  snd (Mv.find (L.unloc x.gv) env.vars) in
     pp_oget option pp fmt (x,e)
 
   | Pload (sz, x, e) -> 
     Format.fprintf fmt "(loadW%a Glob.mem (W64.to_uint %a))" 
-      pp_size sz (pp_wcast env) (add64 x e)
+      pp_size sz (pp_wcast env) (add64 (gkvar x) e)
 
   | Papp1 (op1, e) -> 
     Format.fprintf fmt "(%a %a)" pp_op1 op1 (pp_wcast env) (in_ty_op1 op1, e)
@@ -632,7 +619,7 @@ let pp_lval1 env pp_e fmt (lv, (ety, e)) =
   | Lnone _ -> assert false
   | Lmem(ws, x, e1) -> 
     Format.fprintf fmt "@[Glob.mem <-@ storeW%a Glob.mem (W64.to_uint %a) %a;@]" pp_size ws
-      (pp_wcast env) (add64 x e1) pp_e e
+      (pp_wcast env) (add64 (gkvar x) e1) pp_e e
   | Lvar x  -> 
     Format.fprintf fmt "@[%a <-@ %a;@]" (pp_var env) (L.unloc x) pp_e e
   | Laset (ws, x,e1) -> 
@@ -816,8 +803,9 @@ module Leak = struct
     else safe
     
   let rec safe_e_rec env safe = function
-    | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ -> safe
+    | Pconst _ | Pbool _ | Parr_init _ -> safe
     | Pvar x -> 
+      let x = x.gv in
       let (_s,option) = Mv.find (L.unloc x) env.vars in
       if option then
         match (L.unloc x).v_ty with
@@ -825,9 +813,10 @@ module Leak = struct
         | _ -> Initv(L.unloc x) :: safe 
       else safe 
     | Pload (ws,x,e) -> 
-      is_init env x (Valid (ws, snd (add64 x e)) :: safe_e_rec env safe e)
+      is_init env x (Valid (ws, snd (add64 (gkvar x) e)) :: safe_e_rec env safe e)
     | Papp1 (_, e) -> safe_e_rec env safe e
     | Pget (ws, x, e) -> 
+      let x = x.gv in
       let safe = 
         let (_s,option) = Mv.find (L.unloc x) env.vars in
         if option then Initai(ws, L.unloc x, e) :: safe 
@@ -874,7 +863,7 @@ module Leak = struct
   let safe_lval env = function
     | Lnone _ | Lvar _ -> []
     | Lmem(ws, x, e) -> 
-      is_init env x (Valid (ws, snd (add64 x e)) :: safe_e_rec env [] e)
+      is_init env x (Valid (ws, snd (add64 (gkvar x) e)) :: safe_e_rec env [] e)
     | Laset(ws, x,e) -> in_bound ws x e :: safe_e_rec env [] e 
 
   let pp_safe_e env fmt = function
@@ -1076,7 +1065,7 @@ let pp_aux fmt env =
 
 let pp_safe_ret env fmt xs =
   if for_safety env then
-    let es = List.map (fun x -> Pvar x) xs in
+    let es = List.map (fun x -> Pvar (gkvar x)) xs in
     Leak.pp_safe_cond env fmt (Leak.safe_es env es)
 
 let pp_fun env fmt f = 
@@ -1106,9 +1095,17 @@ let pp_fun env fmt f =
     (pp_safe_ret env) f.f_ret 
     (pp_ret env) f.f_ret
 
-let pp_glob_decl env fmt (ws,x, z) =
-  Format.fprintf fmt "@[abbrev %a = %a.of_int %a.@]@ "
-    (pp_glob env) x pp_Tsz ws B.pp_print z
+let pp_glob_decl env fmt (x,d) =
+  match Prog.glob_of_cglob x.v_ty d with
+  | `GWord(ws, z) -> 
+    Format.fprintf fmt "@[abbrev %a = %a.of_int %a.@]@ "
+      (pp_var env) x pp_Tsz ws B.pp_print z
+  | `GArray(wz, t) ->
+    let pp_elem fmt z = 
+      Format.fprintf fmt "%a.of_int %a" pp_Tsz wz B.pp_print z in
+    Format.fprintf fmt "@[abbrev %a = Array%i.of_list [%a].@]@ "
+       (pp_var env) x (Array.length t) 
+       (pp_list ",@ " pp_elem) (Array.to_list t)
 
 let add_arrsz env f = 
   let add_sz x sz = 
@@ -1140,11 +1137,11 @@ let pp_warray_decl i =
   Format.fprintf fmt "clone export WArray as WArray%i  with op size <- %i.@]@." i i;
   close_out out
 
-let pp_prog fmt model globs funcs = 
+let pp_prog fmt model globs funcs  =
 
   let env = empty_env model funcs in
   let env = 
-    List.fold_left (fun env (ws, x, _) -> add_glob env x ws)
+    List.fold_left (fun env (x, _) -> add_glob env x)
       env globs in
   let env = List.fold_left add_arrsz env funcs in
 
@@ -1197,5 +1194,5 @@ let extract fmt model ((globs,funcs):'a prog) tokeep =
       (tokeep := Ss.union (used_func f) !tokeep; true)
     else false in
   let funcs = List.filter dofun funcs in
-  pp_prog fmt model globs (List.rev funcs)
+  pp_prog fmt model globs (List.rev funcs) 
 

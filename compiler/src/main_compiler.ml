@@ -133,7 +133,8 @@ and pp_comp_ferr tbl fmt = function
      Printer.pp_iloc i_loc
   | Ferr_remove_glob_dup (_, _) ->
     Format.fprintf fmt "duplicate global: please report"
-
+  | Compiler_util.Ferr_msg msg ->
+    pp_comp_err tbl fmt msg
 
 (* -------------------------------------------------------------------- *)
 let main () =
@@ -257,7 +258,7 @@ let main () =
 
     let stk_alloc_fd cfd =
       let fd = Conv.fdef_of_cfdef tbl cfd in
-      if !debug then Format.eprintf "START stack alloc@." ;
+      if !debug then Format.eprintf "START stack alloc func@." ;
       let stk_i =
         Var0.Var.vname (Conv.cvar_of_var tbl Array_expand.vstack) in
       let alloc, sz = Array_expand.stk_alloc_func fd in
@@ -267,6 +268,17 @@ let main () =
       let sz = Conv.z_of_int sz in
       (sz, stk_i), alloc
     in
+
+    let stk_alloc_gl p =
+      let p = Conv.prog_of_cprog tbl p in
+      if !debug then Format.eprintf "START stack alloc@.";
+      let (data, rip, alloc) = Array_expand.init_glob p in
+      let rip_i = 
+        Var0.Var.vname (Conv.cvar_of_var tbl rip) in
+      let alloc =
+        let trans (v,i) = Conv.cvar_of_var tbl v, Conv.z_of_int i in
+        List.map trans alloc in
+      (data, rip_i), alloc in
 
     let is_var_in_memory cv : bool =
       let v = Conv.vari_of_cvari tbl cv |> L.unloc in
@@ -302,18 +314,21 @@ let main () =
       x.v_kind = Global in
 
     let fresh_id gd x =
-      let x = (Conv.var_of_cvar tbl x).v_name in
-      let ns = List.map (fun (g,_) -> snd (Conv.global_of_cglobal g)) gd in
+      let x = Conv.var_of_cvar tbl x in
+      let ns = List.map (fun (g,_) -> (Conv.var_of_cvar tbl g).v_name) gd in
       let s = Ss.of_list ns in
-      let x =
-        if Ss.mem x s then
+      let name = x.v_name in
+      let name =
+        if Ss.mem name s then
           let rec aux i =
-            let x = x ^ "_" ^ string_of_int i in
-            if Ss.mem x s then aux (i+1)
-            else x in
+            let name = name ^ "_" ^ string_of_int i in
+            if Ss.mem name s then aux (i+1)
+            else name in
           aux 0
-        else x in
-      Conv.string0_of_string x in
+        else name in
+      let x = V.mk name x.v_kind x.v_ty L._dummy in
+      let cx = Conv.cvar_of_var tbl x in
+      cx.Var0.Var.vname in
 
     let cparams = {
       Compiler.rename_fd    = rename_fd;
@@ -322,6 +337,7 @@ let main () =
       Compiler.share_stk_fd = apply "share stk" Varalloc.alloc_stack_fd;
       Compiler.reg_alloc_fd = apply "reg alloc" (Regalloc.regalloc translate_var);
       Compiler.stk_alloc_fd = stk_alloc_fd;
+      Compiler.stk_alloc_gl = stk_alloc_gl;
       Compiler.lowering_vars = lowering_vars;
       Compiler.is_var_in_memory = is_var_in_memory;
       Compiler.print_prog   = (fun s p -> eprint s pp_cprog p; p);

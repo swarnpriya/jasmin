@@ -38,6 +38,11 @@ type 'ty gvar = private {
 
 type 'ty gvar_i = 'ty gvar L.located
 
+type 'ty ggvar = {
+  gv : 'ty gvar_i;
+  gk : E.gkind;
+}
+
 type 'expr gty =
   | Bty of base_ty
   | Arr of wsize * 'expr (* Arr(n,de): array of n-bit integers with dim. *)
@@ -48,9 +53,8 @@ type 'ty gexpr =
   | Pconst of B.zint
   | Pbool  of bool
   | Parr_init of B.zint
-  | Pvar   of 'ty gvar_i
-  | Pglobal of wsize * Name.t
-  | Pget   of wsize * 'ty gvar_i * 'ty gexpr
+  | Pvar   of 'ty ggvar
+  | Pget   of wsize * 'ty ggvar * 'ty gexpr
   | Pload  of wsize * 'ty gvar_i * 'ty gexpr
   | Papp1  of E.sop1 * 'ty gexpr
   | Papp2  of E.sop2 * 'ty gexpr * 'ty gexpr
@@ -131,10 +135,14 @@ type ('ty,'info) gfunc = {
     f_ret  : 'ty gvar_i list
   }
 
+type 'ty ggexpr = 
+  | GEword of 'ty gexpr
+  | GEarray of 'ty gexprs
+
 type ('ty,'info) gmod_item =
   | MIfun   of ('ty,'info) gfunc
   | MIparam of ('ty gvar * 'ty gexpr)
-  | MIglobal of (Name.t * 'ty) * 'ty gexpr
+  | MIglobal of ('ty gvar * 'ty ggexpr)
 
 type ('ty,'info) gprog = ('ty,'info) gmod_item list
    (* first declaration occur at the end (i.e reverse order) *)
@@ -169,6 +177,10 @@ module PV : sig
   val is_glob : pvar -> bool
 end
 
+val gkglob : 'ty gvar_i -> 'ty ggvar
+val gkvar : 'ty gvar_i -> 'ty ggvar
+val is_gkvar : 'ty ggvar -> bool
+
 module Mpv : Map.S  with type key = pvar
 module Spv : Set.S  with type elt = pvar
 
@@ -192,7 +204,9 @@ type 'info stmt  = (ty,'info) gstmt
 
 type 'info func     = (ty,'info) gfunc
 type 'info mod_item = (ty,'info) gmod_item
-type global_decl    = wsize * Name.t * B.zint
+
+type global_decl    = var * E.glob_data
+
 type 'info prog     = global_decl list * 'info func list
 
 
@@ -290,3 +304,19 @@ val destruct_move : ('ty, 'info) ginstr -> 'ty glval * assgn_tag * 'ty * 'ty gex
 (* -------------------------------------------------------------------- *)
 val clamp : Type.wsize -> Bigint.zint -> Bigint.zint
 val clamp_pe : Type.pelem -> Bigint.zint -> Bigint.zint
+
+(* -------------------------------------------------------------------- *)
+
+val bi_of_pos : BinNums.positive -> Bigint.zint
+val bi_of_z : BinNums.coq_Z -> Bigint.zint
+
+val pos_of_bi : Bigint.zint -> BinNums.positive
+val z_of_bi : Bigint.zint -> BinNums.coq_Z
+val z_of_int   : int -> BinNums.coq_Z
+
+val pos_of_int : int -> BinNums.positive
+val int_of_pos : BinNums.positive -> int
+
+val glob_of_cglob : ty -> Expr.glob_data -> [`GWord of Type.wsize * Bigint.zint
+                                      |`GArray of Type.wsize * Bigint.zint array]
+

@@ -125,7 +125,7 @@ Section REMOVE.
       | Pget ws xi e =>
         let vi := xi.(gv) in 
         let x := vi.(v_var) in
-        if is_glob x then cferror (Ferr_remove_glob ii vi)
+        if is_lvar xi && is_glob x then cferror (Ferr_remove_glob ii vi)
         else
           Let e := remove_glob_e ii env e in
           ok (Pget ws xi e)

@@ -1,0 +1,14 @@
+export fn test(reg u64 in) -> reg u64 {
+   reg u256[2] t;
+   stack u256[2] s;
+   reg u64 r;
+   t[0] = (u256)[in + 0];
+   t[1] = (u256)[in + 32];
+   s[0] = t[0];
+   s[1] = t[1];
+   s[1] ^= t[0];             // should fail : two memory addresses
+   (u256)[in + 0] = s[0];    // should fail : two memory addresses 
+   (u256)[in + 32] = s[1];   // should fail : two memory addresses
+   r = 0;
+   return r;     
+}

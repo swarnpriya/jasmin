@@ -35,15 +35,12 @@ val vari_of_cvari : 'a coq_tbl -> Expr.var_i -> var L.located
 
 val lval_of_clval : 'a coq_tbl -> Expr.lval -> Prog.lval
 
-val global_of_cglobal : Expr.global -> Type.wsize * Name.t
-
 val cexpr_of_expr : 'info coq_tbl -> expr -> Expr.pexpr
 val expr_of_cexpr : 'info coq_tbl -> Expr.pexpr -> expr
 
 val cfun_of_fun : 'info coq_tbl -> funname -> BinNums.positive
 val fun_of_cfun : 'info coq_tbl -> BinNums.positive -> funname
 
-val gd_of_cgd : Expr.global * BinNums.coq_Z -> Type.wsize * Name.t * B.zint
 val get_iinfo   : 'info coq_tbl -> BinNums.positive -> (L.t * L.t list) * 'info
 
 val cfdef_of_fdef : 'info coq_tbl -> 'info func -> BinNums.positive * Expr.fundef
@@ -53,3 +50,4 @@ val cprog_of_prog : 'info -> 'info prog -> 'info coq_tbl * Expr.prog
 val prog_of_cprog : 'info coq_tbl -> Expr.prog -> 'info prog
 
 val fresh_cvar : 'info coq_tbl -> string -> ty -> Var0.Var.var
+

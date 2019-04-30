@@ -3,41 +3,22 @@ open Prog
 module T = Type
 module C = Expr
 
-let rec pos_of_bi bi =
-  let open B.Notations in
-  if bi <=^ B.one then BinNums.Coq_xH
-  else
-    let p = pos_of_bi (B.rshift bi 1) in
-    if (B.erem bi (B.of_int 2)) =^ B.one
-    then BinNums.Coq_xI p
-    else BinNums.Coq_xO p
 
-let rec bi_of_pos pos =
-  let open B.Notations in
-  match pos with
-  | BinNums.Coq_xH   -> B.one
-  | BinNums.Coq_xO p -> B.lshift (bi_of_pos p) 1
-  | BinNums.Coq_xI p -> B.lshift (bi_of_pos p) 1 +^ B.one
+let bi_of_pos = Prog.bi_of_pos
 
-let z_of_bi bi =
-  let open B.Notations in
-  if bi =^ B.zero then BinNums.Z0
-  else if bi <^ B.zero then BinNums.Zneg (pos_of_bi (B.abs bi))
-  else BinNums.Zpos (pos_of_bi bi)
+let bi_of_z = Prog.bi_of_z
 
-let bi_of_z z =
-  match z with
-  | BinNums.Zneg p -> B.neg (bi_of_pos p)
-  | BinNums.Z0     -> B.zero
-  | BinNums.Zpos p -> bi_of_pos p
+let pos_of_bi = Prog.pos_of_bi
 
-let z_of_int i = z_of_bi (B.of_int i)
+let z_of_bi = Prog.z_of_bi
+
+let z_of_int = Prog.z_of_int 
 
 let bi_of_nat n =
   bi_of_z (BinInt.Z.of_nat n)
 
-let pos_of_int i = pos_of_bi (B.of_int i)
-let int_of_pos p = B.to_int (bi_of_pos p)
+let pos_of_int = Prog.pos_of_int 
+let int_of_pos = Prog.int_of_pos 
 
 let int64_of_bi bi = Word0.wrepr T.U64 (z_of_bi bi)
 let bi_of_int64 z  = bi_of_z (Word0.wsigned T.U64 z)
@@ -128,7 +109,9 @@ let cvar_of_reg tbl v = gen_cvar_of_var false tbl v
 
 let var_of_cvar tbl cv =
   try Hashtbl.find tbl.var cv
-  with Not_found -> assert false
+  with Not_found -> 
+    Format.eprintf "%s@." (string_of_string0 cv.Var.vname);
+    assert false
 
 let fresh_cvar tbl n ty =
   let v = V.mk n Reg ty L._dummy in
@@ -154,33 +137,20 @@ let vari_of_cvari tbl v =
   let loc =  get_loc tbl v.C.v_info in
   L.mk_loc loc (var_of_cvar tbl v.C.v_var)
 
-(* ------------------------------------------------------------------------ *)
+let cgvari_of_gvari tbl v = 
+  { C.gv = cvari_of_vari tbl v.gv;
+    C.gk = v.gk }
 
-let cglobal_of_global ws (g: Name.t) : C.global =
-  {
-    size_of_global = ws;
-    ident_of_global = string0_of_string g;
-  }
-
-let global_of_cglobal (g: C.global) : T.wsize * Name.t =
-  let { E.size_of_global = ws ; E.ident_of_global = n } = g in
-  ws, string_of_string0 n
-
-let cgd_of_gd (ws, g, z) = 
-  (cglobal_of_global ws g, z_of_bi z)
-  
-let gd_of_cgd (g, z) = 
-  let ws, n = global_of_cglobal g in
-  (ws, n, bi_of_z z)
-
+let gvari_of_cgvari tbl v = 
+  { gv = vari_of_cvari tbl v.C.gv;
+    gk = v.C.gk }
 (* ------------------------------------------------------------------------ *)
 let rec cexpr_of_expr tbl = function
   | Pconst z          -> C.Pconst (z_of_bi z)
   | Pbool  b          -> C.Pbool  b
   | Parr_init n       -> C.Parr_init (pos_of_bi n)
-  | Pvar x            -> C.Pvar (cvari_of_vari tbl x)
-  | Pglobal (ws, g)   -> C.Pglobal (cglobal_of_global ws g)
-  | Pget (ws, x,e)    -> C.Pget (ws, cvari_of_vari tbl x, cexpr_of_expr tbl e)
+  | Pvar x            -> C.Pvar (cgvari_of_gvari tbl x)
+  | Pget (ws, x,e)    -> C.Pget (ws, cgvari_of_gvari tbl x, cexpr_of_expr tbl e)
   | Pload (ws, x, e)  -> C.Pload(ws, cvari_of_vari tbl x, cexpr_of_expr tbl e)
   | Papp1 (o, e)      -> C.Papp1(o, cexpr_of_expr tbl e)
   | Papp2 (o, e1, e2) -> C.Papp2(o, cexpr_of_expr tbl e1, cexpr_of_expr tbl e2)
@@ -194,9 +164,8 @@ let rec expr_of_cexpr tbl = function
   | C.Pconst z          -> Pconst (bi_of_z z)
   | C.Pbool  b          -> Pbool  b
   | C.Parr_init n       -> Parr_init (bi_of_pos n)
-  | C.Pvar x            -> Pvar (vari_of_cvari tbl x)
-  | C.Pglobal g         -> let ws, n = global_of_cglobal g in Pglobal (ws, n)
-  | C.Pget (ws, x,e)    -> Pget (ws, vari_of_cvari tbl x, expr_of_cexpr tbl e)
+  | C.Pvar x            -> Pvar (gvari_of_cgvari tbl x)
+  | C.Pget (ws, x,e)    -> Pget (ws, gvari_of_cgvari tbl x, expr_of_cexpr tbl e)
   | C.Pload (ws, x, e)  -> Pload(ws, vari_of_cvari tbl x, expr_of_cexpr tbl e)
   | C.Papp1 (o, e)      -> Papp1(o, expr_of_cexpr tbl e)
   | C.Papp2 (o, e1, e2) -> Papp2(o, expr_of_cexpr tbl e1, expr_of_cexpr tbl e2)
@@ -405,16 +374,24 @@ let fdef_of_cfdef tbl (fn, fd) =
     f_ret  = List.map (vari_of_cvari tbl) fd.C.f_res;
   }
 
+let cgd_of_gd tbl (x, gd) = 
+  (cvar_of_var tbl x, gd)
+
+let gd_of_cgd tbl (x, gd) =
+  (var_of_cvar tbl x, gd)
+
 let cprog_of_prog info p =
   let tbl = empty_tbl info in
   (* First add registers *)
   List.iter
     (fun x -> ignore (cvar_of_reg tbl x))
     Regalloc.X64.all_registers;
+  let gd  = List.map (cgd_of_gd tbl) (fst p) in
   let fds = List.map (cfdef_of_fdef tbl) (snd p) in
-  let gd  = List.map cgd_of_gd (fst p) in
+
   tbl, { C.p_globs = gd; C.p_funcs = fds }
 
 let prog_of_cprog tbl p =
-  List.map gd_of_cgd p.C.p_globs,
+  List.map (gd_of_cgd tbl) p.C.p_globs,
   List.map (fdef_of_cfdef tbl) p.C.p_funcs
+

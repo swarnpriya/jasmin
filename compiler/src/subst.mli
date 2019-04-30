@@ -1,7 +1,7 @@
 open Prog
 
 (* apply a substitution within a function *)
-val gsubst_func : ('ty1 -> 'ty2) -> ('ty1 gvar_i -> 'ty2 gexpr) -> ('ty1, 'info) gfunc -> ('ty2, 'info) gfunc
+val subst_func : ('ty gvar_i -> 'ty gexpr) -> ('ty, 'info) gfunc -> ('ty, 'info) gfunc
 
 (* replace parameter by their definition everywhere in the program *)
 val remove_params : 'info pprog -> 'info prog

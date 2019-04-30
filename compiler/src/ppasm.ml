@@ -57,7 +57,7 @@ let string_of_funname tbl (p : Expr.funname) : string =
 type lreg =
   | RNumeric of int
   | RAlpha   of char
-  | RSpecial of [`RStack | `RBase | `RSrcIdx | `RDstIdx]
+  | RSpecial of [`RStack | `RBase | `RSrcIdx | `RDstIdx | `RIP]
 
 let lreg_of_reg (reg : X86_sem.register) =
   match reg with
@@ -77,6 +77,7 @@ let lreg_of_reg (reg : X86_sem.register) =
   | R13 -> RNumeric 13
   | R14 -> RNumeric 14
   | R15 -> RNumeric 15
+  | RIP -> RSpecial `RIP 
 
 (* -------------------------------------------------------------------- *)
 let rsize_of_wsize (ws : LM.wsize) =
@@ -101,7 +102,8 @@ let pp_register (ws : rsize) (reg : X86_sem.register) =
     | `RStack  -> "sp"
     | `RBase   -> "bp"
     | `RSrcIdx -> "si"
-    | `RDstIdx -> "di" in
+    | `RDstIdx -> "di"
+    | `RIP     -> "ip" in
 
   match lreg_of_reg reg, ws with
   | RNumeric i, `U8  -> Printf.sprintf "r%d%s" i "b"
@@ -130,6 +132,8 @@ let pp_scale (scale : X86_sem.scale) =
   | Scale8 -> "8"
 
 (* -------------------------------------------------------------------- *)
+let global_datas = "glob_data" 
+
 let pp_address (addr : X86_sem.address) =
   let disp = Conv.bi_of_int64 addr.ad_disp in
   let base = addr.ad_base in
@@ -140,7 +144,14 @@ let pp_address (addr : X86_sem.address) =
     Bigint.to_string disp
   else begin
     let disp = if disp =^ Bigint.zero then None else Some disp in
-    let disp = odfl "" (omap Bigint.to_string disp) in
+    let disp = omap Bigint.to_string disp in
+    let disp = 
+      match base, disp with
+      | Some RIP, None   -> global_datas
+      | _       , None   -> ""
+      | Some RIP, Some i -> Printf.sprintf "%s+%s" global_datas i 
+      | _       , Some i -> i
+    in
     let base = odfl "" (omap (pp_register `U64) base) in
     let off  = omap (pp_register `U64) off in
 
@@ -161,17 +172,10 @@ let pp_imm (imm : Bigint.zint) =
 let pp_label = string_of_label
 
 (* -------------------------------------------------------------------- *)
-let pp_global (g: Expr.global) =
-  Format.sprintf "%s(%%rip)" (Conv.global_of_cglobal g |> snd)
-
-(* -------------------------------------------------------------------- *)
 let pp_opr (ws : rsize) (op : X86_sem.oprd) =
   match op with
   | Imm_op imm ->
       pp_imm (Conv.bi_of_int64 imm)
-
-  | Glo_op g ->
-      pp_global g
 
   | Reg_op reg ->
       pp_register ws reg
@@ -238,12 +242,9 @@ let pp_rm128 (ws: LM.wsize) : X86_sem.rm128 -> string =
   function
   | RM128_reg r -> pp_xmm_register ws r
   | RM128_mem a -> pp_address a
-  | RM128_glo g -> pp_global g
 
-let pp_m128 : X86_sem.m128 -> string =
-  function
-  | M128_mem a -> pp_address a
-  | M128_glo g -> pp_global g
+let pp_m128 (a: X86_sem.m128) : string = pp_address a
+
 (* -------------------------------------------------------------------- *)
 let pp_iname (rs : rsize) (name : string) =
   Printf.sprintf "%s%s" name (pp_instr_rsize rs)
@@ -536,7 +537,6 @@ type rset = X86_sem.register Set.t
 let reg_of_oprd (op : X86_sem.oprd) =
   match op with
   | Imm_op _
-  | Glo_op _
   | Adr_op _  -> None
   | Reg_op r -> Some r
 
@@ -653,31 +653,26 @@ let bigint_to_bytes n z =
   done;
   !res
 
-let pp_const ws z =
-  match decl_of_ws ws with
-  | Some d -> [ `Instr (d, [Bigint.to_string z]) ]
-  | None ->
-    List.rev_map (fun b -> `Instr (".byte", [ Bigint.to_string b] ))
-      (bigint_to_bytes (Prog.size_of_ws ws) z)
-
-let pp_glob_def fmt (gd:Expr.glob_decl) : unit =
-  let (ws,n,z) = Conv.gd_of_cgd gd in
-  let z = Prog.clamp ws z in
-  let m = mangle n in
-  pp_gens fmt ([
-    `Instr (".globl", [m]);
-    `Instr (".globl", [n]);
-    `Instr (".p2align", [pp_align ws]);
-    `Label m;
-    `Label n
-  ] @ pp_const ws z)
+let pp_glob_data fmt gd = 
+  if not (List.is_empty gd) then
+    let n = global_datas in
+    let m = mangle global_datas in
+    begin
+      pp_gens fmt ([
+            `Instr (".data", []);
+            `Instr (".globl", [m]);
+            `Instr (".globl", [n]);
+            `Instr (".p2align", [pp_align U256]);
+            `Label m;
+            `Label n]);
+      Printer.pp_datas fmt gd
+    end
 
 (* -------------------------------------------------------------------- *)
 type 'a tbl = 'a Conv.coq_tbl
-type  gd_t  = Expr.glob_decl list 
 
 let pp_prog (tbl: 'info tbl) (fmt : Format.formatter) 
-   ((gd:gd_t), (asm : X86_sem.xprog)) =
+   (asm : X86_sem.xprog) =
   pp_gens fmt
     [`Instr (".text"   , []);
      `Instr (".p2align", ["5"])];
@@ -685,7 +680,7 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
   List.iter (fun (n, _) -> pp_gens fmt
     [`Instr (".globl", [mangle (string_of_funname tbl n)]);
      `Instr (".globl", [string_of_funname tbl n])])
-    asm;
+    asm.xp_funcs;
 
   List.iter (fun (n, d) ->
       let name = string_of_funname tbl n in
@@ -710,9 +705,6 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
         pp_gens fmt [`Instr ("popq", [pp_register `U64 r])])
         (List.rev wregs);
       pp_gens fmt [`Instr ("popq", ["%rbp"]); `Instr ("ret", [])])
-    asm;
+    asm.xp_funcs;
+  pp_glob_data fmt asm.xp_glob
 
-  if not (List.is_empty gd) then
-    pp_gens fmt [`Instr (".data", [])];
-
-  List.iter (pp_glob_def fmt) gd

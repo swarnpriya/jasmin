@@ -39,6 +39,11 @@ type 'ty gvar = {
 
 type 'ty gvar_i = 'ty gvar L.located
 
+type 'ty ggvar = {
+  gv : 'ty gvar_i;
+  gk : E.gkind;
+}
+
 type 'expr gty =
   | Bty of base_ty
   | Arr of wsize * 'expr (* Arr(n,de): array of n-bit integers with dim. *)
@@ -49,9 +54,8 @@ type 'ty gexpr =
   | Pconst of B.zint
   | Pbool  of bool
   | Parr_init of B.zint
-  | Pvar   of 'ty gvar_i
-  | Pglobal of wsize * Name.t
-  | Pget   of wsize * 'ty gvar_i * 'ty gexpr
+  | Pvar   of 'ty ggvar
+  | Pget   of wsize * 'ty ggvar * 'ty gexpr
   | Pload  of wsize * 'ty gvar_i * 'ty gexpr
   | Papp1  of E.sop1 * 'ty gexpr
   | Papp2  of E.sop2 * 'ty gexpr * 'ty gexpr
@@ -136,10 +140,14 @@ type ('ty,'info) gfunc = {
     f_ret  : 'ty gvar_i list
   }
 
+type 'ty ggexpr = 
+  | GEword of 'ty gexpr
+  | GEarray of 'ty gexprs
+
 type ('ty,'info) gmod_item =
   | MIfun   of ('ty,'info) gfunc
   | MIparam of ('ty gvar * 'ty gexpr)
-  | MIglobal of (Name.t * 'ty) * 'ty gexpr
+  | MIglobal of ('ty gvar * 'ty ggexpr)
 
 type ('ty,'info) gprog = ('ty,'info) gmod_item list
    (* first declaration occur at the end (i.e reverse order) *)
@@ -163,6 +171,10 @@ module GV = struct
   let is_local v = not (is_glob v)
 end
 
+let gkglob x = { gv = x; gk = E.GKglob}
+let gkvar x = { gv = x; gk = E.GKvar}
+
+let is_gkvar x = x.gk = E.GKvar 
 (* ------------------------------------------------------------------------ *)
 (* Parametrized expression *)
 
@@ -182,6 +194,8 @@ type 'info pprog     = (pty,'info) gprog
 module PV = struct
   type t = pvar
   include GV
+
+  let gequal x1 x2 = equal (L.unloc x1.gv) (L.unloc x2.gv) && (x1.gk = x2.gk)
 end
 
 module Mpv : Map.S with type key = pvar = Map.Make (PV)
@@ -200,9 +214,8 @@ and pexpr_equal e1 e2 =
  match e1, e2 with
  | Pconst n1, Pconst n2 -> B.equal n1 n2
  | Pbool b1, Pbool b2 -> b1 = b2
- | Pvar v1, Pvar v2 -> PV.equal (L.unloc v1) (L.unloc v2)
- | Pglobal (s1, n1), Pglobal (s2, n2) -> s1 = s2 && Name.equal n1 n2
- | Pget(b1,v1,e1), Pget(b2,v2,e2) -> b1 = b2 && PV.equal (L.unloc v1) (L.unloc v2) && pexpr_equal e1 e2
+ | Pvar v1, Pvar v2 -> PV.gequal v1 v2
+ | Pget(b1,v1,e1), Pget(b2,v2,e2) -> b1 = b2 && PV.gequal v1 v2 && pexpr_equal e1 e2
  | Pload(b1,v1,e1), Pload(b2,v2,e2) -> b1 = b2 && PV.equal (L.unloc v1) (L.unloc v2) && pexpr_equal e1 e2
  | Papp1(o1,e1), Papp1(o2,e2) -> o1 = o2 && pexpr_equal e1 e2
  | Papp2(o1,e11,e12), Papp2(o2,e21,e22) -> o1 = o2 &&  pexpr_equal e11 e21 && pexpr_equal e12 e22
@@ -225,7 +238,10 @@ type 'info stmt  = (ty,'info) gstmt
 
 type 'info func     = (ty,'info) gfunc
 type 'info mod_item = (ty,'info) gmod_item
-type global_decl    = wsize * Name.t * B.zint
+
+
+type global_decl    = var * E.glob_data
+
 type 'info prog     = global_decl list * 'info func list
 
 module V = struct
@@ -260,10 +276,14 @@ module Hf = Hash.Make(F)
 (* -------------------------------------------------------------------- *)
 (* used variables                                                       *)
 
+let rvars_v x s = 
+  if is_gkvar x then Sv.add (L.unloc x.gv) s 
+  else s 
+
 let rec rvars_e s = function
-  | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ -> s
-  | Pvar x         -> Sv.add (L.unloc x) s
-  | Pget(_,x,e)    -> rvars_e (Sv.add (L.unloc x) s) e
+  | Pconst _ | Pbool _ | Parr_init _ -> s
+  | Pvar x         -> rvars_v x s
+  | Pget(_,x,e)    -> rvars_e (rvars_v x s) e
   | Pload(_,x,e)   -> rvars_e (Sv.add (L.unloc x) s) e
   | Papp1(_, e)    -> rvars_e s e
   | Papp2(_,e1,e2) -> rvars_e (rvars_e s e1) e2
@@ -387,9 +407,9 @@ let cast64 e = Papp1 (Oword_of_int U64, e)
 
 let expr_of_lval = function
   | Lnone _         -> None
-  | Lvar x          -> Some (Pvar x)
+  | Lvar x          -> Some (Pvar (gkvar x))
   | Lmem (ws, x, e) -> Some (Pload(ws,x,e))
-  | Laset(ws, x, e) -> Some (Pget(ws,x,e))
+  | Laset(ws, x, e) -> Some (Pget(ws,gkvar x,e))
 
 (* -------------------------------------------------------------------- *)
 (* Functions over instruction                                           *)
@@ -405,3 +425,54 @@ let clamp (sz : Type.wsize) (z : Bigint.zint) =
 
 let clamp_pe (sz : Type.pelem) (z : Bigint.zint) =
   Bigint.erem z (Bigint.lshift Bigint.one (int_of_pe sz))
+
+(* -------------------------------------------------------------------- *)
+let rec bi_of_pos pos =
+  let open B.Notations in
+  match pos with
+  | BinNums.Coq_xH   -> B.one
+  | BinNums.Coq_xO p -> B.lshift (bi_of_pos p) 1
+  | BinNums.Coq_xI p -> B.lshift (bi_of_pos p) 1 +^ B.one
+
+let bi_of_z z =
+  match z with
+  | BinNums.Zneg p -> B.neg (bi_of_pos p)
+  | BinNums.Z0     -> B.zero
+  | BinNums.Zpos p -> bi_of_pos p
+
+let rec pos_of_bi bi =
+  let open B.Notations in
+  if bi <=^ B.one then BinNums.Coq_xH
+  else
+    let p = pos_of_bi (B.rshift bi 1) in
+    if (B.erem bi (B.of_int 2)) =^ B.one
+    then BinNums.Coq_xI p
+    else BinNums.Coq_xO p
+
+let z_of_bi bi =
+  let open B.Notations in
+  if bi =^ B.zero then BinNums.Z0
+  else if bi <^ B.zero then BinNums.Zneg (pos_of_bi (B.abs bi))
+  else BinNums.Zpos (pos_of_bi bi)
+
+let z_of_int i = z_of_bi (B.of_int i)
+
+let pos_of_int i = pos_of_bi (B.of_int i)
+let int_of_pos p = B.to_int (bi_of_pos p)
+
+let glob_of_cglob ty = function
+  | E.Gword(ws, w) ->
+    let z = Word0.wunsigned ws w in
+    let i = bi_of_z z in
+    `GWord (ws, i)
+  | E.Garr(p, t) ->
+    let (ws, n) = array_kind ty in
+    let t = 
+      Array.init n (fun i ->
+          match Warray.WArray.get p ws t (z_of_int i) with
+          | Ok w ->
+            let z = Word0.wunsigned ws w in
+            bi_of_z z
+          | _ -> assert false) in
+    `GArray(ws, t)
+
