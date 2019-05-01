@@ -275,6 +275,5 @@ let init_glob (globs, funcs) =
     (v,pos) in
   let alloc = List.map init_var vars in
   let data = List.rev !data in
-  Format.eprintf "data = @[<v>%a@]@." Printer.pp_datas data;
   data, Regalloc.X64.rip, alloc
 
