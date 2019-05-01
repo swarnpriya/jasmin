@@ -19,6 +19,7 @@ Variant warning_msg : Set :=
 
 Variant asm_error :=
   | AsmErr_string : string -> asm_error
+  | AsmErr_string_e : string -> pexpr -> asm_error
   | AsmErr_cond   : pexpr -> asm_error.
 
 Inductive error_msg :=

@@ -90,6 +90,9 @@ let rec pp_comp_err tbl fmt =
     | Compiler_util.AsmErr_string s ->
       Format.fprintf fmt "assembler error %a"
         pp_string0 s
+    | Compiler_util.AsmErr_string_e(s,e) ->
+      Format.fprintf fmt "assembler error %a %a"
+        pp_string0 s (Printer.pp_expr ~debug:true) (Conv.expr_of_cexpr tbl e)
     | Compiler_util.AsmErr_cond e ->
       Format.fprintf fmt "assembler error: invalid condition %a"
         (Printer.pp_expr ~debug:true) (Conv.expr_of_cexpr tbl e)

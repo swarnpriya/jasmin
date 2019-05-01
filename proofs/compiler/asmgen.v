@@ -703,7 +703,8 @@ Lemma addr_of_pexprP ii r1 e a x o z o' z' m s:
 Proof.
   move => eqv ok_r1 ok_o ok_z ok_o' ok_z'.
   rewrite /addr_of_pexpr.
-  have {ok_o' o' ok_z'} := addr_ofsP ok_o' ok_z'.
+  have ok_wo' := push_woiP ok_o'.
+  have {ok_wo' ok_o' o' ok_z'} := addr_ofsP ok_wo' ok_z'.
   case: addr_ofs => //=.
   + move => ofs /(_ erefl) [<-] [<-] //=.
     rewrite /decode_addr /= (xgetreg eqv ok_r1 ok_o ok_z);ssring.
@@ -1163,7 +1164,7 @@ Proof.
     case/to_wordI: ok_v ok_v' => szv [vv] [hlev ??]; subst v v' => ok_v /andP [hlev'] /eqP.
     have ? := cmp_le_antisym hlev hlev' => {hlev hlev'}; subst szv.
     rewrite zero_extend_u => ?; subst vv.
-    have := addr_ofsP ok_w' ok_w.
+    have := addr_ofsP (push_woiP ok_w') ok_w.
     clear -eqm.
     case: addr_ofs => //=.
     - move => z /(_ erefl) [<-] [<-] /=; wring.

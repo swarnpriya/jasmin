@@ -243,6 +243,7 @@ Definition sem_ofs m o : exec pointer :=
   | Ofs_error => type_error
   end.
 Import word.
+
 Lemma addr_ofsP m e v w :
   sem_pexpr [::] m e = ok v →
   to_pointer v = ok w →
@@ -268,16 +269,24 @@ elim: e v w => //=.
     * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
       move: hv => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
       t_xrbindP => vz -> /= -> /= h1 [] <- ?; subst v.
-      case: hw => <-;f_equal;wring.
+      by case: hw => <-;f_equal;wring.
     * move => /= x z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _.
       move: hv hw => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
-      t_xrbindP => ? ? -> /= -> <- ? /= [] <- <- [<-];f_equal; wring.
+      by t_xrbindP => ? ? -> /= -> <- ? /= [] <- <- [<-];f_equal; wring.
+    * move=> sc x n /(_ _ _ hvq) hhvq sc1 /(_ _ _ hvp) hhvp _.
+      move: hv; rewrite /sem_sop2 /=; t_xrbindP => wp /hhvp /(_ erefl) [] ?; subst wp.
+      move=> wq /hhvq /(_ erefl) /=; t_xrbindP => wx vx -> /= -> <- /= ?; subst v.
+      by case: hw => <-;rewrite zero_extend_u;f_equal; wring.
     * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
       move: hv hw => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
-      t_xrbindP => vz' -> /= -> wq /hz /(_ erefl) [<-] {wq} ? []<- <- [<-] /=;f_equal;wring.
-    move => /= z /(_ _ _ hvq) hz x z' /(_ _ _ hvp) hz' _ /=.
-    move: hv hw => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
-    by t_xrbindP => y vz' -> /= -> /= <- ? /hz /(_ erefl) [<-] ? []<- <- [<-];rewrite zero_extend_u.
+      by t_xrbindP => vz' -> /= -> wq /hz /(_ erefl) [<-] {wq} ? []<- <- [<-] /=;f_equal;wring.
+    * move => /= z /(_ _ _ hvq) hz x z' /(_ _ _ hvp) hz' _ /=.
+      move: hv hw => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
+      by t_xrbindP => y vz' -> /= -> /= <- ? /hz /(_ erefl) [<-] ? []<- <- [<-];rewrite zero_extend_u.
+    move=> sc1 /(_ _ _ hvq) hhvq sc x n /(_ _ _ hvp) hhvp _.
+    move: hv; rewrite /sem_sop2 /=; t_xrbindP => wp /hhvp /(_ erefl) [] /=.
+    t_xrbindP => wx vx -> /= -> <- /= wq /hhvq /(_ erefl) /= [<-] ?; subst v.
+    by case: hw => <-; rewrite zero_extend_u; f_equal; wring.
   (* Mul *)
   move => [] // p ihp q ihq v w; t_xrbindP => vp hvp vq hvq hv hw.
   case: (addr_ofs p) ihp => //; case: (addr_ofs q) ihq => //.
@@ -287,9 +296,57 @@ elim: e v w => //=.
   * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _ /=.
     move: hv => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl) [<-] {wp} wq /hz /(_ erefl).
     by t_xrbindP => vz -> /= -> /= ? [] <- ?; subst v; f_equal; case: hw => <-;rewrite zero_extend_u.
-  move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _.
-  move: hv hw => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
-  by t_xrbindP => ? -> /= -> ? /hz /(_ erefl) [<-] ? [<-] <- /= [<-];f_equal;wring.
+  * move=> z x  /(_ _ _ hvq) hhvq z' /(_ _ _ hvp) hhvp _.
+    move: hv hw; rewrite /sem_sop2 /=; t_xrbindP => wp /hhvp /(_ erefl) [?];subst wp.
+    move=> wq /hhvq /(_ erefl) /=; t_xrbindP => ?? -> /= -> /= <- <- /=.
+    by rewrite truncate_word_u => -[<-]; f_equal; wring.
+  * move=> sc x n /(_ _ _ hvq) hhvq sc1 /(_ _ _ hvp) hhvp _.
+    move: hv hw; rewrite /sem_sop2 /=; t_xrbindP => wp /hhvp /(_ erefl) [?];subst wp.
+    move=> wq /hhvq /(_ erefl) /=; t_xrbindP => ?? -> /= -> /= <- <- /=.
+    by rewrite truncate_word_u => -[<-]; f_equal; wring.
+  * move => /= z /(_ _ _ hvq) hz z' /(_ _ _ hvp) hz' _.
+    move: hv hw => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
+    by t_xrbindP => ? -> /= -> ? /hz /(_ erefl) [<-] ? [<-] <- /= [<-];f_equal;wring.
+  * move=> z' /(_ _ _ hvq) hhvq z x /(_ _ _ hvp) hhvp _.
+    move: hv hw; rewrite /sem_sop2 /=; t_xrbindP => wp /hhvp /(_ erefl) /=.
+    t_xrbindP => ?? -> /= -> /= <- ? /hhvq /(_ erefl) [<-] <- /=. 
+    by rewrite truncate_word_u => -[<-]; f_equal; wring.
+  move=> sc1 /(_ _ _ hvq) hhvq sc x n /(_ _ _ hvp) hhvp _.
+  move: hv hw; rewrite /sem_sop2 /=; t_xrbindP => wp /hhvp /(_ erefl) /=. 
+  t_xrbindP => ?? -> /= -> /= <- ? /hhvq /(_ erefl) [<-] <- /=.
+  by rewrite truncate_word_u => -[<-]; f_equal; wring.
+Qed.
+
+Lemma push_woi_auxP m e v :
+  sem_pexpr [::] m (Papp1 (Oword_of_int Uptr) e) = ok v →
+  sem_pexpr [::] m (push_woi_aux e) = ok v.
+Proof.
+  elim: e v => //=.
+  + move=> op [] //= x _; case: eqP => // ->; case: eqP => // ht v.
+    rewrite /sem_sop1; t_xrbindP => vo vx /= hget ?; rewrite hget.
+    move: hget; rewrite /get_gvar; case: ifP => // _.
+    rewrite /get_var; apply: on_vuP => //.
+    case: (gv x) ht => -[xty xn] ii /= -> /= w _ <- /= /truncate_wordP.
+    case: w => sz w hle /= [] hle1; have ? := cmp_le_antisym hle hle1; subst sz.
+    by move=> -> <- ? /to_intI [<-] <-; rewrite zero_extend_u wrepr_unsigned.
+  move=> op e1 ih1 e2 ih2 v; case: eqP => [-> /= | _].
+  + rewrite /sem_sop2; t_xrbindP => /= y v1 hv1 v2 hv2 i1 hi1 i2 hi2 i [] ??;subst i y.
+    move: ih1 ih2; rewrite hv1 hv2 /sem_sop1 /= hi1 hi2 /= => /(_ _ erefl) -> /(_ _ erefl) -> [<-] /=.
+    by rewrite !zero_extend_u wrepr_add.
+  case: eqP => [-> /= | //].
+  rewrite /sem_sop2; t_xrbindP => /= y v1 hv1 v2 hv2 i1 hi1 i2 hi2 i [] ??;subst i y.
+  move: ih1 ih2; rewrite hv1 hv2 /sem_sop1 /= hi1 hi2 /= => /(_ _ erefl) -> /(_ _ erefl) -> [<-] /=.
+  by rewrite !zero_extend_u wrepr_mul.
+Qed.
+
+Lemma push_woiP m e v :
+  sem_pexpr [::] m e = ok v →
+  sem_pexpr [::] m (push_woi e) = ok v.
+Proof.
+  elim: e v => //=.
+  + move=> op e ih v; case: eqP => [-> | _]; first by apply:push_woi_auxP. 
+    by t_xrbindP => ? /ih /= ->.
+  by move=> op e1 ih1 e2 ih2 v; t_xrbindP => ? /ih1 -> ? /ih2 ->.
 Qed.
 
 (* -------------------------------------------------------------------- *)
