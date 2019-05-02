@@ -111,7 +111,7 @@ def _options():
     options.jobs     = cmdopt.jobs
     options.report   = cmdopt.report
 
-    defaults = dict(args = '', exclude = '', okdirs = '', kodirs = '', bin = None)
+    defaults = dict(args = '', exclude = '', okdirs = '', kodirs = '', bin = '')
 
     config = cp.SafeConfigParser(defaults)
     config.read(args[0])
@@ -205,7 +205,7 @@ def _run_test(config, options):
                      (config.filename, config.isvalid))
 
     timestamp = time.time()
-    binary = options.bin if config.bin is None else config.bin
+    binary = options.bin if not config.bin else config.bin
     try:
         command = [binary] + options.args + config.args
         if options.timeout:
