@@ -140,54 +140,24 @@ abbrev [-printing] const_rotate16_256 =
 abbrev [-printing] const_rotate24_256 =
   W256.of_int 5454353864746073763129182254217446065883741921538078285974850505695092212225.
 
-(*lemma pack8u32_bits128 ws i : 0 <= i < 2 => 
-  W8u32.pack8_t ws \bits128 i = pack4 [ws.[4*i];ws.[4*i+1];ws.[4*i+2];ws.[4*i+3] ].
-proof.
-  move=> /(mema_iota 0 2 i); move: i; apply /List.allP => /=.
-  by split; apply W128.all_eq_eq;cbv delta.
-qed. *)
-
-lemma pack2_4u32_8u32 (w0 w1 w2 w3 w4 w5 w6 w7 :W32.t) :
-   pack2 [pack4 [w0;w1;w2;w3]; pack4 [w4; w5; w6; w7]] =
-   pack8 [w0; w1; w2; w3; w4; w5; w6; w7].
-proof. by apply W256.all_eq_eq;cbv W256.all_eq edivz. qed.
-
 lemma rotate8_256_E w : 
   x86_VPSHUFB_256 w const_rotate8_256 = W8u32.map (fun w => W32.rol w 8) w.
-proof.
-admitted.
-(*
-  rewrite -(W8u32.unpack32K w) /unpack32 /= /x86_VPSHUFB_256 -{1}pack2_4u32_8u32.
-  rewrite -(W2u128.unpack128K const_rotate8_256) /unpack128 /=.
-  rewrite !W2u128.of_int_bits128_div 1,2://.
-  rewrite -W128.of_int_mod; cbv edivz. 
-  by rewrite pack2_4u32_8u32.
+proof. 
+  by apply: W256.all_eq_eq; cbv delta. 
 qed.
-*)
+
 lemma rotate16_256_E w : 
   x86_VPSHUFB_256 w const_rotate16_256 = W8u32.map (fun w => W32.rol w 16) w.
 proof.
-admitted.
-(*
-  rewrite -(W8u32.unpack32K w) /unpack32 /= /x86_VPSHUFB_256 -{1}pack2_4u32_8u32.
-  rewrite -(W2u128.unpack128K const_rotate16_256) /unpack128 /=.
-  rewrite !W2u128.of_int_bits128_div 1,2://.
-  rewrite -W128.of_int_mod; cbv edivz.
-  by rewrite pack2_4u32_8u32.
+  by apply: W256.all_eq_eq; cbv delta. 
 qed.
-*)
+
 lemma rotate24_256_E w : 
   x86_VPSHUFB_256 w const_rotate24_256 = W8u32.map (fun w => W32.rol w 24) w.
 proof.
-admitted.
-(*
-  rewrite -(W8u32.unpack32K w) /unpack32 /= /x86_VPSHUFB_256 -{1}pack2_4u32_8u32.
-  rewrite -(W2u128.unpack128K const_rotate24_256) /unpack128 /=.
-  rewrite !W2u128.of_int_bits128_div 1,2://.
-  rewrite -W128.of_int_mod; cbv edivz.
-  by rewrite pack2_4u32_8u32.
+  by apply: W256.all_eq_eq; cbv delta.
 qed.
-*)
+
 hint simplify (rotate8_256_E, rotate16_256_E, rotate24_256_E).
 
 (* -------------------------------------------------------------------- *)
