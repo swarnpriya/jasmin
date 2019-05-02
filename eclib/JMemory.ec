@@ -188,8 +188,7 @@ lemma store4u32 mem ptr w0 w1 w2 w3 :
     (ptr + 12) w3.
 proof.
   rewrite storeW128E !storeW32E.
-  rewrite /W4u8.Pack.to_list /mkseq /= /stores /=.
-  by rewrite !pack4u32_bits8_nth //.
+  by rewrite /W4u8.Pack.to_list /mkseq /= /stores.
 qed.
 
 lemma store4u8 mem ptr w0 w1 w2 w3 :
