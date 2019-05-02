@@ -60,6 +60,30 @@ op x86_DEC_32 (w:W32.t) =
 
 (* -------------------------------------------------------------------- *)
 
+op SF_of_w64 (w : W64.t) =
+  w.[31].
+
+op PF_of_w64 (w : W64.t) =
+  w.[0].
+
+op ZF_of_w64 (w : W64.t) =
+  w = W64.zero.
+
+op rflags_of_aluop_nocf64 (w : W64.t) (vs : int) =
+  let OF = W64.to_sint w <> vs in
+  let SF = SF_of_w64 w in 
+  let PF = PF_of_w64 w in 
+  let ZF = ZF_of_w64 w in
+  (OF, SF, PF, ZF).
+
+op x86_DEC_64 (w:W64.t) =
+  let v  = w - W64.of_int 1 in
+  let vs = W64.to_sint w - 1 in
+  let (OF, SF, PF, SZ) = rflags_of_aluop_nocf64 v vs in
+  (OF,SF,PF,SF,v).
+
+(* -------------------------------------------------------------------- *)
+
 op SF_of_w8 (w : W8.t) =
   w.[7].
 
