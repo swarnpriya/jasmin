@@ -274,8 +274,8 @@ op x86_VPERM2I128 (w1 w2: W256.t) (i:W8.t) : W256.t =
   pack2 [choose 0; choose 4].
 
 op x86_VPERMQ (w:W256.t) (i:W8.t) : W256.t = 
-  let choose = fun n => w \bits64 ((to_uint i %/ 2^n) %% 4) in
-  pack4 [choose 0; choose 1; choose 2; choose 4].
+  let choose = fun n => w \bits64 ((to_uint i %/ n) %% 4) in
+  pack4 [choose 1; choose 4; choose 16; choose 64].
 
 op x86_VEXTRACTI128 (w:W256.t) (i:W8.t) : W128.t = 
   w \bits128 b2i i.[0].
