@@ -1103,11 +1103,11 @@ let pp_glob_decl env fmt (x,d) =
   | `GArray(wz, t) ->
     let pp_elem fmt z = 
       Format.fprintf fmt "%a.of_int %a" pp_Tsz wz B.pp_print z in
-    Format.fprintf fmt "@[abbrev %a = Array%i.of_list [%a].@]@ "
+    Format.fprintf fmt "@[abbrev %a = Array%i.of_list witness [%a].@]@ "
        (pp_var env) x (Array.length t) 
-       (pp_list ",@ " pp_elem) (Array.to_list t)
+       (pp_list ";@ " pp_elem) (Array.to_list t)
 
-let add_arrsz env f = 
+let add_arrsz env vars =
   let add_sz x sz = 
     match x.v_ty with
     | Arr(_ws, n) -> Sint.add n sz 
@@ -1116,10 +1116,14 @@ let add_arrsz env f =
     match x.v_ty with
     | Arr(ws, n) -> Sint.add (arr_size ws n) sz 
     | _ -> sz in
-    
-  let vars = vars_fc f in
   {env with arrsz = Sv.fold add_sz vars env.arrsz;
-            warrsz = Sv.fold add_wsz vars env.warrsz; }
+            warrsz = Sv.fold add_wsz vars env.warrsz; }  
+
+let add_arrsz_fc env f = 
+  add_arrsz env (vars_fc f)
+
+let add_arrsz_gl env globs = 
+  add_arrsz env (Sv.of_list (List.map fst globs))
 
 let pp_array_decl i = 
   let file = Format.sprintf "Array%i.ec" i in
@@ -1143,7 +1147,8 @@ let pp_prog fmt model globs funcs  =
   let env = 
     List.fold_left (fun env (x, _) -> add_glob env x)
       env globs in
-  let env = List.fold_left add_arrsz env funcs in
+  let env = add_arrsz_gl env globs in
+  let env = List.fold_left add_arrsz_fc env funcs in
 
   Sint.iter pp_array_decl env.arrsz;
   Sint.iter pp_warray_decl env.warrsz;
