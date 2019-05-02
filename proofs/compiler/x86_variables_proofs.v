@@ -284,7 +284,7 @@ elim: e v w => //=.
       move: hv hw => /=; rewrite /sem_sop2; t_xrbindP => wp /hz' /(_ erefl).
       by t_xrbindP => y vz' -> /= -> /= <- ? /hz /(_ erefl) [<-] ? []<- <- [<-];rewrite zero_extend_u.
     move=> sc1 /(_ _ _ hvq) hhvq sc x n /(_ _ _ hvp) hhvp _.
-    move: hv; rewrite /sem_sop2 /=; t_xrbindP => wp /hhvp /(_ erefl) [] /=.
+    move: hv; rewrite /sem_sop2 /=; t_xrbindP => wp /hhvp /(_ erefl) /=.
     t_xrbindP => wx vx -> /= -> <- /= wq /hhvq /(_ erefl) /= [<-] ?; subst v.
     by case: hw => <-; rewrite zero_extend_u; f_equal; wring.
   (* Mul *)
