@@ -360,7 +360,8 @@ let set_var env x option s =
     vars = Mv.add x (s,option) env.vars }
 
 let add_var option env x = 
-  let s = create_name env x.v_name in
+  let s = String.uncapitalize_ascii x.v_name in
+  let s = create_name env s in
   set_var env x option s
 
 let add_glob env x = 
