@@ -932,6 +932,7 @@ abstract theory WT.
   op andw : t -> t -> t.
   op orw  : t -> t -> t.
   op (+^) : t -> t -> t.
+  op invw : t -> t.
   
   op (+) : t -> t -> t.
 
@@ -949,6 +950,7 @@ abstract theory WT.
   axiom andwE (w1 w2 : t) (i : int) : (andw w1 w2).[i] = (w1.[i] /\ w2.[i]).
   axiom orwE  (w1 w2 : t) (i : int) : (orw  w1 w2).[i] = (w1.[i] \/ w2.[i]).
   axiom xorwE (w1 w2 : t) (i : int) : (w1 +^ w2).[i] = (w1.[i] ^^ w2.[i]).
+  axiom invwE (w:t) (i:int) : (invw w).[i] = (0 <= i < size /\ !w.[i]).
 
   axiom wordP (w1 w2 : t) :
     w1 = w2 <=> forall (i : int), 0 <= i < size => w1.[i] = w2.[i].
@@ -1138,8 +1140,16 @@ abstract theory W_WS.
   lemma xorb'SE (w1 w2:WB.t) i :
     (WB.(+^) w1 w2) \bits'S i = WS.(+^) (w1 \bits'S i) (w2 \bits'S i).
   proof.
-   apply WS.wordP => j hj.
+    apply WS.wordP => j hj.
     by rewrite bits'SiE // WB.xorwE WS.xorwE !bits'SiE.
+  qed.
+
+  lemma invw'SE (w:WB.t) i :
+    0 <= i < r =>
+    (WB.invw w) \bits'S i = WS.invw (w \bits'S i).
+  proof.
+    move=> hi;apply WS.wordP => j hj.
+    rewrite bits'SiE // WB.invwE WS.invwE !bits'SiE //; smt (in_bound).
   qed.
 
   lemma andb'Ru'SE ws1 ws2 : 
@@ -1161,6 +1171,13 @@ abstract theory W_WS.
    proof.
      apply (canRL _ _ _ _ unpack'SK); apply packP => i hi.
      by rewrite get_unpack'S // map2iE // xorb'SE // !pack'RbE. 
+   qed.
+
+   lemma invw'Ru'SE ws : 
+     WB.invw (pack'R_t ws) = pack'R_t (map WS.invw ws).
+   proof.
+     apply (canRL _ _ _ _ unpack'SK); apply packP => i hi.
+     by rewrite get_unpack'S // mapiE // invw'SE // !pack'RbE. 
    qed.
 
    lemma bits'S_div (w:WB.t) i : 0 <= i =>
@@ -1192,8 +1209,8 @@ abstract theory W_WS.
    proof. by move=> hi hw;apply of_int_bits'S_div. qed.
  
    hint simplify (pack'RwE, bits'SiE, pack'RbE, get_unpack'S, unpack'SK, pack'RK, 
-                  mapbE, map2bE, andb'SE, orb'SE, xorb'SE,
-                  andb'Ru'SE, orb'Ru'SE, xorb'Ru'SE, of_int_bits'S_div_red).
+                  mapbE, map2bE, andb'SE, orb'SE, xorb'SE, invw'SE,
+                  andb'Ru'SE, orb'Ru'SE, xorb'Ru'SE, invw'Ru'SE, of_int_bits'S_div_red).
 
    lemma to_uint_zeroextu'B (w:WS.t) :
      WB.to_uint (zeroextu'B w) = WS.to_uint w.
