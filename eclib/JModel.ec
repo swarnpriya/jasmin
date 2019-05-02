@@ -366,6 +366,19 @@ op x86_VPSRLV_4u64 (w1:W256.t) (w2:W256.t) =
   map2 srl w1 w2.
 
 (* ------------------------------------------------------------------- *)
+op x86_VPBLENDD_128 (w1 w2: W128.t) (i:W8.t) : W128.t = 
+  let choose = fun n =>
+     let w = if i.[n] then w2 else w1 in
+     w \bits32 n in
+  pack4 [choose 0; choose 1; choose 2; choose 3].
+
+op x86_VPBLENDD_256 (w1 w2: W256.t) (i:W8.t) : W256.t = 
+  let choose = fun n =>
+     let w = if i.[n] then w2 else w1 in
+     w \bits32 n in
+  pack8 [choose 0; choose 1; choose 2; choose 3; choose 4; choose 5; choose 6; choose 7].
+
+(* ------------------------------------------------------------------- *)
 abbrev [-printing] (\vshr32u128) (w1:W128.t) (w2:W8.t) = x86_VPSRL_4u32 w1 w2.
 abbrev [-printing] (\vshl32u128) (w1:W128.t) (w2:W8.t) = x86_VPSLL_4u32 w1 w2.
 abbrev [-printing] (\vadd32u128) (w1 w2:W128.t) = x86_VPADD_4u32 w1 w2.
