@@ -42,7 +42,7 @@ build: jasmin.mlpack native
 define do-build
 	rm -f jasminc
 	$(OCAMLBUILD) "$(1)"
-	ln -sf "$(1)" jasminc
+	ln -sf "_build/$(1)" jasminc
 endef
 
 byte:
