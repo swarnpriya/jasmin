@@ -56,7 +56,21 @@ op x86_DEC_32 (w:W32.t) =
   let v  = w - W32.of_int 1 in
   let vs = W32.to_sint w - 1 in
   let (OF, SF, PF, SZ) = rflags_of_aluop_nocf32 v vs in
-  (OF,SF,PF,SF,v).
+  (OF,SF,PF,SZ,v).
+
+lemma DEC32_counter n (c:W32.t) :
+  c <> W32.zero =>
+  (n - to_uint c + 1 = n - to_uint (x86_DEC_32 c).`5 /\ 
+  (x86_DEC_32 c).`4 = ((x86_DEC_32 c).`5 = W32.zero)) /\
+  (n - to_uint c + 1 < n <=> ! (x86_DEC_32 c).`4).
+proof.
+  move=> hc0; rewrite /x86_DEC_32 /rflags_of_aluop_nocf32 /ZF_of_w32 => /=.
+  have -> : (c - W32.one = W32.zero) <=> (to_uint (c - W32.one) = 0).
+  + by split => [-> // | h]; apply (canRL _ _ _ _ W32.to_uintK).
+  have hc0': to_uint c <> 0.
+  + by apply negP => heq; apply hc0; rewrite -(W32.to_uintK c) heq.
+  rewrite W32.to_uintB /= 1:uleE /=; smt (W32.to_uint_cmp).
+qed.
 
 (* -------------------------------------------------------------------- *)
 
@@ -80,7 +94,21 @@ op x86_DEC_64 (w:W64.t) =
   let v  = w - W64.of_int 1 in
   let vs = W64.to_sint w - 1 in
   let (OF, SF, PF, SZ) = rflags_of_aluop_nocf64 v vs in
-  (OF,SF,PF,SF,v).
+  (OF,SF,PF,SZ,v).
+
+lemma DEC64_counter n (c:W64.t) :
+  c <> W64.zero =>
+  (n - to_uint c + 1 = n - to_uint (x86_DEC_64 c).`5 /\ 
+  (x86_DEC_64 c).`4 = ((x86_DEC_64 c).`5 = W64.zero)) /\
+  (n - to_uint c + 1 < n <=> ! (x86_DEC_64 c).`4).
+proof.
+  move=> hc0; rewrite /x86_DEC_64 /rflags_of_aluop_nocf64 /ZF_of_w64 => /=.
+  have -> : (c - W64.one = W64.zero) <=> (to_uint (c - W64.one) = 0).
+  + by split => [-> // | h]; apply (canRL _ _ _ _ W64.to_uintK).
+  have hc0': to_uint c <> 0.
+  + by apply negP => heq; apply hc0; rewrite -(W64.to_uintK c) heq.
+  rewrite W64.to_uintB /= 1:uleE /=; smt (W64.to_uint_cmp).
+qed.
 
 (* -------------------------------------------------------------------- *)
 
