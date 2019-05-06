@@ -157,7 +157,7 @@ Definition compile_prog (entries : seq funname) (p:prog) :=
 
     (* stack_allocation                    *)
     Let ps := stack_alloc.alloc_prog cparams.(stk_alloc_fd) cparams.(stk_alloc_gl) pd in
-    (* linearisation                     *)
+    (* linearisation                       *)
     Let pl := linear_prog ps in
     let pl := cparams.(print_linear) pl in
     (* asm                               *)
