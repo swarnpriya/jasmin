@@ -132,8 +132,44 @@ let rec array_acces_i tbl i =
 and array_access_c tbl c = 
   List.fold_left array_acces_i tbl c
 
+let needed_arr_vars_lval x needed = 
+  match x with 
+  | Lnone _ | Lmem _ -> needed
+  | Lvar x -> 
+    let x = L.unloc x in
+    if is_stack_var x && is_ty_arr x.v_ty then Sv.remove x needed
+    else needed
+  | Laset(_, x, _) ->
+    let x = L.unloc x in
+    if is_stack_var x then Sv.add x needed 
+    else needed
+
+let needed_arr_vars_lvals xs needed = 
+  List.fold_right needed_arr_vars_lval xs needed
+
+let rec needed_arr_vars c needed = 
+  List.fold_right needed_arr_vars_i c needed 
+and needed_arr_vars_i i needed = 
+  match i.i_desc with
+  | Cassgn(x, _, _, _) -> needed_arr_vars_lval x needed 
+  | Copn(xs, _, _, _) | Ccall(_, xs, _, _)-> needed_arr_vars_lvals xs needed 
+  | Cif(_, c1, c2) ->
+    let n1 = needed_arr_vars c1 needed in
+    let n2 = needed_arr_vars c2 needed in
+    Sv.union n1 n2
+  | Cwhile(_, c1, _, c2) ->
+    let c = c2 @ c1 in
+    (* FIXME *)
+    let n' = needed_arr_vars c needed in
+    let n1 = Sv.union needed n' in
+    needed_arr_vars c1 n1
+  | Cfor(_, _, _) -> assert false (* For loop should have been removed *)
+
 let init_stk fc =
-  let vars = Sv.elements (Sv.filter is_stack_var (vars_fc fc)) in
+  let needed = needed_arr_vars fc.f_body Sv.empty in
+  let test x = 
+    is_stack_var x && (not (is_ty_arr x.v_ty) || Sv.mem x needed) in
+  let vars = Sv.elements (Sv.filter test (vars_fc fc)) in
   let tbl = array_access_c Mv.empty fc.f_body in
   let size v =
      match v.v_ty with

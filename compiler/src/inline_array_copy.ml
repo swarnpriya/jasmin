@@ -9,7 +9,10 @@ let is_array_copy (x:lval) e =
     begin match (L.unloc z).v_ty with
     | Arr (ws, n) ->
       begin match e with
-      | Pvar y -> Some (z, ws, n, y)
+      | Pvar y -> 
+        if is_gkvar y && not ((L.unloc z).v_kind = Stack && (L.unloc y.gv).v_kind = Stack) then
+          Some (z, ws, n, y)
+        else None
       | _ -> None
       end
     | _ -> None

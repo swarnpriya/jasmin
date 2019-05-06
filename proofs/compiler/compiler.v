@@ -83,7 +83,7 @@ Record compiler_params := {
   is_var_in_memory : var_i → bool;
   reg_alloc_fd : funname -> fundef -> fundef;
   stk_alloc_gl : prog → seq u8 * Ident.ident * seq (var * Z);
-  stk_alloc_fd : fun_decl -> Z * Ident.ident * list (var * Z);
+  stk_alloc_fd : fun_decl -> (Z * Ident.ident * list (var * Z)) * (var -> var);
   print_prog   : compiler_step -> prog -> prog;
   print_linear : lprog -> lprog;
   warning      : instr_info -> warning_msg -> instr_info;

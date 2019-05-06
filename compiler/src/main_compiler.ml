@@ -259,6 +259,22 @@ let main () =
       let fd = trans fd in
       cfdef_of_fdef fd in
 
+    let translate_var = Conv.var_of_cvar tbl in
+
+    let tbl_ptrreg = Hashtbl.create 101 in
+
+    let regalloc fn cfd =
+      if !debug then Format.eprintf "START reg alloc@.";
+      let fd = fdef_of_cfdef fn cfd in
+      if !debug then Format.eprintf "back to ocaml@.";
+      let fd', m = Regalloc.regalloc translate_var fd in
+      let ptrreg_of_reg x = 
+        let x = Conv.var_of_cvar tbl x in
+        let xp = try Mv.find x m with Not_found -> assert false in
+        Conv.cvar_of_var tbl xp in
+      Hashtbl.add tbl_ptrreg fn ptrreg_of_reg;
+      cfdef_of_fdef fd' in
+
     let stk_alloc_fd cfd =
       let fd = Conv.fdef_of_cfdef tbl cfd in
       if !debug then Format.eprintf "START stack alloc func@." ;
@@ -269,7 +285,9 @@ let main () =
         let trans (v,i) = Conv.cvar_of_var tbl v, Conv.z_of_int i in
         List.map trans alloc in
       let sz = Conv.z_of_int sz in
-      (sz, stk_i), alloc
+      let ptrreg_of_reg = 
+        try Hashtbl.find tbl_ptrreg (fst cfd) with Not_found -> assert false in
+      ((sz, stk_i), alloc), ptrreg_of_reg
     in
 
     let stk_alloc_gl p =
@@ -310,7 +328,7 @@ let main () =
       let x = Conv.var_of_cvar tbl x in
       x.v_kind = Inline in
 
-    let translate_var = Conv.var_of_cvar tbl in
+
 
     let is_glob x =
       let x = Conv.var_of_cvar tbl x in
@@ -333,12 +351,13 @@ let main () =
       let cx = Conv.cvar_of_var tbl x in
       cx.Var0.Var.vname in
 
+         
     let cparams = {
       Compiler.rename_fd    = rename_fd;
       Compiler.expand_fd    = apply "arr exp" Array_expand.arrexp_func;
       Compiler.var_alloc_fd = apply "var alloc" Varalloc.merge_var_inline_fd;
       Compiler.share_stk_fd = apply "share stk" Varalloc.alloc_stack_fd;
-      Compiler.reg_alloc_fd = apply "reg alloc" (Regalloc.regalloc translate_var);
+      Compiler.reg_alloc_fd = regalloc;
       Compiler.stk_alloc_fd = stk_alloc_fd;
       Compiler.stk_alloc_gl = stk_alloc_gl;
       Compiler.lowering_vars = lowering_vars;
