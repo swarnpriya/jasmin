@@ -55,7 +55,7 @@ type 'ty gexpr =
   | Pbool  of bool
   | Parr_init of B.zint
   | Pvar   of 'ty ggvar
-  | Pget   of wsize * 'ty ggvar * 'ty gexpr
+  | Pget   of Warray.arr_access * wsize * 'ty ggvar * 'ty gexpr
   | Pload  of wsize * 'ty gvar_i * 'ty gexpr
   | Papp1  of E.sop1 * 'ty gexpr
   | Papp2  of E.sop2 * 'ty gexpr * 'ty gexpr
@@ -90,7 +90,7 @@ type 'ty glval =
  | Lnone of L.t * 'ty
  | Lvar  of 'ty gvar_i
  | Lmem  of wsize * 'ty gvar_i * 'ty gexpr
- | Laset of wsize * 'ty gvar_i * 'ty gexpr
+ | Laset of Warray.arr_access * wsize * 'ty gvar_i * 'ty gexpr
 
 type 'ty glvals = 'ty glval list
 
@@ -215,7 +215,7 @@ and pexpr_equal e1 e2 =
  | Pconst n1, Pconst n2 -> B.equal n1 n2
  | Pbool b1, Pbool b2 -> b1 = b2
  | Pvar v1, Pvar v2 -> PV.gequal v1 v2
- | Pget(b1,v1,e1), Pget(b2,v2,e2) -> b1 = b2 && PV.gequal v1 v2 && pexpr_equal e1 e2
+ | Pget(a1,b1,v1,e1), Pget(a2, b2,v2,e2) -> a1 = a2 && b1 = b2 && PV.gequal v1 v2 && pexpr_equal e1 e2
  | Pload(b1,v1,e1), Pload(b2,v2,e2) -> b1 = b2 && PV.equal (L.unloc v1) (L.unloc v2) && pexpr_equal e1 e2
  | Papp1(o1,e1), Papp1(o2,e2) -> o1 = o2 && pexpr_equal e1 e2
  | Papp2(o1,e11,e12), Papp2(o2,e21,e22) -> o1 = o2 &&  pexpr_equal e11 e21 && pexpr_equal e12 e22
@@ -283,7 +283,7 @@ let rvars_v x s =
 let rec rvars_e s = function
   | Pconst _ | Pbool _ | Parr_init _ -> s
   | Pvar x         -> rvars_v x s
-  | Pget(_,x,e)    -> rvars_e (rvars_v x s) e
+  | Pget(_,_,x,e)  -> rvars_e (rvars_v x s) e
   | Pload(_,x,e)   -> rvars_e (Sv.add (L.unloc x) s) e
   | Papp1(_, e)    -> rvars_e s e
   | Papp2(_,e1,e2) -> rvars_e (rvars_e s e1) e2
@@ -296,7 +296,7 @@ let rec rvars_lv s = function
  | Lnone _       -> s
  | Lvar x        -> Sv.add (L.unloc x) s
  | Lmem (_,x,e)
- | Laset (_,x,e) -> rvars_e (Sv.add (L.unloc x) s) e
+ | Laset(_,_,x,e)-> rvars_e (Sv.add (L.unloc x) s) e
 
 let rvars_lvs s lvs = List.fold_left rvars_lv s lvs
 
@@ -409,7 +409,7 @@ let expr_of_lval = function
   | Lnone _         -> None
   | Lvar x          -> Some (Pvar (gkvar x))
   | Lmem (ws, x, e) -> Some (Pload(ws,x,e))
-  | Laset(ws, x, e) -> Some (Pget(ws,gkvar x,e))
+  | Laset(aa,ws, x, e) -> Some (Pget(aa, ws,gkvar x,e))
 
 (* -------------------------------------------------------------------- *)
 (* Functions over instruction                                           *)
@@ -469,7 +469,7 @@ let glob_of_cglob ty = function
     let (ws, n) = array_kind ty in
     let t = 
       Array.init n (fun i ->
-          match Warray.WArray.get p ws t (z_of_int i) with
+          match Warray.WArray.get p Warray.AAscale ws t (z_of_int i) with
           | Ok w ->
             let z = Word0.wunsigned ws w in
             bi_of_z z

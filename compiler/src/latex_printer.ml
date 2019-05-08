@@ -136,11 +136,17 @@ let pp_svsize fmt (vs,s,ve) =
 let pp_space fmt _ =
   F.fprintf fmt " "
 
+let pp_aa = function
+  | `AAscale -> "[", "]"
+  | `AAdirect -> "{", "}"
+
 let rec pp_expr_rec prio fmt pe =
   match L.unloc pe with
   | PEParens e -> pp_expr_rec prio fmt e
   | PEVar x -> pp_var fmt x
-  | PEGet (ws, x, e) -> F.fprintf fmt "%a[%a%a%a]" pp_var x (pp_opt pp_ws) ws (pp_opt pp_space) ws pp_expr e
+  | PEGet (aa,ws, x, e) -> 
+    let bl, br = pp_aa aa in
+    F.fprintf fmt "%a%s%a%a%a%s" pp_var x bl (pp_opt pp_ws) ws (pp_opt pp_space) ws pp_expr e br
   | PEFetch (ty, x, e) -> F.fprintf fmt "%a[%a + %a]" (pp_opt (pp_paren pp_ws)) ty pp_var x pp_expr e
   | PEpack (vs,es) ->
     F.fprintf fmt "(%a)[@[%a@]]" pp_svsize vs (pp_list ",@ " pp_expr) es
@@ -218,7 +224,9 @@ let pp_lv fmt x =
   match L.unloc x with
   | PLIgnore -> F.fprintf fmt "_"
   | PLVar x -> pp_var fmt x
-  | PLArray (ws, x, e) -> F.fprintf fmt "%a[%a%a%a]" pp_var x (pp_opt pp_ws) ws (pp_opt pp_space) ws pp_expr e
+  | PLArray (aa, ws, x, e) -> 
+    let bl, br = pp_aa aa in
+    F.fprintf fmt "%a%s%a%a%a%s" pp_var x bl (pp_opt pp_ws) ws (pp_opt pp_space) ws pp_expr e br
   | PLMem (ty, x, e) -> F.fprintf fmt "%a[%a + %a]" (pp_opt (pp_paren pp_ws)) ty pp_var x pp_expr e
 
 let pp_eqop fmt op =

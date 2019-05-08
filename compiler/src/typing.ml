@@ -706,7 +706,12 @@ let tt_pack ~loc nb es =
   let n2 = S.bits_of_vesize es in
   wsize_of_bits ~loc (n1 * n2), pelem_of_bits ~loc n2, n1
 
+let tt_aa = function
+  | `AAscale -> Warray.AAscale
+  | `AAdirect -> Warray.AAdirect
+
 (* -------------------------------------------------------------------- *)
+
 let rec tt_expr ?(mode=`AllVar) (env : Env.env) pe =
   match L.unloc pe with
   | S.PEParens pe ->
@@ -729,14 +734,15 @@ let rec tt_expr ?(mode=`AllVar) (env : Env.env) pe =
     let ct = ct |> omap_dfl tt_ws T.U64 in
     P.Pload (ct, L.mk_loc xlc x, e), P.Bty (P.U ct)
 
-  | S.PEGet (ws, ({ L.pl_loc = xlc } as x), pi) ->
+  | S.PEGet (aa, ws, ({ L.pl_loc = xlc } as x), pi) ->
+    let aa = tt_aa aa in
     let x, xty  = tt_var_global mode env x in
     let ty = tt_as_array (xlc, xty) in
     let ws = omap_dfl tt_ws (P.ws_of_ty ty) ws in
     let ty = P.tu ws in
     let i,ity  = tt_expr ~mode env pi in
     check_ty_eq ~loc:(L.loc pi) ~from:ity ~to_:P.tint;
-    P.Pget (ws, x, i), ty
+    P.Pget (aa, ws, x, i), ty
 
   | S.PEOp1 (op, pe) ->
     let e, ety = tt_expr ~mode env pe in
@@ -859,14 +865,15 @@ let tt_lvalue (env : Env.env) { L.pl_desc = pl; L.pl_loc = loc; } =
     let x = tt_var `AllVar env x in
     loc, (fun _ -> P.Lvar (L.mk_loc loc x)), Some x.P.v_ty
 
-  | S.PLArray (ws, ({ pl_loc = xlc } as x), pi) ->
+  | S.PLArray (aa, ws, ({ pl_loc = xlc } as x), pi) ->
+    let aa = tt_aa aa in
     let x  = tt_var `AllVar env x in
     let ty = tt_as_array (xlc, x.P.v_ty) in
     let ws = omap_dfl tt_ws (P.ws_of_ty ty) ws in 
     let ty = P.tu ws in
     let i,ity  = tt_expr env ~mode:`AllVar pi in
     check_ty_eq ~loc:(L.loc pi) ~from:ity ~to_:P.tint;
-    loc, (fun _ -> P.Laset (ws, L.mk_loc xlc x, i)), Some ty 
+    loc, (fun _ -> P.Laset (aa, ws, L.mk_loc xlc x, i)), Some ty 
 
   | S.PLMem (ct, ({ pl_loc = xlc } as x), po) ->
     let x = tt_var `AllVar env x in
@@ -1099,7 +1106,7 @@ let pexpr_of_plvalue exn l =
   match L.unloc l with
   | S.PLIgnore      -> raise exn
   | S.PLVar  x      -> L.mk_loc (L.loc l) (S.PEVar x)
-  | S.PLArray(ws,x,e)  -> L.mk_loc (L.loc l) (S.PEGet(ws,x,e))
+  | S.PLArray(aa,ws,x,e)  -> L.mk_loc (L.loc l) (S.PEGet(aa,ws,x,e))
   | S.PLMem(ty,x,e) -> L.mk_loc (L.loc l) (S.PEFetch(ty,x,e))
 
 

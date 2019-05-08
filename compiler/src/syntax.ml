@@ -11,6 +11,7 @@ let parse_error ?msg loc =
 type symbol = string
 type pident = symbol L.located
 
+type arr_access = [`AAscale | `AAdirect]
 (* -------------------------------------------------------------------- *)
 type wsize = [ `W8 | `W16 | `W32 | `W64 | `W128 | `W256 ]
 
@@ -152,7 +153,7 @@ let string_of_peop2 : peop2 -> string =
 type pexpr_r =
   | PEParens of pexpr
   | PEVar    of pident
-  | PEGet    of wsize option * pident * pexpr
+  | PEGet    of arr_access * wsize option * pident * pexpr
   | PEFetch  of wsize option * pident * pexpr
   | PEpack   of svsize * pexpr list
   | PEBool   of bool
@@ -179,7 +180,7 @@ type pstotype = pstorage * ptype
 type plvalue_r =
   | PLIgnore
   | PLVar   of pident
-  | PLArray of wsize option * pident * pexpr
+  | PLArray of arr_access * wsize option * pident * pexpr
   | PLMem   of wsize option * pident * pexpr
 
 type plvalue = plvalue_r L.located

@@ -40,11 +40,11 @@ let rec arrexp_e tbl e =
   | Pconst _ | Pbool _ | Parr_init _ -> e
   | Pvar x -> check_not_reg_arr "Pvar" x.gv; e
 
-  | Pget (ws, x,e) ->
+  | Pget (aa, ws, x,e) ->
     if is_reg_arr (L.unloc x.gv) then
       let v = get_reg_arr tbl x.gv e in
       Pvar (gkvar (L.mk_loc (L.loc x.gv) v))
-    else Pget(ws, x, arrexp_e tbl e)
+    else Pget(aa, ws, x, arrexp_e tbl e)
 
   | Pload(ws,x,e)  -> Pload(ws,x,arrexp_e tbl e)
   | Papp1 (o, e)   -> Papp1(o, arrexp_e tbl e)
@@ -54,11 +54,11 @@ let rec arrexp_e tbl e =
 
 let arrexp_lv tbl lv =
   match lv with
-  | Laset(ws, x,e) ->
+  | Laset(aa, ws, x,e) ->
     if is_reg_arr (L.unloc x) then
       let v = get_reg_arr tbl x e in
       Lvar (L.mk_loc (L.loc x) v)
-    else Laset(ws, x, arrexp_e tbl e)
+    else Laset(aa, ws, x, arrexp_e tbl e)
   | Lvar x       -> check_not_reg_arr "Lvar" x; lv
   | Lnone _      -> lv
   | Lmem(ws,x,e) -> Lmem(ws,x,arrexp_e tbl e)
@@ -104,7 +104,7 @@ let add_var tbl ws x =
 let rec array_access_e tbl e = 
   match e with
   | Pconst _ | Pbool _ | Parr_init _ | Pvar _ -> tbl
-  | Pget(ws, x, e) -> array_access_e (add_var tbl ws (L.unloc x.gv)) e
+  | Pget(_, ws, x, e) -> array_access_e (add_var tbl ws (L.unloc x.gv)) e
   | Pload (_,_,e) | Papp1 (_,e) -> array_access_e tbl e 
   | Papp2(_,e1,e2) -> array_access_e (array_access_e tbl e1) e2
   | PappN (_,es) -> array_access_es tbl es
@@ -115,7 +115,7 @@ and array_access_es tbl es = List.fold_left array_access_e tbl es
 let array_access_lv tbl = function
  | Lnone _ | Lvar _ -> tbl
  | Lmem  (_,_,e) -> array_access_e tbl e
- | Laset (ws, x, e) -> array_access_e (add_var tbl ws (L.unloc x)) e
+ | Laset (_, ws, x, e) -> array_access_e (add_var tbl ws (L.unloc x)) e
 
 let array_access_lvs =  List.fold_left array_access_lv
 
@@ -139,7 +139,7 @@ let needed_arr_vars_lval x needed =
     let x = L.unloc x in
     if is_stack_var x && is_ty_arr x.v_ty then Sv.remove x needed
     else needed
-  | Laset(_, x, _) ->
+  | Laset(_, _, x, _) ->
     let x = L.unloc x in
     if is_stack_var x then Sv.add x needed 
     else needed
@@ -223,7 +223,7 @@ let add_gvar tbl ws x =
 let rec garray_access_e tbl e = 
   match e with
   | Pconst _ | Pbool _ | Parr_init _ | Pvar _ -> tbl
-  | Pget(ws, x, e) -> 
+  | Pget(_aa, ws, x, e) -> 
     if is_gkvar x then tbl 
     else
       garray_access_e (add_gvar tbl ws (L.unloc x.gv)) e
@@ -301,7 +301,7 @@ let init_glob (globs, funcs) =
       let ip = Prog.int_of_pos p in
       for i = 0 to ip - 1 do
         let w = 
-          match Warray.WArray.get p U8 t (Prog.z_of_int i) with
+          match Warray.WArray.get p Warray.AAscale U8 t (Prog.z_of_int i) with
           | Ok w -> w
           | _    -> assert false in
         data := w :: !data

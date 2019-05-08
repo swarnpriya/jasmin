@@ -13,6 +13,7 @@ val pp_string0 : Format.formatter -> char list -> unit
 
 val pp_kind  : Format.formatter -> v_kind -> unit
 
+val pp_aa : Warray.arr_access -> string * string 
 val pp_glv : (Format.formatter -> 'a Prog.gty Prog.gvar -> unit) -> Format.formatter -> 'a Prog.gty Prog.glval -> unit
 
 val pp_iloc  : Format.formatter -> i_loc -> unit 

@@ -103,6 +103,10 @@ let string_of_opN =
       (int_of_pe pe)
 
 (* -------------------------------------------------------------------- *)
+let pp_aa = function
+  | Warray.AAscale -> "[", "]"
+  | Warray.AAdirect -> "{", "}"
+
 let pp_ge pp_var =
   let pp_var_i = pp_gvar_i pp_var in
   let pp_gvar fmt x = 
@@ -113,8 +117,9 @@ let pp_ge pp_var =
   | Pbool  b    -> F.fprintf fmt "%b" b
   | Parr_init n -> F.fprintf fmt "array_init(%a)" B.pp_print n
   | Pvar v      -> pp_gvar fmt v
-  | Pget(ws,x,e)   -> 
-    F.fprintf fmt "%a[%a %a]"  pp_btype (U ws) pp_gvar x pp_expr e
+  | Pget(aa, ws,x,e)   -> 
+    let bl, br = pp_aa aa in
+    F.fprintf fmt "%a%s%a %a%s"  pp_gvar x bl pp_btype (U ws) pp_expr e br
   | Pload(ws,x,e) ->
     F.fprintf fmt "@[(load %a@ %a@ %a)@]"
       pp_btype (U ws) pp_var_i x pp_expr e
@@ -138,8 +143,10 @@ let pp_glv pp_var fmt = function
   | Lmem (ws, x, e) ->
     F.fprintf fmt "@[store %a@ %a@ %a@]"
      pp_btype (U ws) (pp_gvar_i pp_var) x (pp_ge pp_var) e
-  | Laset(ws, x,e) ->
-    F.fprintf fmt "%a[%a %a]" pp_btype (U ws) (pp_gvar_i pp_var) x (pp_ge pp_var) e
+  | Laset(aa, ws, x,e) ->
+    let bl, br = pp_aa aa in
+    F.fprintf fmt "%a%s%a %a%s" 
+      (pp_gvar_i pp_var) x bl pp_btype (U ws) (pp_ge pp_var) e br
 
 (* -------------------------------------------------------------------- *)
 let pp_ges pp_var fmt es =
