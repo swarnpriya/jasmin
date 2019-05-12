@@ -27,6 +27,9 @@ Canonical  arr_access_eqType      := Eval hnf in EqType arr_access arr_access_eq
 Definition arr_size (ws:wsize) (s:positive)  := 
    (wsize_size ws * s)%Z.
 
+Definition mk_scale (aa:arr_access) ws := 
+  if aa is AAscale then wsize_size ws else 1%Z.
+
 Module WArray.
 
  
@@ -59,8 +62,17 @@ Module WArray.
       rewrite /in_range; case: andP => h; constructor; move: h; rewrite !zify; Psatz.nia.
     Qed.
 
+    Definition is_align (p:pointer) ws := (p mod wsize_size ws == 0)%Z.
+
+    Lemma is_align8 (p:pointer) : is_align p U8.
+    Proof. by rewrite /is_align /wsize_size Z.mod_1_r. Qed.
+
+    Lemma is_align_scale (p:pointer) ws : is_align (p * mk_scale AAscale ws)%Z ws.
+    Proof. by rewrite /is_align /mk_scale /= Z_mod_mult. Qed.
+
     Definition validw (m:array s) (p:pointer) (ws:wsize) : exec unit := 
-      assert (in_range p ws) ErrOob.
+      Let _ := assert (in_range p ws) ErrOob in
+      assert (is_align p ws) ErrAddrInvalid.
 
     Definition validr (m:array s) (p:pointer) (ws:wsize) := 
       Let _ := validw m p ws in
@@ -83,7 +95,7 @@ Module WArray.
       (0 <= i < wsize_size sw)%Z ->
       validw m1 p sw = ok t -> validw m2 (add p i) U8 = ok tt.
     Proof.
-      move=> hi;rewrite /validw /assert; case: in_rangeP => // h1 _. 
+      move=> hi;rewrite /validw /assert is_align8; case: in_rangeP => // h1 _. 
       by case: in_rangeP => //; rewrite /wsize_size /add; Psatz.nia.
     Qed.
 
@@ -102,7 +114,7 @@ Module WArray.
       (0 <= i < wsize_size sw)%Z ->
       validr (uset m (add p i) v) k U8 = if add p i == k then ok t else validr m k U8.
     Proof.
-      case: t; rewrite /validr /= Z.add_0_r /validw /assert /add.
+      case: t; rewrite /validr /= Z.add_0_r /validw /assert /add is_align8.
       case: in_rangeP => //= hw _ hi.
       case: in_rangeP; rewrite /= /wsize_size => h.
       + by rewrite Mz.setP !andbT; case: (_ =P k). 
@@ -118,9 +130,6 @@ Module WArray.
         validrP validw_validr usetP.
  
   End CM.
-
-  Definition mk_scale (aa:arr_access) ws := 
-    if aa is AAscale then wsize_size ws else 1%Z.
 
   Definition get len (aa:arr_access) ws (a:array len) (p:Z) :=
     CoreMem.read a (p * mk_scale aa ws)%Z ws.
@@ -140,15 +149,15 @@ Module WArray.
   Lemma uincl_validw {len1 len2} (a1 : array len1) (a2 : array len2) ws i t :
     uincl a1 a2 -> validw a1 i ws = ok t -> validw a2 i ws = ok tt.
   Proof.
-    move=> [h1 h2]; rewrite /validw => /assertP/in_rangeP hi.
-    case: in_rangeP => //; nia.
+    move=> [h1 h2]; rewrite /validw; t_xrbindP => tt1 /assertP /in_rangeP hi. 
+    case: (is_align i ws) => //= _; case: in_rangeP => //; nia.
   Qed.
 
   Lemma uincl_validr {len1 len2} (a1 : array len1) (a2 : array len2) ws i t :
     uincl a1 a2 -> validr a1 i ws = ok t -> validr a2 i ws = ok tt.
   Proof.
-    move=> [h1 h2]; rewrite /validr /validw; t_xrbindP => t1. 
-    case: in_rangeP => //= hi1 _ {t1} /assertP /allP h.
+    move=> [h1 h2]; rewrite /validr /validw; t_xrbindP => t1 t2. 
+    case: in_rangeP => //= hi1 _ {t2} /assertP -> /= /assertP /allP h.
     case: in_rangeP => //= hi2; last by nia.
     case: allP => // -[] k hk; have := h _ hk.
     move: hk; rewrite in_ziota !zify Z.add_0_l => hk.
@@ -188,7 +197,7 @@ Module WArray.
     + by t_xrbindP => ? _ _ ? _; case: Mz.get => //= ?? ->.
     rewrite /validw; case: in_rangeP; rewrite /wsize_size /=; last by nia.
     case: in_rangeP; rewrite /wsize_size /= !andbT; last by nia.
-    move=> _ _; rewrite hg1 /=.
+    rewrite is_align8 /= => _ _; rewrite hg1 /=.
     have := h2 k _ hk; case: Mz.get => //= v1 /(_ _ erefl) -> _ /=.
     by case: Mz.get => //= ? _ ->.
   Qed.
@@ -229,8 +238,8 @@ Module WArray.
     move=> hk; rewrite /set /CoreMem.write; t_xrbindP => ? /= hw <-.
     have /= := CoreMem.uwrite_uget (CM := array_CM _) v k hw.
     have /= := CoreMem.uwrite_validr8 (CM := array_CM _) v k hw.
-    move: hw => /assertP/in_rangeP => hw.
-    rewrite /validr /= /sub /validw /uget.
+    move: hw; rewrite /validr /validw; t_xrbindP => t1 /assertP/in_rangeP hw /assertP hal.
+    rewrite is_align8  /= /sub /validw /uget.
     case: in_rangeP; last by rewrite wsize8; nia.
     case: ifPn; rewrite !zify wsize8 Z.add_0_r => ? _ /=.
     + by case: Mz.get => //= ? _ ->.
@@ -243,7 +252,7 @@ Module WArray.
   Proof.
     move=> hset; have := set_zget8 _ hset; move: hset.
     rewrite /set /CoreMem.write /validr /=; t_xrbindP => ? hw1 <-.
-    move: (hw1); rewrite /validw; t_xrbindP => /assertP /dup [] /in_rangeP hp -> /= hz.
+    move: (hw1); rewrite /validw; t_xrbindP => t1 /assertP /dup [] /in_rangeP hp -> -> hz /=.
     case: allP => //= -[] k; rewrite in_ziota !zify Z.add_0_l => hk.
     rewrite hz; last by nia.
     case: ifPn => //=; rewrite !zify; nia.
@@ -268,7 +277,8 @@ Module WArray.
   Proof.
     move=> /eqP hp hset; have := set_zget8 _ hset; move: hset.
     rewrite /set /CoreMem.write /validr /=; t_xrbindP => ? hw1 <-.
-    move: (hw1); rewrite /validw => /assertP /in_rangeP hp1 hz.
+    move: (hw1); rewrite /validw /validr; t_xrbindP => t1 /assertP /in_rangeP hp1. 
+    rewrite !is_align_scale => /= _ hz.
     case: in_rangeP => hp2 //=; f_equal.
     apply all_ziota => i hi; rewrite hz; last by nia.
     case: ifPn => //=; rewrite !zify;  nia.
@@ -326,18 +336,22 @@ Module WArray.
 
   Lemma get_bound ws len aa (t:array len) i w :
     get aa ws t i = ok w -> 
-    (0 <= i * mk_scale aa ws /\ (i + 1) * mk_scale aa ws <= len)%Z.
+    [/\ 0 <= i * mk_scale aa ws,
+        i * mk_scale aa ws + wsize_size ws <= len &
+        is_align (i * mk_scale aa ws) ws]%Z.
   Proof.
-    rewrite /get /CoreMem.read /= /validr /validw; t_xrbindP => ?? /assertP /in_rangeP. 
-    have := mk_scale_bound aa ws;nia.
+    rewrite /get /CoreMem.read /= /validr /validw; t_xrbindP => ??? /assertP /in_rangeP ? /assertP ->. 
+    have := mk_scale_bound aa ws => *;split => //; nia.
   Qed.     
 
   Lemma set_bound ws len aa (a t:array len) i (w:word ws) :
     set a aa i w = ok t -> 
-    (0 <= i * mk_scale aa ws /\ (i+1) * mk_scale aa ws <= len)%Z.
+    [/\ 0 <= i * mk_scale aa ws,
+        i * mk_scale aa ws +  wsize_size ws <= len &
+        is_align (i * mk_scale aa ws) ws]%Z.
   Proof.
-    rewrite /set /CoreMem.write /= /validw; t_xrbindP => ? /assertP /in_rangeP.
-    have := mk_scale_bound aa ws;nia.
+    rewrite /set /CoreMem.write /= /validw /validr; t_xrbindP => ?? /assertP /in_rangeP ? /assertP ->.
+    have := mk_scale_bound aa ws => *; split => //;nia.
   Qed.
 
   Lemma get_uget len aa (t:array len) i v :
@@ -353,8 +367,8 @@ Module WArray.
     exists v, get aa' U8 t (i * mk_scale aa ws + k) = ok v.
   Proof.
     rewrite /get /CoreMem.read /= /validr /validw; t_xrbindP.
-    move=> ?? /assertP /in_rangeP h1 /assertP /allP h2 ? hk /=.
-    rewrite mk_scale_U8 Z.mul_1_r Z.add_0_r.
+    move=> ??? /assertP /in_rangeP h1 /assertP ha /assertP /allP h2 ? hk /=.
+    rewrite is_align8 mk_scale_U8 Z.mul_1_r Z.add_0_r /=.
     have -> /= : in_range len (i * mk_scale aa ws + k)%Z U8.
     + by rewrite /in_range !zify wsize8; nia.
     rewrite h2 /=; first by eauto.
@@ -364,7 +378,7 @@ Module WArray.
   Lemma get0 (n:positive) aa off : (0 <= off ∧ off < n)%Z -> 
     get aa U8 (empty n) off = Error ErrAddrInvalid.
   Proof.
-    rewrite /get /CoreMem.read /= /validr /validw /= /in_range mk_scale_U8 wsize8 Z.mul_1_r.
+    rewrite /get /CoreMem.read /= /validr /validw /= /in_range mk_scale_U8 wsize8 Z.mul_1_r is_align8.
     case: andP => //; rewrite !zify; lia.
   Qed.
 
