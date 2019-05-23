@@ -172,6 +172,14 @@ cast:
 prim:
 | SHARP x=ident { x }
 
+%inline mem_ofs:
+| PLUS e=pexpr { `Add, e }
+| MINUS e=pexpr { `Sub, e }
+
+%inline mem_access:
+| ct=parens(utype)? LBRACKET v=var e=mem_ofs? RBRACKET 
+  { ct, v, e }
+  
 pexpr_r:
 | v=var
     { PEVar v }
@@ -188,8 +196,8 @@ pexpr_r:
 | i=INT
     { PEInt i }
 
-| ct=parens(utype)? LBRACKET v=var PLUS e=pexpr RBRACKET
-    { PEFetch (ct, v, e) }
+| ma=mem_access 
+    { let ct,v,e = ma in PEFetch (ct, v, e) }
 
 | ct=parens(svsize) LBRACKET es=rtuple1(pexpr) RBRACKET
     { PEpack(ct,es) }
@@ -242,8 +250,8 @@ plvalue_r:
 | x=var i=brackets(ws=utype? e=pexpr {ws, e})
     { let ws,e = i in PLArray (ws, x, e) }
 
-| ct=parens(utype)? LBRACKET v=var PLUS e=pexpr RBRACKET
-    { PLMem (ct, v, e) }
+| ma=mem_access 
+    { let ct,v,e = ma in PLMem (ct, v, e) }
 
 plvalue:
 | x=loc(plvalue_r) { x }

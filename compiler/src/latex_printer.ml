@@ -141,7 +141,7 @@ let rec pp_expr_rec prio fmt pe =
   | PEParens e -> pp_expr_rec prio fmt e
   | PEVar x -> pp_var fmt x
   | PEGet (ws, x, e) -> F.fprintf fmt "%a[%a%a%a]" pp_var x (pp_opt pp_ws) ws (pp_opt pp_space) ws pp_expr e
-  | PEFetch (ty, x, e) -> F.fprintf fmt "%a[%a + %a]" (pp_opt (pp_paren pp_ws)) ty pp_var x pp_expr e
+  | PEFetch me -> pp_mem_access fmt me 
   | PEpack (vs,es) ->
     F.fprintf fmt "(%a)[@[%a@]]" pp_svsize vs (pp_list ",@ " pp_expr) es
   | PEBool b -> F.fprintf fmt "%s" (if b then "true" else "false")
@@ -164,6 +164,14 @@ let rec pp_expr_rec prio fmt pe =
     F.fprintf fmt "%a ? %a : %a" (pp_expr_rec p) e1 (pp_expr_rec p) e2 (pp_expr_rec p) e3;
     optparent fmt prio p ")"
 
+and pp_mem_access fmt (ty,x,e) = 
+  let pp_e fmt e = 
+    match e with
+    | None -> ()
+    | Some (`Add, e) -> Format.fprintf fmt " + %a" pp_expr e 
+    | Some (`Sub, e) -> Format.fprintf fmt " - %a" pp_expr e in
+  F.fprintf fmt "%a[%a%a]" (pp_opt (pp_paren pp_ws)) ty pp_var x pp_e e
+  
 and pp_type fmt ty =
   match L.unloc ty with
   | TBool -> F.fprintf fmt "%a" ptype "bool"
@@ -219,7 +227,7 @@ let pp_lv fmt x =
   | PLIgnore -> F.fprintf fmt "_"
   | PLVar x -> pp_var fmt x
   | PLArray (ws, x, e) -> F.fprintf fmt "%a[%a%a%a]" pp_var x (pp_opt pp_ws) ws (pp_opt pp_space) ws pp_expr e
-  | PLMem (ty, x, e) -> F.fprintf fmt "%a[%a + %a]" (pp_opt (pp_paren pp_ws)) ty pp_var x pp_expr e
+  | PLMem me -> pp_mem_access fmt me 
 
 let pp_eqop fmt op =
   F.fprintf fmt "%a=" pp_op2 op
