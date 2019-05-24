@@ -659,6 +659,7 @@ repeat match goal with
 | |- is_word ?sz ?w = ok ?u → _ => move => /is_wordI /= -> {u}
 | |- to_word ?sz ?v = ok _ → _ =>
   let k := fresh in case/to_wordI => ? [?] [k ->?]; rewrite /= k => {k}
+| |- _ -> _ => case:ifP
 | |- _ → _ => intro
 end;
 trivial.
@@ -1724,6 +1725,7 @@ Proof.
 rewrite /sem_sopn; case: o; do 2 (try (refine (λ sz: wsize, _)));
 try (move => ve sz; exact: vuincl_sopn);
 try apply: vuincl_sopn => //.
++ by move=> [] // ????/=; case:ifP.
 move: vs=> [] // vs1 [] // vs2 [] // vs3 [] //.
 case/List_Forall2_inv_l => vs'1 [?] [->] [H1].
 case/List_Forall2_inv_l => vs'2 [?] [->] [H2].

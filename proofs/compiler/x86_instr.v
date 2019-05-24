@@ -1005,33 +1005,58 @@ Qed.
 Definition SHRD_desc sz := make_instr_desc (SHRD_gsc sz).
 
 (* ----------------------------------------------------------------------------- *)
-Definition SET0 sz o : asm :=
-  XOR
-    (if o is Reg_op _
-     then cmp_min U32 sz
-     else sz)
-    o o.
 
-Lemma Set0_gsc sz :
-  gen_sem_correct [:: TYoprd] (Oset0 sz)
-     (implicit_flags ++ [:: E sz 0])
-     [::] [::] (SET0 sz).
+Definition SET0 sz : interp_ty (if (sz <= U64)%CMP then TYoprd else TYxreg) -> asm :=
+  match (sz <= U64)%CMP as t return interp_ty (if t then TYoprd else TYxreg) -> asm with
+  | true => fun o =>
+    XOR (if o is Reg_op _  then cmp_min U32 sz
+         else sz) o o
+  | false => fun o =>
+    VPXOR sz (RM128_reg o) (RM128_reg o) (RM128_reg o)
+  end.
+
+Lemma Set0_gsc sz : 
+  gen_sem_correct [:: if (sz <= U64)%CMP then TYoprd else TYxreg] (Oset0 sz)
+     (if (sz <= U64)%CMP then implicit_flags ++ [:: E sz 0] else [::E sz 0])
+     [::] [::] (@SET0 sz).
 Proof.
-move => x; split => // gd m m'; rewrite /low_sem_aux /= /eval_XOR.
-have ok_sz : ∀ u, check_size_8_64 sz = ok u → check_size_8_64 (if x is Reg_op _ then cmp_min U32 sz else sz) = ok tt.
-+ by case: x => //; case: sz.
-case: x ok_sz => //= [ x | x ] ok_sz; t_xrbindP => vs _ /(ok_sz) {ok_sz} -> /= <-.
-- case => <- /=; rewrite wxor_xx /= /rflags_of_bwop /SF_of_word msb0 /=.
-  know_it; f_equal; rewrite /mem_write_reg /=; f_equal; last first.
-  * by apply /ffunP; case; rewrite !ffunE.
-  by rewrite /word_extend_reg /=; f_equal; case: sz.
-rewrite /sets_low /= truncate_word_u /= /mem_write_mem /= !decode_addr_set_rflags.
-apply: rbindP => m'' hw [<-].
-have [o ->] := write_mem_can_read hw.
-rewrite /= wxor_xx decode_addr_update_rflags /= hw /= /rflags_of_bwop /SF_of_word msb0; update_set.
+  rewrite /SET0; case heq:(sz <= U64)%CMP => x; split => // gd m m'; rewrite /low_sem_aux /=.
+  + rewrite /eval_XOR /check_size_8_64 heq.
+    have -> /= : ((if x is Reg_op _ then cmp_min U32 sz else sz) <= U64)%CMP.
+    + by case: x => //; case: (sz).
+    case: x => //= [ x | x ]; rewrite /sets_low /=.
+    + move=> []<- /=; rewrite wxor_xx /= /rflags_of_bwop /SF_of_word msb0 /=.
+      know_it; f_equal; rewrite /mem_write_reg /=; f_equal; last first.
+      * by apply /ffunP; case; rewrite !ffunE.
+      by rewrite /word_extend_reg /=; f_equal; case: (sz).
+    rewrite /sets_low /= truncate_word_u /= /mem_write_mem /= !decode_addr_set_rflags.
+    apply: rbindP => m'' hw [<-].
+    have [o ->] := write_mem_can_read hw.
+    rewrite /= wxor_xx decode_addr_update_rflags /= hw /= /rflags_of_bwop /SF_of_word msb0; update_set.
+  rewrite heq; t_xrbindP => y ?;subst y.
+  rewrite /sets_low /= => -[<-].
+  know_it; rewrite /eval_VPXOR /eval_rm128_binop /read_rm128.
+  rewrite /check_size_128_256.
+  have -> /= : (U128 ≤ sz)%CMP && (sz ≤ U256)%CMP by case: sz heq.
+  by rewrite wxor_xx.
 Qed.
 
-Definition Set0_desc sz := make_instr_desc (Set0_gsc sz).
+Lemma SET0_wf_out sz : 
+    is_true (all (wf_arg_desc [:: if (sz <= U64)%CMP then TYoprd else TYxreg]) 
+         (if (sz <= U64)%CMP then implicit_flags ++ [:: E sz 0] else [::E sz 0])).
+Proof. case:ifP => //. Qed.
+
+Definition Set0_desc sz := 
+  {| id_name := _;
+     id_msb_flag := _;
+     id_out := _;
+     id_in  := _;
+     id_tys := _;
+     id_instr := _;
+     id_gen_sem := @Set0_gsc sz;
+     id_in_wf := refl_equal;
+     id_out_wf := SET0_wf_out sz
+|}.
 
 (* ----------------------------------------------------------------------------- *)
 Lemma BSWAP_gsc sz :

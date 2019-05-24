@@ -332,7 +332,9 @@ Definition sopn_tout (o:sopn) :  list stype :=
   match o with
   | Omulu sz | Ox86_MULX sz => [::sword sz; sword sz]
   | Oaddcarry sz | Osubcarry sz | Ox86_ADCX sz | Ox86_ADOX sz => [:: sbool; sword sz]
-  | Oset0 sz => b5w_ty sz
+  | Oset0 sz => 
+    if (sz <= U64)%CMP then b5w_ty sz
+    else [::sword sz]
   | Ox86_MOV sz
   | Ox86_MOVSX sz _
   | Ox86_MOVZX sz _

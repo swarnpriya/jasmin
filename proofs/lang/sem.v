@@ -1409,10 +1409,13 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
   | Omulu sz => app_ww sz (fun x y => ok (@pval (sword sz) (sword sz) (wumul x y)))
   | Oaddcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (waddcarry x y c)))
   | Osubcarry sz => app_wwb sz (fun x y c => ok (@pval sbool (sword sz) (wsubcarry x y c)))
-  | Oset0 sz => app_sopn [::]
-    (Let _ := check_size_8_64 sz in
-     let vf := Vbool false in
-     ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
+  | Oset0 sz => 
+    if (sz <= U64)%CMP then 
+      app_sopn [::]
+        (let vf := Vbool false in
+         ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
+    else 
+      app_sopn [::] (ok [:: @Vword sz 0%R])
 
   (* Low level x86 operations *)
   | Ox86_MOV sz => app_w sz (@x86_MOV sz)
@@ -1524,8 +1527,8 @@ Lemma sopn_toutP o vs vs' : exec_sopn o vs = ok vs' ->
   List.map type_of_val vs' = sopn_tout o.
 Proof.
   rewrite /exec_sopn ;case: o => /=; app_sopn_t => //;
-  try (by apply: rbindP => _ _; app_sopn_t).
-
+  try (by apply: rbindP => _ _; app_sopn_t).  
+  + by case:ifP => ?; case: vs => // -[<-].
   + by move=> ???? w2 w3; case: ifP => ? [<-].
   + by rewrite /x86_div;t_xrbindP => ??;case: ifP => // ? [<-].
   + by rewrite /x86_idiv;t_xrbindP => ??;case: ifP => // ? [<-].
