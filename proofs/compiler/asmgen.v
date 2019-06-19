@@ -42,7 +42,7 @@ Proof.
       move => /eqP ne k; refine (ne (let: erefl := k in erefl))).
 Defined.
 
-Definition destination_eqMixin := comparableClass destination_eq_dec.
+Definition destination_eqMixin := comparableMixin destination_eq_dec.
 Canonical destination_eqType := EqType _ destination_eqMixin.
 
 (* -------------------------------------------------------------------- *)
@@ -52,7 +52,7 @@ Variant arg_ty :=
 
 Scheme Equality for arg_ty.
 
-Definition arg_ty_eqMixin := comparableClass arg_ty_eq_dec.
+Definition arg_ty_eqMixin := comparableMixin arg_ty_eq_dec.
 Canonical arg_ty_eqType := EqType arg_ty arg_ty_eqMixin.
 
 Definition string_of_arg_ty (ty: arg_ty) : string :=
@@ -108,7 +108,7 @@ Proof.
   abstract (case: g g' ne => [ c | o | r ] [ c' | o' | r' ] //= /eqP ne k; refine (ne (let: erefl := k in erefl))).
 Defined.
 
-Definition garg_eqMixin := comparableClass garg_eq_dec.
+Definition garg_eqMixin := comparableMixin garg_eq_dec.
 Canonical garg_eqType := EqType _ garg_eqMixin.
 
 Definition string_of_garg (g: garg) : string :=

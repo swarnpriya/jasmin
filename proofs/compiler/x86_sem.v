@@ -228,22 +228,28 @@ Variant asm : Type :=
 .
 
 (* -------------------------------------------------------------------- *)
+(** Compatibility with ssreflect 1.7. *)
+Definition comparableMixin :=
+  ltac:( exact: comparableMixin || exact: comparableClass ).
+
+(* -------------------------------------------------------------------- *)
 Scheme Equality for register.
 Scheme Equality for xmm_register.
 Scheme Equality for rflag.
 Scheme Equality for scale.
 Scheme Equality for condt.
 
-Definition reg_eqMixin := comparableClass register_eq_dec.
+
+Definition reg_eqMixin := comparableMixin register_eq_dec.
 Canonical reg_eqType := EqType register reg_eqMixin.
 
-Definition xreg_eqMixin := comparableClass xmm_register_eq_dec.
+Definition xreg_eqMixin := comparableMixin xmm_register_eq_dec.
 Canonical xreg_eqType := EqType _ xreg_eqMixin.
 
-Definition rflag_eqMixin := comparableClass rflag_eq_dec.
+Definition rflag_eqMixin := comparableMixin rflag_eq_dec.
 Canonical rflag_eqType := EqType rflag rflag_eqMixin.
 
-Definition scale_eqMixin := comparableClass scale_eq_dec.
+Definition scale_eqMixin := comparableMixin scale_eq_dec.
 Canonical scale_eqType := EqType scale scale_eqMixin.
 
 Definition address_beq (addr1: address) addr2 :=
@@ -280,7 +286,7 @@ Qed.
 Definition oprd_eqMixin := Equality.Mixin oprd_eq_axiom.
 Canonical oprd_eqType := EqType oprd oprd_eqMixin.
 
-Definition condt_eqMixin := comparableClass condt_eq_dec.
+Definition condt_eqMixin := comparableMixin condt_eq_dec.
 Canonical condt_eqType := EqType condt condt_eqMixin.
 
 Definition rm128_beq (rm1 rm2: rm128) : bool :=
@@ -410,7 +416,7 @@ Definition rflagmap0 : rflagmap := [ffun x => Undef].
 
 Scheme Equality for RflagMap.rflagv.
 
-Definition rflagv_eqMixin := comparableClass rflagv_eq_dec.
+Definition rflagv_eqMixin := comparableMixin rflagv_eq_dec.
 Canonical rflagv_eqType := EqType _ rflagv_eqMixin.
 
 (* -------------------------------------------------------------------- *)
@@ -707,7 +713,7 @@ Definition read_rm128 (sz: wsize) (rm: rm128) (m: x86_mem) : exec (word sz) :=
 Variant msb_flag := MSB_CLEAR | MSB_MERGE.
 
 Scheme Equality for msb_flag.
-Definition msb_flag_eqMixin := comparableClass msb_flag_eq_dec.
+Definition msb_flag_eqMixin := comparableMixin msb_flag_eq_dec.
 Canonical msb_flag_eqType := EqType msb_flag msb_flag_eqMixin.
 
 Definition update_u256 (f: msb_flag) (old: u256) (sz: wsize) (new: word sz) : u256 :=
