@@ -224,7 +224,7 @@ Variant compiled_variable :=
 
 Scheme Equality for compiled_variable.
 
-Definition compiled_variable_eqMixin := comparableClass compiled_variable_eq_dec.
+Definition compiled_variable_eqMixin := comparableMixin compiled_variable_eq_dec.
 Canonical compiled_variable_eqType := EqType compiled_variable compiled_variable_eqMixin.
 
 Definition compile_var (v: var) : option compiled_variable :=

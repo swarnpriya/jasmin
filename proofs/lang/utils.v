@@ -203,7 +203,7 @@ Ltac clarify :=
   repeat match goal with
   | H : ?a = ?b |- _ => subst a || subst b
   | H : ok _ = ok _ |- _ => apply ok_inj in H
-  | H : Some _ = Some _ |- _ => apply Some_inj in H
+  | H : Some _ = Some _ |- _ => move: H => /Some_inj H
   | H : ?a = _, K : ?a = _ |- _ => rewrite H in K
   end.
 

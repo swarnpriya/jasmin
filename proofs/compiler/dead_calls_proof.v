@@ -129,7 +129,7 @@ Lemma live_calls_in K p fn fd :
 Proof.
   elim: p K fn fd => // [[n d] p] ih K fn fd hn /=.
   case: eqP.
-  - move <- => {n} h; apply Some_inj in h; subst.
+  - move <- => {n} /Some_inj ->.
     rewrite (SpD.F.mem_1 hn) c_callsE.
     etransitivity. 2: apply: live_calls_subset. SpD.fsetdec.
   - move => ne rec. specialize (ih _ _ _ hn rec).
