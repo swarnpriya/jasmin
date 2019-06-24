@@ -387,6 +387,32 @@ struct
 
   let all_registers = reserved @ allocatable @ xmm_allocatable @ flags
 
+  (* prefix for assigning register preferences *)
+  let reg_pref_prefix = "__R"
+
+  (* extract a preferred allocation from a variable name *)
+  let var_pref bank v =
+    let vnamelen = String.length v.v_name in
+    if vnamelen < 4 || String.sub v.v_name 0 3 <> reg_pref_prefix
+    then None
+    else match String.split_on_char '#'
+                 (String.sub v.v_name 2 (vnamelen-2)) with
+         | [] -> None
+         | vname::xs ->
+            let off = match xs with
+                      | (y :: _) -> (try int_of_string y
+                                     with _ -> 0)
+                      | _ -> 0
+                      in
+            let rec find_pref l =
+              match l with
+              | x::xs -> if vname = x.v_name
+                         then try Some (List.nth (x::xs) off)
+                              with Failure _ -> None
+                         else find_pref xs
+              | _ -> None in
+            find_pref bank
+
   let forced_registers translate_var loc (vars: int Hv.t) (cnf: conflicts)
       (lvs: 'ty glvals) (op: sopn) (es: 'ty gexprs)
       (a: allocation) : allocation =
@@ -503,6 +529,42 @@ let type_of_vars (vars: var list) : ty =
       Printer.(pp_list "; " (pp_var ~debug: true)) vars
   | [] -> assert false
 
+(* Attempt to honor register preferences *)
+let alloc_prefs
+    (vars: int Hv.t)
+    (nv: int) (cnf: conflicts)
+    (a: allocation) : allocation =
+  let a = ref a in
+  for i = 0 to nv-1 do
+    if not (IntMap.mem i !a) then (
+      let vi = find_vars vars i in
+      if vi <> [] then (
+        let bank =
+          match kind_of_type (type_of_vars vi) with
+          | Word -> X64.allocatable
+          | Vector -> X64.xmm_allocatable
+          | Unknown ty -> hierror "Register allocation: no register bank for type %a" Printer.pp_ty ty 
+        in
+        let reg_pref = List.fold_left
+                         (fun x v -> if Option.is_some x
+                                     then x
+                                     else X64.var_pref bank v)
+                         None vi
+        in
+        match reg_pref with
+        | Some reg ->
+           let c = conflicting_registers i cnf !a in
+           let no_conflict = not (List.mem (Some reg) c) in
+           if no_conflict
+           then a := IntMap.add i reg !a
+           else (let pv = Printer.pp_list "; " (Printer.pp_var ~debug: true) in
+                 Format.eprintf "WARNING - Register allocation: ignoring conflicting preference on %a\n" pv vi)
+        | _ -> ()
+      )
+    )
+  done;
+  !a
+
 let greedy_allocation
     (vars: int Hv.t)
     (nv: int) (cnf: conflicts)
@@ -553,6 +615,7 @@ let regalloc translate_var (f: 'info func) : unit func =
   let conflicts = collect_conflicts vars tr lf in
   let a =
     allocate_forced_registers translate_var vars conflicts f IntMap.empty |>
+    alloc_prefs vars nv conflicts |>
     greedy_allocation vars nv conflicts fr |>
     subst_of_allocation vars
   in Subst.gsubst_func (fun ty -> ty) a f
