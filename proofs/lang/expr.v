@@ -111,6 +111,21 @@ Variant sopn : Set :=
 | Osubcarry of wsize   (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
 
 (* Low level x86 operations *)
+| Ox86_RAX               (* force allocation to register RAX *)
+| Ox86_RBX               (* force allocation to register RBX *)
+| Ox86_RCX               (* force allocation to register RCX *)
+| Ox86_RDX               (* force allocation to register RDX *)
+| Ox86_RSI               (* force allocation to register RSI *)
+| Ox86_RDI               (* force allocation to register RDI *)
+| Ox86_RBP               (* force allocation to register RBP *)
+| Ox86_R8                (* force allocation to register R8  *)
+| Ox86_R9                (* force allocation to register R9  *)
+| Ox86_R10               (* force allocation to register R10 *)
+| Ox86_R11               (* force allocation to register R11 *)
+| Ox86_R12               (* force allocation to register R12 *)
+| Ox86_R13               (* force allocation to register R13 *)
+| Ox86_R14               (* force allocation to register R14 *)
+| Ox86_R15               (* force allocation to register R15 *)
 | Oset0        of wsize  (* set register + flags to 0 (implemented using XOR x x) *)
 | Ox86_MOV     of wsize  (* copy *)
 | Ox86_MOVSX of wsize & wsize (* sign-extension *)
@@ -245,6 +260,21 @@ Definition string_of_sopn o : string :=
   | Omulu sz => "Omulu " ++ string_of_wsize sz
   | Oaddcarry sz => "Oaddcarry " ++ string_of_wsize sz
   | Osubcarry sz => "Osubcarry " ++ string_of_wsize sz
+  | Ox86_RAX => "Ox86_RAX"
+  | Ox86_RBX => "Ox86_RBX"
+  | Ox86_RCX => "Ox86_RCX"
+  | Ox86_RDX => "Ox86_RDX"
+  | Ox86_RSI => "Ox86_RSI"
+  | Ox86_RDI => "Ox86_RDI"
+  | Ox86_RBP => "Ox86_RBP"
+  | Ox86_R8  => "Ox86_R8"
+  | Ox86_R9  => "Ox86_R9"
+  | Ox86_R10 => "Ox86_R10"
+  | Ox86_R11 => "Ox86_R11"
+  | Ox86_R12 => "Ox86_R12"
+  | Ox86_R13 => "Ox86_R13"
+  | Ox86_R14 => "Ox86_R14"
+  | Ox86_R15 => "Ox86_R15"
   | Oset0 sz => "Oset0 " ++ string_of_wsize sz
   | Ox86_MOV sz => "Ox86_MOV " ++ string_of_wsize sz
   | Ox86_MOVSX sz sz' => "Ox86_MOVSX " ++ string_of_wsize sz ++ " " ++ string_of_wsize sz'
@@ -340,6 +370,9 @@ Definition sopn_tout (o:sopn) :  list stype :=
   | Ox86_BSWAP sz
   | Ox86_CQO sz  
     => w_ty sz
+  | Ox86_RAX | Ox86_RBX | Ox86_RCX | Ox86_RDX | Ox86_RSI | Ox86_RDI
+  | Ox86_RBP | Ox86_R8 | Ox86_R9 | Ox86_R10 | Ox86_R11 | Ox86_R12
+  | Ox86_R13 | Ox86_R14 | Ox86_R15
   | Ox86_MOVZX32 => [:: sword64 ]
   | Ox86_ADD sz | Ox86_SUB sz     => b5w_ty sz
   | Ox86_MUL sz | Ox86_IMUL sz    => b5ww_ty sz
@@ -388,6 +421,9 @@ Definition sopn_tin (o: sopn) : list stype :=
   | Ox86_ADCX sz 
   | Ox86_ADOX sz
     => let t := sword sz in [:: t ; t ; sbool ]
+  | Ox86_RAX | Ox86_RBX | Ox86_RCX | Ox86_RDX | Ox86_RSI | Ox86_RDI
+  | Ox86_RBP | Ox86_R8 | Ox86_R9 | Ox86_R10 | Ox86_R11 | Ox86_R12
+  | Ox86_R13 | Ox86_R14 | Ox86_R15 => [:: sword64 ]
   | Oset0 _ => [::]
   | Ox86_MOV sz
   | Ox86_MOVSX _ sz

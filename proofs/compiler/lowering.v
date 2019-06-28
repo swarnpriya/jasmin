@@ -597,6 +597,21 @@ Definition wsize_of_sopn (op: sopn) : wsize :=
   | Ox86_VPBLENDD x | Ox86_VPBROADCAST _ x
     => x
   | Ox86_MOVZX32 => U32
+  | Ox86_RAX
+  | Ox86_RBX
+  | Ox86_RCX
+  | Ox86_RDX
+  | Ox86_RSI
+  | Ox86_RDI
+  | Ox86_RBP
+  | Ox86_R8
+  | Ox86_R9
+  | Ox86_R10
+  | Ox86_R11
+  | Ox86_R12
+  | Ox86_R13
+  | Ox86_R14
+  | Ox86_R15 => U64
   | Ox86_MOVD _
   | Ox86_VPEXTR _ | Ox86_VPINSR _
     => U128

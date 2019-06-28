@@ -939,6 +939,8 @@ Definition vbools bs : exec values := ok (List.map Vbool bs).
 
 (* -------------------------------------------------------------------- *)
 
+Definition x86_REG (x: word U64) : exec values :=
+  ok [:: Vword x].
 
 Definition x86_MOV sz (x: word sz) : exec values :=
   Let _ := check_size_8_64 sz in
@@ -1415,6 +1417,9 @@ Definition exec_sopn (o:sopn) :  values -> exec values :=
      ok [:: vf; vf; vf; vf; Vbool true; @Vword sz 0%R])
 
   (* Low level x86 operations *)
+  | Ox86_RAX | Ox86_RBX | Ox86_RCX | Ox86_RDX | Ox86_RSI | Ox86_RDI
+  | Ox86_RBP | Ox86_R8 | Ox86_R9 | Ox86_R10 | Ox86_R11 | Ox86_R12
+  | Ox86_R13 | Ox86_R14 | Ox86_R15 => app_w U64 x86_REG
   | Ox86_MOV sz => app_w sz (@x86_MOV sz)
   | Ox86_MOVSX sz sz' => app_w sz' (@x86_MOVSX sz sz')
   | Ox86_MOVZX sz sz' => app_w sz' (@x86_MOVZX sz sz')

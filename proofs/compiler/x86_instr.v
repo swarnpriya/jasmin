@@ -1005,6 +1005,262 @@ Qed.
 Definition SHRD_desc sz := make_instr_desc (SHRD_gsc sz).
 
 (* ----------------------------------------------------------------------------- *)
+Lemma RAX_gsc:
+  gen_sem_correct [:: TYreg] Ox86_RAX
+     [:: R RAX] [:: R RAX] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition RAX_desc := make_instr_desc RAX_gsc.
+
+Lemma RBX_gsc:
+  gen_sem_correct [:: TYreg] Ox86_RBX
+     [:: R RBX] [:: R RBX] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition RBX_desc := make_instr_desc RBX_gsc.
+
+Lemma RCX_gsc:
+  gen_sem_correct [:: TYreg] Ox86_RCX
+     [:: R RCX] [:: R RCX] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition RCX_desc := make_instr_desc RCX_gsc.
+
+Lemma RDX_gsc:
+  gen_sem_correct [:: TYreg] Ox86_RDX
+     [:: R RDX] [:: R RDX] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition RDX_desc := make_instr_desc RDX_gsc.
+
+Lemma RSI_gsc:
+  gen_sem_correct [:: TYreg] Ox86_RSI
+     [:: R RSI] [:: R RSI] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition RSI_desc := make_instr_desc RSI_gsc.
+
+Lemma RDI_gsc:
+  gen_sem_correct [:: TYreg] Ox86_RDI
+     [:: R RDI] [:: R RDI] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition RDI_desc := make_instr_desc RDI_gsc.
+
+Lemma RBP_gsc:
+  gen_sem_correct [:: TYreg] Ox86_RBP
+     [:: R RBP] [:: R RBP] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition RBP_desc := make_instr_desc RBP_gsc.
+
+Lemma R8_gsc:
+  gen_sem_correct [:: TYreg] Ox86_R8
+     [:: R R8] [:: R R8] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition R8_desc := make_instr_desc R8_gsc.
+
+Lemma R9_gsc:
+  gen_sem_correct [:: TYreg] Ox86_R9
+     [:: R R9] [:: R R9] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition R9_desc := make_instr_desc R9_gsc.
+
+Lemma R10_gsc:
+  gen_sem_correct [:: TYreg] Ox86_R10
+     [:: R R10] [:: R R10] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition R10_desc := make_instr_desc R10_gsc.
+
+Lemma R11_gsc:
+  gen_sem_correct [:: TYreg] Ox86_R11
+     [:: R R11] [:: R R11] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition R11_desc := make_instr_desc R11_gsc.
+
+Lemma R12_gsc:
+  gen_sem_correct [:: TYreg] Ox86_R12
+     [:: R R12] [:: R R12] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition R12_desc := make_instr_desc R12_gsc.
+
+Lemma R13_gsc:
+  gen_sem_correct [:: TYreg] Ox86_R13
+     [:: R R13] [:: R R13] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition R13_desc := make_instr_desc R13_gsc.
+
+Lemma R14_gsc:
+  gen_sem_correct [:: TYreg] Ox86_R14
+     [:: R R14] [:: R R14] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition R14_desc := make_instr_desc R14_gsc.
+
+Lemma R15_gsc:
+  gen_sem_correct [:: TYreg] Ox86_R15
+     [:: R R15] [:: R R15] [::] (fun _ => NOASM).
+Proof.
+move => x; split => // gd m m'; rewrite /low_sem_aux /=.
+rewrite /sets_low /=.
+t_xrbindP => H; exists m'.
+move: H; rewrite /mem_write_reg /=  /word_extend_reg zero_extend_u.
+have ->: forall w, merge_word w w = w.
+ by move=> w; rewrite /merge_word /mask_word wand0 wxor0 zero_extend_u.
+rewrite -RegMap_set_id => <-.
+case: m => ???? //=; split => //.
+by apply x86_mem_equiv_refl.
+Qed.
+
+Definition R15_desc := make_instr_desc R15_gsc.
+
+(* ----------------------------------------------------------------------------- *)
 Definition SET0 sz o : asm :=
   XOR
     (if o is Reg_op _
@@ -1440,6 +1696,21 @@ Definition sopn_desc ii (c : sopn) : ciexec instr_desc :=
   match c with
   | Omulu _ | Oaddcarry _ | Osubcarry _ => cierror ii (Cerr_assembler (AsmErr_string "sopn_desc"))
   | Oset0 sz => ok (Set0_desc sz)
+  | Ox86_RAX => ok (RAX_desc)
+  | Ox86_RBX => ok (RBX_desc)
+  | Ox86_RCX => ok (RCX_desc)
+  | Ox86_RDX => ok (RDX_desc)
+  | Ox86_RSI => ok (RSI_desc)
+  | Ox86_RDI => ok (RDI_desc)
+  | Ox86_RBP => ok (RBP_desc)
+  | Ox86_R8 => ok (R8_desc)
+  | Ox86_R9 => ok (R9_desc)
+  | Ox86_R10 => ok (R10_desc)
+  | Ox86_R11 => ok (R11_desc)
+  | Ox86_R12 => ok (R12_desc)
+  | Ox86_R13 => ok (R13_desc)
+  | Ox86_R14 => ok (R14_desc)
+  | Ox86_R15 => ok (R15_desc)
   | Ox86_MOV sz => ok (MOV_desc sz)
   | Ox86_MOVSX sz sz' => ok (MOVSX_desc sz sz')
   | Ox86_MOVZX sz sz' => ok (MOVZX_desc sz sz')

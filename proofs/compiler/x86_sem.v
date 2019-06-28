@@ -134,6 +134,7 @@ Coercion rm128_of_m128 mo : rm128 :=
 
 (* -------------------------------------------------------------------- *)
 Variant asm : Type :=
+| NOASM	       (* Psudo instruction with no assembly counterpart *)
 | ALIGN
 | LABEL of label
 
@@ -1374,6 +1375,7 @@ Definition eval_VPERMQ (dst: xmm_register) (src: rm128) (i: u8) s : x86_result :
 (* -------------------------------------------------------------------- *)
 Definition eval_instr_mem (i : asm) s : x86_result :=
   match i with
+  | NOASM
   | ALIGN
   | JMP    _
   | Jcc    _ _

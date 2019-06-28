@@ -3506,6 +3506,10 @@ let safe_lvals = List.fold_left (fun safe x -> safe_lval x @ safe) []
 
 let safe_opn safe opn es = match opn with
   | E.Omulu _ | E.Oaddcarry _ | E.Osubcarry _ | E.Oset0 _
+  | E.Ox86_RAX | E.Ox86_RBX | E.Ox86_RCX | E.Ox86_RDX
+  | E.Ox86_RSI | E.Ox86_RDI | E.Ox86_RBP
+  | E.Ox86_R8 | E.Ox86_R9 | E.Ox86_R10 | E.Ox86_R11
+  | E.Ox86_R12 | E.Ox86_R13 | E.Ox86_R14 | E.Ox86_R15
   | E.Ox86_MOV _ | E.Ox86_MOVSX _ | E.Ox86_MOVZX _ | E.Ox86_MOVZX32
   | E.Ox86_CMOVcc _ | E.Ox86_ADD _ | E.Ox86_SUB _ | E.Ox86_MUL _ | E.Ox86_IMUL _
   | E.Ox86_ADCX _| E.Ox86_ADOX _ | E.Ox86_MULX _ | E.Ox86_IMULt _ | E.Ox86_IMULtimm _ -> safe

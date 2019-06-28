@@ -112,10 +112,12 @@ Proof.
 rewrite /linear_sem.eval_instr /x86_sem.eval_instr; case => eqm eqc eqpc.
 case: i => ii [] /=.
 - move => lvs op pes ok_j; t_xrbindP => es ok_es <- {ls'} /=.
-  have [m2 [-> eqm2 /=]] := assemble_sopnP eqm ok_j ok_es.
+  have [m2 [/= eqi eqm2]] := assemble_sopnP eqm ok_j ok_es.
   have := assemble_sopn_is_sopn ok_j.
-  by case: j {ok_j} => //; (eexists; split; first by reflexivity); constructor => //=;
-    rewrite ?to_estate_of_estate ?eqpc.
+  rewrite eqi /=.
+  by case: j ok_j eqi => //= ok_j eqi; (eexists; split; first by reflexivity); constructor => //=;
+    rewrite ?to_estate_of_estate // ?eqpc //.
+(*  by move: eqi => [->].*)
 - move => [<-] [<-];eexists;split;first by reflexivity.
   by constructor => //; rewrite /setpc eqpc.
 - move => lbl [<-] [<-]; eexists; split; first by reflexivity.

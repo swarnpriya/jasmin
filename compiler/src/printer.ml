@@ -7,6 +7,15 @@ module F = Format
 module B = Bigint
 
 (* -------------------------------------------------------------------- *)
+let camlstring_of_coqstring (s: char list) : string =
+  let r = Bytes.create (List.length s) in
+  let rec fill pos =
+    function
+    | [] -> r
+    | c :: s -> r.[pos] <- c; fill (pos + 1) s
+  in Bytes.to_string (fill 0 s)
+
+(* -------------------------------------------------------------------- *)
 let rec pp_list sep pp fmt xs =
   let pp_list = pp_list sep pp in
     match xs with
@@ -160,6 +169,21 @@ let pp_opn =
   | Oaddcarry w -> f w "#addc"
   | Osubcarry w -> f w "#subc"
   | Oset0 w -> f w "#set0"
+  | Ox86_RAX -> "#x86_RAX"
+  | Ox86_RBX -> "#x86_RBX"
+  | Ox86_RCX -> "#x86_RCX"
+  | Ox86_RDX -> "#x86_RDX"
+  | Ox86_RSI -> "#x86_RSI"
+  | Ox86_RDI -> "#x86_RDI"
+  | Ox86_RBP -> "#x86_RBP"
+  | Ox86_R8 -> "#x86_R8"
+  | Ox86_R9 -> "#x86_R9"
+  | Ox86_R10 -> "#x86_R10"
+  | Ox86_R11 -> "#x86_R11"
+  | Ox86_R12 -> "#x86_R12"
+  | Ox86_R13 -> "#x86_R13"
+  | Ox86_R14 -> "#x86_R14"
+  | Ox86_R15 -> "#x86_R15"
   | Ox86_MOV w -> f w "#x86_MOV"
   | Ox86_MOVSX (w, w') -> f2 w w' "#x86_MOVSX"
   | Ox86_MOVZX (w, w') -> f2 w w' "#x86_MOVZX"

@@ -34,6 +34,7 @@ let mangle (x : string) = "_" ^ x
 let iwidth = 4
 
 let pp_gen (fmt : Format.formatter) = function
+  | `NoOp -> ()
   | `Label lbl ->
       Format.fprintf fmt "%s:" lbl
   | `Instr (s, []) ->
@@ -314,6 +315,8 @@ let pp_xxri name sz dst src1 src2 mask =
 (* -------------------------------------------------------------------- *)
 let pp_instr name (i : X86_sem.asm) =
   match i with
+  | NOASM -> `NoOp
+
   | ALIGN ->
     `Instr (".p2align", ["5"])
     
@@ -543,6 +546,7 @@ let reg_of_oprd (op : X86_sem.oprd) =
 (* TODO: generate from instr_desc *)
 let wregs_of_instr (c : rset) (i : X86_sem.asm) =
   match i with
+  | NOASM
   | ALIGN | LABEL _ | Jcc  _ | JMP _
   | CMP   _ | TEST _ | BT _
   | MOVD _
