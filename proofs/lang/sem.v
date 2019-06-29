@@ -939,7 +939,7 @@ Definition vbools bs : exec values := ok (List.map Vbool bs).
 
 (* -------------------------------------------------------------------- *)
 
-Definition x86_REG (x: word U64) : exec values :=
+Definition x86_REG (x: word U64): exec values :=
   ok [:: Vword x].
 
 Definition x86_MOV sz (x: word sz) : exec values :=

@@ -373,6 +373,7 @@ Definition sopn_tout (o:sopn) :  list stype :=
   | Ox86_RAX | Ox86_RBX | Ox86_RCX | Ox86_RDX | Ox86_RSI | Ox86_RDI
   | Ox86_RBP | Ox86_R8 | Ox86_R9 | Ox86_R10 | Ox86_R11 | Ox86_R12
   | Ox86_R13 | Ox86_R14 | Ox86_R15
+    => [:: sword64 ]
   | Ox86_MOVZX32 => [:: sword64 ]
   | Ox86_ADD sz | Ox86_SUB sz     => b5w_ty sz
   | Ox86_MUL sz | Ox86_IMUL sz    => b5ww_ty sz

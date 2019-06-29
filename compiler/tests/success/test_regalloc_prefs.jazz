@@ -1,0 +1,27 @@
+export
+fn f(reg u64 x, reg u64 y) {
+ reg u64[24] __R12; // preferred registers for reg.array
+ /* When we name a variable as "__R{AX,BX,CX,DX,SI,DI,BP,8..15}", it
+ specifies a "preference" to the register allocator. The allocator will
+ try to accomodate the preferences after assigning the registers enforced
+ by certain operations (e.g. "MUL" assembly instruction). Nevertheless,
+ the allocator will NOT fail if it is not able to fulfil the preference
+ (e.g. when the preference conflicts with the already assigned registers).
+    If the preference is placed on a register array, subsquent registers are
+ assigned.                                                                */
+
+ inline int i;
+ for i = 0 to 4 {
+  __R12[i] = [x + 8*i];
+  if (i==2) { __R12[i] = #x86_RBX(__R12[i]); } // force __R12[2] into RBX
+  /* The (pseudo-)instruction "#x86_R??" forces a specific register to be
+  assigned to a variable (the allocator fails if is not able to accomodate
+  the assignment). Note that, in order to fit on the existing syntax, the
+  behaviour of "#x86_R??" is a bit annoying --- in general, when one writes
+  " v1 = #x85_R??(v2); ", then both "v1" and "v2" will be allocated to "R??",
+  and semantically it behaves as a MOV.                                    */
+
+  __R12[i] ^= [y + 8*i];
+  [x + 8*i] = __R12[i];
+ }
+}
