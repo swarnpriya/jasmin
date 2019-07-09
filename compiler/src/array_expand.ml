@@ -138,7 +138,7 @@ let init_stk fc =
   let free_regs = Sv.diff allocatable fv in
   let vars = Sv.elements (Sv.filter is_stack_var (vars_fc fc)) in
   if vars == [] then 
-    [], 0, Sv.diff Regalloc.X64.callee_save fv, None
+    [], 0, Sv.inter Regalloc.X64.callee_save fv, None
   else
 
   let tbl = array_access_c Mv.empty fc.f_body in
