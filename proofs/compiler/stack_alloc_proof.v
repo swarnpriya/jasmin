@@ -1125,7 +1125,7 @@ Proof.
   move=> hap get Sget. 
   have [sfd1 [] /=]:= getfun_alloc hap get.
   rewrite Sget => -[?]; subst sfd1.
-  case: (oracle (fn, fd)) => [[stk_s stk_i] l].
+  case: (oracle (fn, fd)) => [[[stk_s stk_i] l] extra].
   case hinit : init_map => [m |] //=; t_xrbindP => sfd c.
   apply: add_finfoP => Hi; case:andP => // -[Hp Hr] [?] ?.
   subst sfd fd' => /=.

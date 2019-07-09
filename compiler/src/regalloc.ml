@@ -350,6 +350,8 @@ struct
       r12; r13; r14; r15
     ]
 
+  let allocatables = Sv.of_list allocatable
+
   let xmm_allocatable = [
     xmm0; xmm1; xmm2; xmm3; xmm4; xmm5; xmm6; xmm7;
     xmm8; xmm9; xmm10; xmm11; xmm12; xmm13; xmm14; xmm15
@@ -376,6 +378,10 @@ struct
     rsp
   ]
 
+  (* rsp does not need to be saved since it is an invariant 
+     of jasmin program *)
+  let callee_save = Sv.of_list [ rbp; rbx; r12; r13; r14; r15 ]
+  
   let f_c = V.mk "CF" Reg (Bty Bool) L._dummy
   let f_d = V.mk "DF" Reg (Bty Bool) L._dummy
   let f_o = V.mk "OF" Reg (Bty Bool) L._dummy

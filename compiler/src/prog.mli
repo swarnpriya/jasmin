@@ -250,9 +250,10 @@ val locals  : 'info func -> Sv.t
 (* -------------------------------------------------------------------- *)
 (* Functions on types                                                   *)
 
-val int_of_ws : wsize -> int
+val int_of_ws  : wsize -> int
 val size_of_ws : wsize -> int
-val int_of_pe : pelem -> int
+val uptr       : wsize 
+val int_of_pe  : pelem -> int
 
 val int_of_velem : velem -> int 
 

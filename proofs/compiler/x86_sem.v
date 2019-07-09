@@ -1482,12 +1482,19 @@ Definition x86sem : relation x86_state := clos_refl_trans x86_state x86sem1.
 End GLOB_DEFS.
 
 (* -------------------------------------------------------------------- *)
+Variant saved_stack := 
+| SavedStackNone 
+| SavedStackReg of register  
+| SavedStackStk of Z.
+
+
 Record xfundef := XFundef {
  xfd_stk_size : Z;
  xfd_nstk : register;
  xfd_arg  : seq register;
  xfd_body : seq asm;
  xfd_res  : seq register;
+ xfd_extra : list register * saved_stack;
 }.
 
 Definition xprog : Type :=

@@ -43,6 +43,14 @@ Definition x86_gen_error (e: x86_gen_error_t) : instr_error :=
   end)).
 
 (* -------------------------------------------------------------------- *)
+
+Definition assemble_saved_stack (x:stack_alloc.saved_stack) := 
+  match x with
+  | stack_alloc.SavedStackNone  => ok (x86_sem.SavedStackNone)
+  | stack_alloc.SavedStackReg r => Let r := reg_of_var xH r in ok (x86_sem.SavedStackReg r)
+  | stack_alloc.SavedStackStk z => ok (x86_sem.SavedStackStk z)
+  end.
+
 Definition assemble_fd (fd: lfundef) :=
   Let fd' := assemble_c (lfd_body fd) in
 
@@ -50,8 +58,11 @@ Definition assemble_fd (fd: lfundef) :=
   | Some sp =>
       Let arg := reg_of_vars xH (lfd_arg fd) in
       Let res := reg_of_vars xH (lfd_res fd) in
-      Let _ := assert (~~ (sp \in arg)) (x86_gen_error (X86Error_StackPointerInArguments sp)) in
-      ciok (XFundef (lfd_stk_size fd) sp arg fd' res)
+      Let _ :=
+        assert (~~ (sp \in arg)) (x86_gen_error (X86Error_StackPointerInArguments sp)) in
+      Let tosave := reg_of_vars xH (map (fun x => VarI x xH) (lfd_extra fd).1) in
+      Let saved  := assemble_saved_stack (lfd_extra fd).2 in
+      ciok (XFundef (lfd_stk_size fd) sp arg fd' res (tosave, saved))
 
   | None => Error (x86_gen_error X86Error_InvalidStackPointer)
   end.
@@ -247,8 +258,8 @@ have [fd' [h ok_fd']] := get_map_cfprog ok_p' ok_fd.
 exists fd'. split; first exact: ok_fd'.
 move => s1 hargs ?; subst m1.
 move: h; rewrite /assemble_fd; t_xrbindP => body ok_body.
-case ok_sp: (reg_of_string _) => [ sp | // ];
-  t_xrbindP => args ok_args dsts ok_dsts _ /assertP hsp [?]; subst fd'.
+case ok_sp: (reg_of_string _) => [ sp | // ].
+t_xrbindP => args ok_args dsts ok_dsts _ /assertP hsp tosave ? savedstk ? [?]; subst fd'.
 set xr1 := mem_write_reg sp (top_stack m1') {| xmem := m1' ; xreg := s1.(xreg) ; xxreg := s1.(xxreg) ; xrf := rflagmap0 |}.
 have eqm1 : lom_eqv {| emem := m1' ; evm := vm1 |} xr1.
 + constructor => //.
@@ -288,8 +299,8 @@ Lemma assemble_fd_stk_size fd xfd :
   assemble_fd fd = ok xfd →
   lfd_stk_size fd = xfd_stk_size xfd.
 Proof.
-by rewrite /assemble_fd; t_xrbindP => c _;
-  case: reg_of_string => //; t_xrbindP => ?? _ ? _ _ _ [<-].
+rewrite /assemble_fd; t_xrbindP => c _.
+by case: reg_of_string => //; t_xrbindP => ? ? ? ? ? ? ? ? ? ? ? [<-].
 Qed.
 
 End PROG.

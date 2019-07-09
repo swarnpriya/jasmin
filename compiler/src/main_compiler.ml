@@ -260,12 +260,19 @@ let main () =
       if !debug then Format.eprintf "START stack alloc@." ;
       let stk_i =
         Var0.Var.vname (Conv.cvar_of_var tbl Array_expand.vstack) in
-      let alloc, sz = Array_expand.stk_alloc_func fd in
+      let alloc, sz, to_save, p_stack = Array_expand.stk_alloc_func fd in
       let alloc =
         let trans (v,i) = Conv.cvar_of_var tbl v, Conv.z_of_int i in
         List.map trans alloc in
       let sz = Conv.z_of_int sz in
-      (sz, stk_i), alloc
+      let p_stack = 
+        match p_stack with
+        | None -> Stack_alloc.SavedStackNone
+        | Some (`InReg x) -> Stack_alloc.SavedStackReg (Conv.cvar_of_var tbl x)
+        | Some (`InStack p) -> Stack_alloc.SavedStackStk (Conv.z_of_int p) in
+      
+      let to_save = List.map (Conv.cvar_of_var tbl) (Sv.elements to_save) in
+      ((sz, stk_i), alloc), (to_save, p_stack) 
     in
 
     let is_var_in_memory cv : bool =

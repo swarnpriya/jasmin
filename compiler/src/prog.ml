@@ -330,6 +330,8 @@ let size_of_ws = function
   | U128 -> 16
   | U256 -> 32
 
+let uptr = U64 (* Warning this should be arch dependent *)
+
 let int_of_pe =
   function
   | PE1   -> 1
