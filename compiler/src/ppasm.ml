@@ -603,6 +603,10 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
       let name = string_of_funname tbl n in
       let stsz  = Conv.bi_of_z d.xfd_stk_size in
       let tosave, saved_stack = d.xfd_extra in
+      pp_gens fmt [
+        `Label (mangle (string_of_funname tbl n));
+        `Label name
+      ];
       List.iter (fun r ->
         pp_gens fmt [`Instr ("pushq", [pp_register `U64 r])])
         tosave;
