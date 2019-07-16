@@ -369,17 +369,16 @@ let pp_instr name (i : X86_sem.asm) =
 
   | ADCX(ws, r, op) -> 
     let rs = rs_of_ws ws in
-    `Instr (pp_iname rs "adcx", [pp_register rs r; pp_opr rs op])
+    `Instr (pp_iname rs "adcx", [pp_opr rs op; pp_register rs r])
 
   | ADOX(ws, r, op) -> 
     let rs = rs_of_ws ws in
-    `Instr (pp_iname rs "adox", [pp_register rs r; pp_opr rs op])
+    `Instr (pp_iname rs "adox", [pp_opr rs op; pp_register rs r])
 
   | MULX(ws, r1, r2, op) ->
     let rs = rs_of_ws ws in
-    `Instr (pp_iname rs "mulx", 
-            [pp_register rs r1; pp_register rs r2; pp_opr rs op])
- 
+    `Instr (pp_iname rs "mulx",
+            [pp_opr rs op; pp_register rs r2; pp_register rs r1;])
 
   | CQO ws ->
     let name =
