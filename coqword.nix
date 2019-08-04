@@ -4,7 +4,7 @@ let inherit (coqPackages) coq; in
 
 let mathcomp = coqPackages.mathcomp-algebra or coqPackages.mathcomp; in
 
-let rev = "1577c1fe57b64da83a5f97be057f79497093f3f5"; in
+let rev = "14d21c02204d0a59fca9242da39de70ac88e89ed"; in
 
 stdenv.mkDerivation rec {
   version = "0.0-git-${builtins.substring 0 8 rev}";
@@ -14,7 +14,7 @@ stdenv.mkDerivation rec {
     owner = "jasmin-lang";
     repo = "coqword";
     inherit rev;
-    sha256 = "16a4v5k1qgajf37ylqhm0fm91snxia1p1b54b85247d2nssccp0c";
+    sha256 = "145sc40d3jcbrk7fl2ss08c769idgzcbznk1b9a5jdsba8rx16hp";
   };
 
   buildInputs = [ coq ];
