@@ -573,7 +573,7 @@ proof. by move=> x /negb_exists /=; apply choiceb_dfl. qed.
 
 abbrev (^) = WRingA.exp.
 
-lemma nosmt ofintS (n : int) : 0 <= n => of_int (n + 1) = of_int 1 + of_int n.
+lemma ofintS (n : int) : 0 <= n => of_int (n + 1) = of_int 1 + of_int n.
 proof. by rewrite of_intD addrC. qed. 
 
 lemma to_uintB (x y: t) : y \ule x => to_uint (x - y) = to_uint x - to_uint y.
