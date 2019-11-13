@@ -20,11 +20,11 @@ qed.
 
 lemma cmpW i d : 0 <= i < d => 0 <= i <= d.
 proof. by move=> [h1 h2];split => // ?;apply ltzW. qed.
- 
+
 lemma le_modz m d : 0 <= m => m %% d <= m.
 proof.
-  move=> hm. 
-  have [ ->| [] hd]: d = 0 \/ d < 0 \/ 0 < d by smt(). 
+  move=> hm.
+  have [ ->| [] hd]: d = 0 \/ d < 0 \/ 0 < d by smt().
   + by rewrite modz0.
   + by rewrite -modzN {2}(divz_eq m (-d)); smt (divz_ge0).
   by rewrite {2}(divz_eq m d); smt (divz_ge0).
@@ -62,12 +62,12 @@ proof.
   move=> [hp | <- //]; move=> [hn | <- //].
   rewrite {2}(divz_eq i (n*p)) {2} (divz_eq (i %% (n * p)) p).
   pose i1 := i %% (n * p).
-  have -> : (i %/ (n * p) * (n * p) + (i1 %/ p * p + i1 %% p)) = 
+  have -> : (i %/ (n * p) * (n * p) + (i1 %/ p * p + i1 %% p)) =
          ((i %/ (n * p) * n + i1 %/ p) * p + i1 %% p) by ring.
   have hp0 : p <> 0 by smt().
   rewrite divzMDl 1:// (divz_small (i1%%p) p) 2:/=; 1: smt (edivzP).
   rewrite modzMDl modz_small 2://.
-  apply bound_abs;apply divz_cmp => //. 
+  apply bound_abs;apply divz_cmp => //.
   by apply modz_cmp => /#.
 qed.
 
@@ -85,9 +85,9 @@ proof.
     + rewrite (modz_small (i %% 2^n)) 2://;smt (modz_cmp gt0_pow2 pow_Mle).
     case (0 <= k) => hk.
     + rewrite modz_dvd 2://;1: by apply dvdz_exp2l => /#.
-    have hk0 : k <= 0 by smt().      
+    have hk0 : k <= 0 by smt().
     by rewrite !(powNeg _ _ hk0) modz1.
-  rewrite /min;case (n < k) => hnk. 
+  rewrite /min;case (n < k) => hnk.
   + by rewrite powNeg 1:/# (modz1 i).
   have hk0 : (k <= 0) by smt().
   by rewrite (powNeg _ _ hk0) modz1.
@@ -97,7 +97,7 @@ qed.
 lemma nosmt modz_pow2_div n p i: 0 <= p <= n =>
   (i %% 2^n) %/ 2^p = (i %/ 2^p) %% 2^(n-p).
 proof.
-  move=> [h1 h2];rewrite divz_mod_div.   
+  move=> [h1 h2];rewrite divz_mod_div.
   + by apply dvdz_exp2l.
   + by apply ltzW; apply gt0_pow2.
   + by apply ltzW; apply gt0_pow2.
@@ -127,7 +127,7 @@ lemma pow2_128 : 2 ^ 128 = 340282366920938463463374607431768211456 by [].
 lemma pow2_256 : 2 ^ 256 = 115792089237316195423570985008687907853269984665640564039457584007913129639936 by [].
 
 hint simplify
-  (pow2_1, pow2_2, pow2_3, pow2_4, pow2_5, pow2_6, pow2_7, pow2_8, 
+  (pow2_1, pow2_2, pow2_3, pow2_4, pow2_5, pow2_6, pow2_7, pow2_8,
    pow2_16, pow2_32, pow2_64, pow2_128, pow2_256)@0.
 
 (* -------------------------------------------------------------------- *)
@@ -162,60 +162,60 @@ hint simplify xorK_simplify@1.
 (* -------------------------------------------------------------------- *)
 (* extra stuff on list                                                  *)
 
-op map2 ['a, 'b, 'c] (f:'a -> 'b -> 'c) (s:'a list) (t:'b list) = 
+op map2 ['a, 'b, 'c] (f:'a -> 'b -> 'c) (s:'a list) (t:'b list) =
   with s = "[]"   , t = "[]" => []
   with s = _ :: _ , t = "[]" => []
   with s = "[]"   , t = _ :: _ => []
   with s = x :: s', t = y :: t' => f x y :: map2 f s' t'.
 
-lemma map2_zip (f:'a -> 'b -> 'c) s t : 
+lemma map2_zip (f:'a -> 'b -> 'c) s t :
   map2 f s t = map (fun (p:'a * 'b) => f p.`1 p.`2) (zip s t).
 proof.
   by elim: s t => [ | s1 s hrec] [ | t1 t] //=;rewrite hrec.
 qed.
 
 op mapN ['a, 'b] (f:'a -> 'b) dfa (s:'a list) N =
-  with s = "[]" => 
+  with s = "[]" =>
    if N <= 0 then [] else nseq N (f dfa)
-  with s = x :: s' => 
+  with s = x :: s' =>
     if N <= 0 then []
     else f x :: mapN f dfa s' (N-1).
- 
-op mapN2 ['a, 'b, 'c] (f:'a -> 'b -> 'c) dfa dfb (s:'a list) (t:'b list) N = 
-  with s = "[]"   , t = "[]"    => 
+
+op mapN2 ['a, 'b, 'c] (f:'a -> 'b -> 'c) dfa dfb (s:'a list) (t:'b list) N =
+  with s = "[]"   , t = "[]"    =>
     if N <= 0 then [] else nseq N (f dfa dfb)
 
   with s = _ :: _ , t = "[]"    => mapN (fun x => f x dfb) dfa s N
 
   with s = "[]"   , t = _ :: _  => mapN (fun y => f dfa y) dfb t N
 
-  with s = x :: s', t = y :: t' => 
+  with s = x :: s', t = y :: t' =>
     if N <= 0 then []
     else f x y :: mapN2 f dfa dfb s' t' (N-1).
 
-lemma nth_mapN ['a, 'b] dfb (f:'a -> 'b) dfa (s:'a list) N i : 
-  0 <= i < N => 
+lemma nth_mapN ['a, 'b] dfb (f:'a -> 'b) dfa (s:'a list) N i :
+  0 <= i < N =>
   nth dfb (mapN f dfa s N) i = f (nth dfa s i).
 proof.
   elim: s N i => /= [ | x s hrec] N i hiN;
-    have -> /= : !(N <= 0) 
+    have -> /= : !(N <= 0)
       by apply ltzNge; case hiN; apply IntOrder.ler_lt_trans.
   + by rewrite nth_nseq.
   by case (i=0) => // ?; apply hrec => /#.
 qed.
 
-lemma nth_mapN2 ['a, 'b, 'c] 
+lemma nth_mapN2 ['a, 'b, 'c]
   (f:'a -> 'b -> 'c) dfa dfb dfc (s:'a list) (t:'b list) N i :
-  0 <= i < N => 
+  0 <= i < N =>
   nth dfc (mapN2 f dfa dfb s t N) i = f (nth dfa s i) (nth dfb t i).
 proof.
   elim: s t N i => [ | x s hrec] [ | y t] N i hiN /=;
-    have -> /= : !(N <= 0) 
+    have -> /= : !(N <= 0)
       by apply ltzNge; case hiN; apply IntOrder.ler_lt_trans.
-  + by rewrite nth_nseq. 
+  + by rewrite nth_nseq.
   + by case (i=0) => // neqi; apply nth_mapN => /#.
   + by case (i=0) => // neqi; apply nth_mapN => /#.
-  by case (i=0) => // ?;apply hrec => /#.  
+  by case (i=0) => // ?;apply hrec => /#.
 qed.
 
 lemma map2_cat (f:'a -> 'b -> 'c) (l1 l2:'a list) (l1' l2':'b list):
@@ -223,7 +223,7 @@ lemma map2_cat (f:'a -> 'b -> 'c) (l1 l2:'a list) (l1' l2':'b list):
   map2 f (l1 ++ l2) (l1' ++ l2') = map2 f l1 l1' ++ map2 f l2 l2'.
 proof. by move=> hs;rewrite !map2_zip zip_cat // map_cat. qed.
 
-lemma map2C (f: 'a -> 'a -> 'b) (l1 l2:'a list) : 
+lemma map2C (f: 'a -> 'a -> 'b) (l1 l2:'a list) :
   (forall a1 a2, f a1 a2 = f a2 a1) =>
   map2 f l1 l2 = map2 f l2 l1.
 proof.
@@ -232,24 +232,26 @@ proof.
 qed.
 
 lemma map2_take1 (f: 'a -> 'b -> 'c) (l1: 'a list) (l2: 'b list) :
-  map2 f l1 l2 = map2 f (take (size l2) l1) l2. 
+  map2 f l1 l2 = map2 f (take (size l2) l1) l2.
 proof.
   elim: l1 l2 => [ | a1 l1 hrec] [ | a2 l2] //=.
-  smt (size_ge0).
+  have ->: ! 1 + size l2 <= 0 by smt(size_ge0).
+  by rewrite hrec.
 qed.
 
 lemma map2_take2 (f: 'a -> 'b -> 'c) (l1: 'a list) (l2: 'b list) :
   map2 f l1 l2 = map2 f l1 (take (size l1) l2).
 proof.
   elim: l1 l2 => [ | a1 l1 hrec] [ | a2 l2] //=.
-  smt (size_ge0).
+  have ->: ! 1 + size l1 <= 0 by smt(size_ge0).
+  by rewrite hrec.
 qed.
 
 lemma size_map2 (f:'a -> 'b -> 'c) (l1:'a list) l2 : size (map2 f l1 l2) = min (size l1) (size l2).
 proof. by rewrite map2_zip size_map size_zip. qed.
 
-lemma nth_map2 dfla dflb dflc (f:'a -> 'b -> 'c) (l1:'a list) l2 i: 
-  0 <= i < min (size l1) (size l2) => 
+lemma nth_map2 dfla dflb dflc (f:'a -> 'b -> 'c) (l1:'a list) l2 i:
+  0 <= i < min (size l1) (size l2) =>
   nth dflc (map2 f l1 l2) i = f (nth dfla l1 i) (nth dflb l2 i).
 proof.
   elim: l1 l2 i => [ | a l1 hrec] [ | b l2] i /=; 1..3:smt(size_ge0).
@@ -258,7 +260,7 @@ proof.
 qed.
 
 (* FIXME: we can not do l1 = "[]", l2= _ => l2 *)
-op _interleave (l1 l2: 'a list) = 
+op _interleave (l1 l2: 'a list) =
  with l1 = "[]", l2= "[]" => []
  with l1 = "[]", l2= _::_ => l2
  with l1 = _::_, l2 = "[]" => l1
@@ -273,8 +275,174 @@ op is_init (x : 'a option) = x <> None.
 lemma is_init_Some (a:'a) : is_init (Some a).
 proof. done. qed.
 
-lemma in_bound_simplify x n : 
+lemma in_bound_simplify x n :
     0 <= x < n => in_bound x n.
 proof. done. qed.
 
 hint simplify (is_init_Some, in_bound_simplify).
+
+(* -------------------------------------------------------------------- *)
+
+lemma powm1_mod k n:
+ (0 <= n <= k)%Int =>
+ (2^k - 1) %% 2^n = 2^n - 1.
+proof.
+move=> ?.
+have [i [Hi ->]]: exists i, 0<=i /\ k = n+i by exists (k-n); smt().
+rewrite -pow_add 1,2:/# mulzC (modzMDl (2^i) (-1) (2^n)) modNz //.
+by apply gt0_pow2.
+qed.
+
+lemma nth_and i bs1 bs2:
+ nth false (map2 (/\) bs1 bs2) i = (nth false bs1 i /\ nth false bs2 i).
+proof.
+rewrite map2_zip.
+case: (i < 0) => ?; first by rewrite !nth_neg //.
+case: (0 <= i < min (size bs1) (size bs2)) => ?.
+ rewrite (nth_map (false,false)) /=.
+  by rewrite size_zip.
+ rewrite nth_zip_cond.
+ by have ->: i < size (zip bs1 bs2) by rewrite size_zip /#.
+rewrite nth_default; first by rewrite size_map size_zip /#.
+case: (size bs1 < size bs2) => ?.
+ have ->//: !nth false bs1 i.
+ by rewrite nth_default /#.
+have ->//: !nth false bs2 i.
+by rewrite nth_default /#.
+qed.
+
+require import BitEncoding.
+require import StdBigop.
+import Bigint Bigint.BIA.
+
+import BitEncoding.BS2Int.
+
+lemma bs2int0P i bs:
+ bs2int bs = 0 =>
+ !(nth false bs i).
+proof.
+elim/last_ind : bs => // bs b /= IH.
+rewrite bs2int_rcons.
+move: (bs2int_ge0 bs) => ?.
+have T2: 0 <= 2 ^ size bs * b2i b by smt(powPos).
+move=> H1.
+have E1: bs2int bs = 0 by smt().
+have: 2 ^ size bs * b2i b = 0 by smt().
+rewrite Ring.IntID.mulf_eq0; move=> [?|]; first by smt(powPos).
+rewrite b2i_eq0 => ?.
+rewrite nth_rcons (IH E1) H0 /#.
+qed.
+
+lemma bs2int_cat bs1 bs2:
+ bs2int (bs1 ++ bs2) = bs2int bs1 + 2^(size bs1) * bs2int bs2.
+proof.
+move: (size_ge0 bs1) => Hsize1.
+move: (size_ge0 bs2) => Hsize2.
+rewrite /bs2int (range_cat (size bs1)) //.
+ by rewrite size_cat /#.
+rewrite big_cat; congr.
+ apply eq_big_int => /> *.
+ by rewrite nth_cat H0.
+rewrite mulr_sumr /=.
+have ->: range (size bs1) (size (bs1 ++ bs2)) = range (size bs1+0) (size bs2+size bs1).
+ by rewrite addz0 addzC size_cat.
+rewrite range_addr big_map /(\o) /=.
+apply eq_big_int => /> *.
+rewrite -pow_add // mulzA nth_cat.
+have ->: size bs1 + i < size bs1 = false by smt().
+rewrite /=; do 4! congr.
+smt().
+qed.
+
+lemma bs2int_cons x xs:
+ bs2int (x::xs) = b2i x + 2 * bs2int xs.
+proof.
+have ->: x::xs = [x]++xs by done.
+rewrite bs2int_cat /= ; congr.
+by rewrite /bs2int /big filter_predT /range iota1.
+qed.
+
+lemma bs2int_nseq b k:
+ bs2int (nseq k b) = if b then 2^k - 1 else 0.
+proof.
+elim/natind: k b => /= [n Hn|n Hn IH] b.
+ by rewrite nseq0_le //= bs2int_nil powNeg.
+rewrite nseqS // bs2int_cons ; case: b => ?.
+ rewrite b2i1 -pow_add // pow2_1 /= (IH true) /=.
+ by ring.
+by rewrite (IH false) b2i0; ring.
+qed.
+
+lemma bs2int_pad sz bs:
+ bs2int bs = bs2int (bs ++ nseq (sz - size bs) false).
+proof. by rewrite bs2int_cat (bs2int_nseq false). qed.
+
+lemma bs2int_and0 i bs1 bs2:
+ bs2int (map2 (/\) bs1 bs2) = 0 =>
+ !(nth false bs1 i /\ nth false bs2 i).
+proof. by move=> /bs2int0P ?; move: (H i); rewrite nth_and. qed.
+
+lemma bs2int_xor_sub bs1 bs2:
+ size bs1 = size bs2 =>
+ bs2int (map2 (/\) (map [!] bs1) bs2) = 0 =>
+ bs2int (map2 (^^) bs1 bs2) = bs2int bs1 - bs2int bs2.
+proof.
+move=> Esz.
+have Esz2: min (size bs1) (size bs2) = size bs2 by smt().
+move=> ?.
+rewrite /bs2int !Esz !size_map2 !Esz2 sumrN !sumrD.
+apply eq_big_int => ? /=.
+move=> ?; rewrite !map2_zip.
+rewrite (nth_map (false,false)) /=; first by rewrite size_zip Esz min_ler //.
+rewrite nth_zip //=.
+case: (nth false bs1 i); case: (nth false bs2 i) => //=.
+move=> *.
+move/(bs2int_and0 i): H.
+by rewrite (nth_map false) ?Esz // H2 H1.
+qed.
+
+lemma bs2int_or_add bs1 bs2:
+ size bs1 = size bs2 =>
+ bs2int (map2 (/\) bs1 bs2) = 0 =>
+ bs2int (map2 (\/) bs1 bs2) = bs2int bs1 + bs2int bs2.
+proof.
+move=> Esz.
+have Esz2: min (size bs1) (size bs2) = size bs2 by smt().
+move=> ?.
+rewrite /bs2int !Esz !size_map2 !Esz2 !sumrD.
+apply eq_big_int => ? /=.
+move=> ?; rewrite !map2_zip.
+rewrite (nth_map (false,false)) /=; first by rewrite size_zip Esz min_ler //.
+rewrite nth_zip //=.
+case: (nth false bs1 i); case: (nth false bs2 i) => //=.
+move=> *.
+move/(bs2int_and0 i): H.
+by rewrite H2 H1.
+qed.
+
+lemma bs2int_add_disjoint bs1 bs2 modulus:
+ size bs1 = size bs2 =>
+ modulus = 2^(size bs2) =>
+ bs2int (map2 (/\) bs1 bs2) = 0 =>
+ bs2int bs1 + bs2int bs2 < modulus.
+proof.
+move=> Esz.
+have Esz2: min (size bs1) (size bs2) = size bs2 by smt().
+move=> ??.
+rewrite -bs2int_or_add // H.
+have:= bs2int_le2Xs (map2 (\/) bs1 bs2).
+by rewrite size_map2 Esz min_ler.
+qed.
+
+lemma bs2int_sub_common bs1 bs2:
+ size bs1 = size bs2 =>
+ bs2int (map2 (/\) (map [!] bs1) bs2) = 0 =>
+ 0 <= bs2int bs1 - bs2int bs2.
+proof.
+move=> Esz.
+have Esz2: min (size bs1) (size bs2) = size bs2 by smt().
+move=> ?.
+rewrite -bs2int_xor_sub //.
+by apply bs2int_ge0.
+qed.
+
