@@ -3,6 +3,13 @@ require import AllCore BitEncoding IntDiv SmtMap Ring List StdOrder Bool.
 (*---*) import CoreMap Map Ring.IntID IntOrder.
 require export JUtils JArray JWord JWord_array JMemory.
 
+(* -------------------------------------------------------------------- *)
+op x86_MULX_64 : W64.t -> W64.t -> (W64.t * W64.t).
+op x86_IMULtimm_64 : W64.t -> W64.t -> (bool * bool * bool * bool * bool * W64.t).
+op x86_ADOX_64 : W64.t -> W64.t -> bool -> (bool * W64.t).
+op x86_ADCX_64 : W64.t -> W64.t -> bool -> (bool * W64.t).
+op x86_XOR_64 : W64.t -> W64.t -> (bool * bool * bool * bool * bool * W64.t).
+op x86_SAR_64 : W64.t -> W8.t -> (bool * bool * bool * bool * bool * W64.t).
 op set0_64 = (false,false,false,false,false, W64.of_int(0)).
 
 (* -------------------------------------------------------------------- *)
