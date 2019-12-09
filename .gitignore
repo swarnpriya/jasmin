@@ -1,6 +1,7 @@
 compiler/src/CIL/*.ml
 compiler/src/CIL/*.mli
 *~
+*.eco
 *.d
 *.o
 *.s
