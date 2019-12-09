@@ -1585,7 +1585,8 @@ abstract theory W_WS.
   proof.
     move=> hr;apply WS.wordP => j hj.
     rewrite bits'SiE // pack'RE initiE /= ?in_bound //.
-    by rewrite modzMDl divzMDl 1:/# divz_small ?modz_small; solve.
+    have h : 0 <= j < `|sizeS| by smt().
+    by rewrite modzMDl divzMDl 1:/# divz_small ?modz_small.
   qed.
 
   lemma pack'RK ws : unpack'S (pack'R_t ws) = ws.
