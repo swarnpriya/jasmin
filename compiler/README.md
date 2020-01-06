@@ -14,7 +14,7 @@ via the opam OCaml packages manager.
 
           $> opam pin add -ny git+https://github.com/jasmin-lang/coqword.git 
 
-  2. Add the Jasmin OPAM package:
+  2. Add the Jasmin OPAM package (from the compiler/ subdirectory)
 
           $> opam pin add -ny jasmin .
 
