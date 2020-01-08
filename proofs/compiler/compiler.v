@@ -27,7 +27,7 @@ From mathcomp Require Import all_ssreflect.
 Require Import x86_gen expr.
 Import ZArith.
 Require Import compiler_util allocation inline dead_calls unrolling remove_globals
-   constant_prop dead_code array_expansion lowering stack_alloc linear x86_sem.
+   constant_prop dead_code array_expansion lowering stack_alloc linear.
 Import Utf8.
 
 Set Implicit Arguments.
@@ -171,10 +171,12 @@ Definition check_signature (p: prog) (lp: lprog) (fn: funname) : bool :=
     else true
   else true.
 
+(*
 Definition compile_prog_to_x86 entries (p: prog): result fun_error (glob_decls * xprog) :=
   Let lp := compile_prog entries p in
   Let _ := assert (all (check_signature p lp.2) entries) Ferr_lowering in
   Let lx := assemble_prog lp.2 in
   ok (lp.1, lx).
+*)
 
 End COMPILER.

@@ -275,7 +275,7 @@ End CoreMem.
 (* ** Memory
  * -------------------------------------------------------------------- *)
 
-Notation Uptr := U64 (only parsing).
+Notation Uptr := U32 (only parsing).
 Notation pointer := (word Uptr) (only parsing).
 
 Definition no_overflow (p: pointer) (sz: Z) : bool :=
@@ -381,7 +381,7 @@ Parameter mem : Type.
 Declare Instance CM : coreMem mem pointer.
 Declare Instance M : memory mem.
 
-Parameter addP : forall p k, add p k = (p + wrepr U64 k)%R.
+Parameter addP : forall p k, add p k = (p + wrepr Uptr k)%R.
 
 Parameter readV : forall m p s,
   reflect (exists v, read_mem m p s = ok v) (valid_pointer m p s).
@@ -418,7 +418,7 @@ Parameter valid_align : forall m p s, valid_pointer m p s -> is_align p s.
 
 Parameter is_align_valid_pointer : forall m p ws,
    is_align p ws -> 
-   (forall k, 0 <= k < wsize_size ws -> valid_pointer m (p + wrepr U64 k) U8) ->
+   (forall k, 0 <= k < wsize_size ws -> valid_pointer m (p + wrepr Uptr k) U8) ->
    valid_pointer m p ws.
 
 Parameter read_write_any_mem :
