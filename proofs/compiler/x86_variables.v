@@ -224,7 +224,14 @@ Variant compiled_variable :=
 
 Scheme Equality for compiled_variable.
 
-Definition compiled_variable_eqMixin := comparableClass compiled_variable_eq_dec.
+Lemma compiled_variable_axiom : Equality.axiom compiled_variable_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_compiled_variable_dec_bl.
+  by apply: internal_compiled_variable_dec_lb.
+Qed.
+
+Definition compiled_variable_eqMixin := Equality.Mixin compiled_variable_axiom.
 Canonical compiled_variable_eqType := EqType compiled_variable compiled_variable_eqMixin.
 
 Definition compile_var (v: var) : option compiled_variable :=
@@ -487,54 +494,10 @@ Definition arg_of_pexpr ii (ty:stype) (e:pexpr) :=
   match ty with
   | sbool => Let c := assemble_cond ii e in ok (Condt c)
   | sword sz => assemble_word ii sz e
-(* FIXME *)
   | sint  => cierror ii (Cerr_assembler (AsmErr_string "sint ???"))
   | sarr _ => cierror ii (Cerr_assembler (AsmErr_string "sarr ???"))
   end.
 
-(*Definition oprd_of_pexpr ii (e: pexpr) :=
-  match e with
-  | Papp1 (Oword_of_int sz') (Pconst z) =>
-    Let _ := assert (sz' ≤ Uptr)%CMP
-                    (ii, Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: invalid cast")) in
-    let w := sign_extend Uptr (wrepr sz' z) in
-    ciok (Imm w)
-  | Pvar v =>
-    Let s := reg_of_var ii v in
-    ciok (Reg s)
-  | Pglobal g =>
-    ciok (Glob g)
-  | Pload sz' v e => (* FIXME: can we recognize more expression for e ? *)
-(*    Let _ :=
-      if sz == sz' then ok tt
-      else cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: bad load cast")) in *)
-     Let s := reg_of_var ii v in
-     Let w := addr_of_pexpr ii s e in
-     ciok (Adr w)
-  | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd"))
-  end.
-*)
-(*
-Definition rm128_of_pexpr_error ii e : ciexec rm128 :=
-  cierror ii (Cerr_assembler (AsmErr_string
-  match e with
-  | Some x => "rm128_of_pexpr: bad variable " ++ vname x
-  | None => "rm128_of_pexpr"
-  end)).
-
-Definition rm128_of_pexpr ii (e: pexpr) : ciexec rm128 :=
-  match e with
-  | Pvar x =>
-    if xmm_register_of_var x is Some r then ciok (RM128_reg r)
-    else rm128_of_pexpr_error ii (Some (v_var x))
-  | Pload _ v e =>
-     Let s := reg_of_var ii v in
-     Let w := addr_of_pexpr ii s e in
-     ciok (RM128_mem w)
-  | Pglobal g => ciok (RM128_glo g)
-  | _ => rm128_of_pexpr_error ii None
-  end.
-*)
 Lemma assemble_cond_eq_expr ii pe pe' c :
   eq_expr pe pe' →
   assemble_cond ii pe = ok c →
@@ -664,17 +627,12 @@ case: pe pe' o =>
   by move=> w; case: pe eq_e => // z /eq_expr_constL -> /=.
 Qed.
 
-(*Lemma arg_of_pexpr_eq_expr ii ty pe pe' o :
+Lemma arg_of_pexpr_eq_expr ii ty pe pe' o :
   eq_expr pe pe' →
   arg_of_pexpr ii ty pe = ok o →
   arg_of_pexpr ii ty pe = arg_of_pexpr ii ty pe'.
 Proof.
-case: ty => [sz | ] /=.
-(* FIXME *)
-Admitted.
-(* + by apply assemble_word_eq_expr.
-by t_xrbindP => he c hc; rewrite (assemble_cond_eq_expr he hc).
+case: ty => //= [ | sz] heq; t_xrbindP.
++ by move=> c /(assemble_cond_eq_expr heq) ->. 
+by move=> /(assemble_word_eq_expr heq) ->.
 Qed.
-
- *)
-*)

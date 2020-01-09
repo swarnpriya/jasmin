@@ -318,7 +318,14 @@ Definition rflagmap0 : rflagmap := [ffun x => Undef].
 
 Scheme Equality for RflagMap.rflagv.
 
-Definition rflagv_eqMixin := comparableClass rflagv_eq_dec.
+Lemma rflagv_eq_axiom : Equality.axiom rflagv_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_rflagv_dec_bl.
+  by apply: internal_rflagv_dec_lb.
+Qed.
+
+Definition rflagv_eqMixin := Equality.Mixin rflagv_eq_axiom.
 Canonical rflagv_eqType := EqType _ rflagv_eqMixin.
 
 (* -------------------------------------------------------------------- *)
@@ -388,35 +395,18 @@ Canonical msb_flag_eqType := EqType msb_flag msb_flag_eqMixin.
 
 (* -------------------------------------------------------------------- *)
 
-(* Variant xtype :=
-  | xword `(wsize)
-  | xbool.
- *)
-(* Definition sem_xt (t : xtype) : Type :=
-  match t with
-  | xbool    => bool
-  | xword s  => word s
-  end.
- *)
-(* Definition sem_xprod ts tr := lprod (map sem_xt ts) tr.
- *)
-(* Definition sem_oxt (t:xtype) : Type :=
-  if t is xbool then option bool
-  else sem_xt t.
-
-Definition sem_xtuple ts := ltuple (map sem_oxt ts).
- *)
-
 Record instr_desc_t := mk_instr_desc {
   (* Info for x86 sem *)
   id_msb_flag : msb_flag;
-  id_in       : seq (arg_desc * stype);
-  id_out      : seq (arg_desc * stype);
-  id_semi     : sem_prod (map snd id_in) (exec (sem_tuple (map snd id_out)));
+  id_tin      : seq stype;
+  id_in       : seq arg_desc; 
+  id_tout     : seq stype;
+  id_out      : seq arg_desc;
+  id_semi     : sem_prod id_tin (exec (sem_tuple id_tout));
   id_check    : list asm_arg -> bool;
   id_nargs    : nat;
   (* Info for jasmin *)
-  id_tin_narr : all is_not_sarr [seq i.2 | i <- id_in];
+  id_tin_narr : all is_not_sarr id_tin; 
   id_str_jas  : unit -> string;
   id_wsize    : wsize;  (* ..... *)
 }.

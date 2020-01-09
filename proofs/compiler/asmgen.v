@@ -58,7 +58,6 @@ Definition check_oreg o a :=
 Local Lemma check_oreg_eq a b : check_oreg a b = x86_sem.check_oreg a b.
 Proof. by case a, b. Qed.
 
-
 Definition compile_arg ii (ade: (arg_desc * stype) * pexpr) (m: nmap asm_arg) : ciexec (nmap asm_arg) :=
   let ad := ade.1 in
   let e := ade.2 in
@@ -108,9 +107,9 @@ Definition check_sopn_arg ii (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc 
 
 Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) :=
   let id := instr_desc op in
-  Let m := compile_args ii id.(id_in) inx (nempty _) in
+  Let m := compile_args ii (zip id.(id_in) id.(id_tin)) inx (nempty _) in
   Let eoutx := mapM (pexpr_of_lval ii) outx in
-  Let m := compile_args ii id.(id_out) eoutx m in
+  Let m := compile_args ii (zip id.(id_out) id.(id_tout)) eoutx m in
   match oseq.omap (nget m) (iota 0 id.(id_nargs)) with
   | None => cierror ii (Cerr_assembler (AsmErr_string "compile_arg : assert false nget"))
   | Some asm_args =>
@@ -145,8 +144,8 @@ Lemma addr_of_pexprP ii gd r1 e a x o z o' z' m s:
   addr_of_pexpr ii r1 e = ok a →
   (z + z')%R = decode_addr m a.
 Proof.
-  move => eqv ok_r1 ok_o ok_z ok_o' ok_z'.
-  rewrite /addr_of_pexpr.
+move => eqv ok_r1 ok_o ok_z ok_o' ok_z'.
+rewrite /addr_of_pexpr.
 have {ok_o' o' ok_z'} := addr_ofsP ok_o' ok_z'.
 case: addr_ofs => //=.
 + move => ofs /(_ erefl) [<-] [<-] //=.
@@ -161,19 +160,14 @@ Qed.
 
 Local Lemma Forall2_cons (A  B:Type) (f:A -> B -> Prop) (a:A) (a': seq A) (b:B) (b':seq B) :
   List.Forall2 f (a:: a') (b :: b') <-> f a b /\ List.Forall2 f a' b'.
-Proof.
-  split.
-(*   eapply (@List.Forall2_ind _ _ _ (fun l l' => _ /\ _) _ _ (a :: a') (b::b')). *)
-  by move => H; inversion H.
-  by move => [] ; apply List.Forall2_cons.
-Qed.
+Proof. by split => [H | []]; [inversion H | apply List.Forall2_cons]. Qed.
 
 Local Lemma all2_MapM_MapM_all2 (A B D:Type)
-                          (P: A -> B -> bool)
-                          (Q: A -> exec D)
-                          (R: B -> exec D)
-                          (S: D -> bool)
-                          (T: D -> D -> Prop):
+  (P: A -> B -> bool)
+  (Q: A -> exec D)
+  (R: B -> exec D)
+  (S: D -> bool)
+  (T: D -> D -> Prop):
   (forall a b c, P a b -> Q a = ok c -> S c -> exists d, R b = ok d /\ T c d) ->
   forall x y h,
   all2 P x y ->
@@ -181,7 +175,7 @@ Local Lemma all2_MapM_MapM_all2 (A B D:Type)
   all S h ->
   ∃ h', mapM R y = ok h' /\ List.Forall2 T h h'.
 Proof.
-   move => HPQRT.
+  move => HPQRT.
   elim => [|hx tx IHtx] [|hy ty] [|hh th];
   try solve [rewrite all2P => /andP [] Hsize HP HQ => //].
   + by exists [::].
@@ -233,18 +227,18 @@ Lemma check_sopn_arg_get ii args w v e sp :
   ~ (check_sopn_arg ii args (Pget w v e) sp).
 Proof. by case/check_sopn_argP => //= n o a []. Qed.
 
-Lemma check_sopn_arg_sem_eval gd m s ii args e sp v:
+Lemma check_sopn_arg_sem_eval gd m s ii args e adty v:
      lom_eqv m s
-  -> check_sopn_arg ii args e sp
+  -> check_sopn_arg ii args e adty
   -> sem_pexpr gd m e = ok v
   -> is_defined v
-  -> exists v', eval_arg_in_v gd s args sp = ok v' /\ value_uincl v v'.
+  -> exists v', eval_arg_in_v gd s args adty.1 adty.2 = ok v' /\ value_uincl v v'.
 Proof.
-case: sp => ad ty eqm hcheck okv dv; case: e hcheck okv => /=.
+move => eqm hcheck okv dv; case: e hcheck okv => /=.
 + by move=> z /check_sopn_arg_const.
 + by move=> b /check_sopn_arg_bool.
 + by move=> b /check_sopn_arg_arr_init.
-+ move=> x /check_sopn_argP[i|n o a] ty'.
++ move=> x /check_sopn_argP [i|n o a] ty'.
   - move=> /= /eqP-> okv; rewrite /eval_arg_in_v /=.
     case: i okv => /= [rf|r] okv.
     * case: {+}eqm => _ _ _ /(_ _ _ okv) h.

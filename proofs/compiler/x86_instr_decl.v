@@ -643,8 +643,10 @@ Definition iCF := F CF.
 
 Notation mk_instr str_jas tin tout ain aout msb semi check nargs wsizei := {|
   id_msb_flag := msb;
-  id_in       := zip ain tin;
-  id_out      := zip aout tout;
+  id_tin      := tin;
+  id_in       := ain;
+  id_tout     := tout;
+  id_out      := aout;
   id_semi     := semi;
   id_nargs    := nargs;
   id_check    := check;

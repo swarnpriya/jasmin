@@ -388,7 +388,7 @@ have : exists (b1 b2:bool), st = sbool /\ sem_pexpr gd s e1 = ok (Vbool b1) /\ s
     by move: htr2; rewrite /truncate_val; t_xrbindP => /= b2 /to_boolI -> ?;eauto.
   have [??]:= truncate_val_boolI htr2;subst st v2.
   by move: htr1; rewrite /truncate_val; t_xrbindP => /= b1 /to_boolI -> ?;eauto.
-move=> [b1 [b2 [[->] []/dup[]hb1 /he1 -> /dup[]hb2 /he2 ->]]] /=.
+move=> [b1 [b2 [-> []/dup[]hb1 /he1 -> /dup[]hb2 /he2 ->]]] /=.
 by rewrite hb1 hb2 /=; case bp.
 Qed.
 

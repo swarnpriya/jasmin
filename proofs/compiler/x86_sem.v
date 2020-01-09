@@ -161,58 +161,8 @@ Definition check_oreg or ai :=
   | None, _        => true
   end.
 
-(*
-Definition eval_arg_in_word (s:x86_mem) (args:asm_args) (sz:wsize) (ad:arg_desc) : exec (word sz) :=
-  match ad with
-  | ADImplicit (IAreg r)   => ok (zero_extend sz (s.(xreg) r))
-  | ADImplicit (IArflag f) => type_error
-  | ADExplicit i or    =>
-    match onth args i with
-    | None => type_error
-    | Some a =>
-      Let _ := assert (check_oreg or a) ErrType in
-      match a with
-      | Condt _   => type_error
-      | Imm sz' w => ok (zero_extend sz w)
-      | Glob g    => Let w := get_global_word  gd g  in ok (zero_extend sz w)
-      | Reg r     => ok (zero_extend sz (s.(xreg) r))
-      | Adr adr   => read_mem s.(xmem) (decode_addr s adr) sz
-      | XMM x     => ok (zero_extend sz (s.(xxreg) x))
-      end
-    end
-  end.
-
-Definition eval_arg_in_bool (s:x86_mem) (args:asm_args) (ad:arg_desc) : exec bool :=
-  match ad with
-  | ADImplicit (IAreg r)   => type_error
-  | ADImplicit (IArflag f) => Let b := st_get_rflag f s in ok b
-  | ADExplicit i or    =>
-    match onth args i with
-    | None => type_error
-    | Some a =>
-      Let _ := assert (check_oreg or a) ErrType in
-      match a with
-      | Condt c => Let b := eval_cond c s.(xrf) in ok b
-      | _       => type_error
-      end
-    end
-  end.
-
-Definition eval_arg_in (s:x86_mem) (args:asm_args) (ty:stype) (ad:arg_desc) : exec (sem_t ty) :=
-  match ty with
-  | sword sz => eval_arg_in_word s args sz ad
-  | sbool    => eval_arg_in_bool s args ad
-  | sint     => type_error
-  | sarr _   => type_error
-  end.
-
-Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (aty:arg_desc * stype) : exec value :=
-  Let v := eval_arg_in s args aty.2 aty.1 in ok (to_val v).
-
-*)
-
-Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (aty:arg_desc * stype) : exec value :=
-  match aty.1 with
+Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (a:arg_desc) (ty:stype) : exec value :=
+  match a with
   | ADImplicit (IAreg r)   => ok (Vword (s.(xreg) r))
   | ADImplicit (IArflag f) => Let b := st_get_rflag f s in ok (Vbool b)
   | ADExplicit i or =>
@@ -226,7 +176,7 @@ Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (aty:arg_desc * stype) : ex
       | Glob g    => Let w := get_global_word  gd g  in ok (Vword w)
       | Reg r     => ok (Vword (s.(xreg) r))
       | Adr adr   => 
-        match aty.2 with
+        match ty with
         | sword sz => Let w := read_mem s.(xmem) (decode_addr s adr) sz in ok (Vword w)
         | _        => type_error
         end
@@ -235,25 +185,14 @@ Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (aty:arg_desc * stype) : ex
     end
   end.
 
-Definition eval_args_in (s:x86_mem) (args:asm_args) (tin : seq (arg_desc * stype)) :=
-  mapM (eval_arg_in_v s args) tin.
+Definition eval_args_in (s:x86_mem) (args:asm_args) (ain : seq arg_desc) (tin : seq stype) :=
+  mapM2 ErrType (eval_arg_in_v s args) ain tin.
 
 Definition eval_instr_op idesc args (s:x86_mem) :=
   Let _   := assert (idesc.(id_check) args) ErrType in
-  Let vs  := eval_args_in s args idesc.(id_in) in
+  Let vs  := eval_args_in s args idesc.(id_in) idesc.(id_tin) in
   Let t   := app_sopn _ idesc.(id_semi) vs in
   ok (list_ltuple t).
-
-(*
-Fixpoint app_asm_op T (s:x86_mem) (args:asm_args) (tin : seq (arg_desc * stype)) :
-   sem_prod (map snd tin) (exec T) -> exec T :=
-  match tin return sem_prod (map snd tin) (exec T) → exec T with
-  | [::] => λ (o : exec T),  o
-  | aty :: tin => λ (o : sem_prod (aty.2:: map snd tin) (exec T)),
-    Let v := eval_arg_in s args aty.2 aty.1 in
-    @app_asm_op T s args tin (o v)
-  end.
-*)
 
 (* -------------------------------------------------------------------- *)
 
@@ -368,29 +307,13 @@ Definition mem_write_val (f:msb_flag) (args:asm_args) (aty: arg_desc * stype) (v
   Let v := oof_val aty.2 v in
   mem_write_ty f s args aty.1 v.
 
-Definition mem_write_vals (f:msb_flag) (s:x86_mem) (args:asm_args) (aty: seq (arg_desc * stype)) (vs:values) :=
-  fold2 ErrType (mem_write_val f args) aty vs s.
-
-(*
-Fixpoint mem_write_res (f:msb_flag) (args:asm_args) (tout : seq (arg_desc * stype)) (s:x86_mem) : sem_tuple (map snd tout) -> exec x86_mem :=
-  match tout return sem_tuple (map snd tout) -> exec x86_mem with
-  | [::] => fun _ => ok s
-  | aty1 :: tout1 =>
-    let rec := @mem_write_res f args tout1 in
-    match tout1 return (x86_mem -> sem_tuple (map snd tout1) -> exec x86_mem) -> (sem_tuple (map snd (aty1 :: tout1))) -> exec x86_mem with
-    | [::] => λ _ (v : sem_ot aty1.2), @mem_write_ty f s args aty1.1 aty1.2 v
-    | aty2 :: tout2 =>
-      λ (rec:x86_mem -> sem_tuple (map snd (aty2::tout2)) -> exec x86_mem)
-        (p: sem_ot aty1.2 * sem_tuple (map snd (aty2::tout2))),
-        Let s := @mem_write_ty f s args aty1.1 aty1.2 p.1 in
-        rec s p.2
-    end rec
-  end.
-*)
+Definition mem_write_vals 
+  (f:msb_flag) (s:x86_mem) (args:asm_args) (a: seq arg_desc) (ty: seq stype) (vs:values) :=
+  fold2 ErrType (mem_write_val f args) (zip a ty) vs s.
 
 Definition exec_instr_op idesc args (s:x86_mem) : exec x86_mem :=
   Let vs := eval_instr_op idesc args s in
-  mem_write_vals idesc.(id_msb_flag) s args idesc.(id_out) vs.
+  mem_write_vals idesc.(id_msb_flag) s args idesc.(id_out) idesc.(id_tout) vs.
 
 (* -------------------------------------------------------------------- *)
 Definition is_special o :=

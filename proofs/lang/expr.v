@@ -197,8 +197,8 @@ Definition get_instr o :=
       let id := instr_desc instr in
       {|
         str  := id.(id_str_jas);
-        tin  := [seq i.2 | i <- id.(id_in)];
-        tout := [seq i.2 | i <- id.(id_out)];
+        tin  := id.(id_tin);
+        tout := id.(id_tout);
         semi := id.(id_semi);
         tin_narr := id.(id_tin_narr);
         wsizei := id.(id_wsize);
