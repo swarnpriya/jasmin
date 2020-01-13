@@ -770,12 +770,31 @@ rewrite {}eq_st wcat_subwordK {s t}/wt; case: _ / sz_even.
 by rewrite /wrepr /= ureprK.
 Qed.
 
+Lemma mkwordI n x y :
+  (0 <= x < modulus n)%R ->
+  (0 <= y < modulus n)%R ->
+  mkword n x = mkword n y -> x = y.
+Proof.
+by case/andP => /ZleP ? /ZltP ? /andP[] /ZleP ? /ZltP ? [];
+  rewrite !Z.mod_small.
+Qed.
+
 Lemma make_vec_inj sz (bs bs': seq u8) :
   size bs = size bs' →
   size bs = Z.to_nat (wsize_size sz) →
   make_vec sz bs = make_vec sz bs' →
   bs = bs'.
-Proof. Admitted.
+Proof.
+Transparent word.
+rewrite /make_vec /wrepr /word.
+Opaque word.
+have : (wsize_size_minus_1 sz).+1 = (8 * Z.to_nat (wsize_size sz))%nat by case: sz.
+move: (wsize_size sz) => n /= ->.
+move: {n} (Z.to_nat n) => n.
+move => eq_size <- /mkwordI.
+rewrite {2}eq_size => /(_ (wcat_subproof (in_tuple bs)) (wcat_subproof (in_tuple bs'))).
+exact: wcat_rI eq_size.
+Qed.
 
 (* -------------------------------------------------------------------*)
 Definition lift1_vec ve (op : word ve -> word ve)
