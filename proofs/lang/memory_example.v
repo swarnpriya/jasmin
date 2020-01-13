@@ -448,31 +448,53 @@ Module MemoryI : MemoryT.
     by rewrite /write_mem /CoreMem.write /= /valid /assert; case:ifP => //= _ [<-].
   Qed.
 
-  Lemma alloc_uwrite m p s (v:word s): 
-    alloc (CoreMem.uwrite m p v) = alloc m.
-  Proof. by rewrite /CoreMem.uwrite; elim: ziota m => //= ?? hrec ?;rewrite hrec. Qed.
+  Lemma write_mem_invariant T (P: mem → T) :
+    (∀ m p v, P (uset m p v) = P m) →
+    ∀ m p s (v: word s) m',
+      write_mem m p v = ok m' →
+      P m  = P m'.
+  Proof.
+    move => K m p s v m' /write_memE[] _ ->.
+    rewrite /CoreMem.uwrite.
+    elim: (ziota _ _) m => // a q hrec m.
+    by rewrite -hrec K.
+  Qed.
+
+  Lemma top_stack_write_mem m p s (v: word s) m' :
+    write_mem m p v = ok m' →
+    top_stack m = top_stack m'.
+  Proof. exact: write_mem_invariant. Qed.
+
+  Lemma caller_write_mem m p s (v: word s) m' :
+    write_mem m p v = ok m' →
+    caller m =1 caller m'.
+  Proof.
+    move => a x; move: a.
+    exact: (@write_mem_invariant _ (λ m, caller m x)).
+  Qed.
+
+  Lemma frame_size_write_mem m p s (v: word s) m' :
+    write_mem m p v = ok m' →
+    frame_size m = frame_size m'.
+  Proof. exact: write_mem_invariant. Qed.
 
   Lemma write_valid m m' p s (v:word s) p' s':
     write_mem m p v = ok m' ->
     valid_pointer m' p' s' = valid_pointer m p' s'.
-  Proof.
-    move=> /write_memE [hv ->].
-    rewrite /valid_pointer /validr /= /is_alloc; f_equal.
-    by apply eq_in_all => i; rewrite alloc_uwrite.
-  Qed.
+  Proof. move => a; symmetry; move: a. exact: (@write_mem_invariant _ (λ m, valid_pointer m p' s')). Qed.
 
   Lemma write_read8 m m' p ws (v: word ws) k :
     write_mem m p v = ok m' ->
-    read_mem m' k U8 = 
+    read_mem m' k U8 =
       let i := wunsigned k - wunsigned p in
       if (0 <=? i) && (i <? wsize_size ws) then ok (LE.wread8 v i)
       else read_mem m k U8.
   Proof. apply: CoreMem.write_read8. Qed.
-   
+
   Lemma writeP_eq m m' p s (v :word s):
     write_mem m p v = ok m' ->
     read_mem m' p s = ok v.
-  Proof. 
+  Proof.
     move=> hw; rewrite /read_mem /CoreMem.read /= /valid.
     rewrite (write_valid _ _ hw).
     (case: (writeV m p v); rewrite hw) => [[m1 _] /= | []]; last by eauto.
@@ -556,10 +578,14 @@ Module MemoryI : MemoryT.
   Proof.
   Admitted.
 
-  Lemma write_mem_stable m m' p s (v:word s) : 
+  Lemma write_mem_stable m m' p s (v:word s) :
     write_mem m p v = ok m' -> stack_stable m m'.
   Proof.
-  Admitted.
+    move => ok_m'; split => /=.
+    - exact: top_stack_write_mem ok_m'.
+    - exact: caller_write_mem ok_m'.
+    by rewrite (frame_size_write_mem ok_m').
+  Qed.
 
   Lemma free_stackP : forall m sz,
     frame_size m (top_stack m) = Some sz ->
