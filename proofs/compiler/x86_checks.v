@@ -336,6 +336,12 @@ Definition xmm_xmm_xmm_imm8 (sz : wsize) a b c d :=
   | _, _, _, _ => false
   end.
 
+Definition xmm_xmm_xmmm (sz : wsize) a b c :=
+  match a, b, c with
+  | XMM _, XMM _, XMM _ => true 
+  | XMM _, XMM _, Adr _ => true 
+  | _, _, _ => false
+  end.
 
 (* ---------------------------------------------------------------- *)
 
@@ -381,7 +387,7 @@ Definition andn sz (args: list asm_arg) :=
 apply_3 sz [:: r_V_rm_16 ] args.
 
 Definition ror_rol_shr_shl_sal_sar sz (args: list asm_arg) :=
-apply_2 sz [:: rm_imm8 ] args.
+apply_2 sz [:: rm_imm8; rm_r ] args.
 
 Definition shld_shrd sz (args: list asm_arg) :=
 apply_3 sz [:: rm_r_imm8_8 ] args.
@@ -397,6 +403,9 @@ apply_2 sz [:: xmm_xmm ] args.
 
 Definition xmm_xmm_xmm_ sz (args: list asm_arg) :=
 apply_3 sz [:: xmm_xmm_xmm ] args.
+
+Definition xmm_xmm_xmmm_ sz (args: list asm_arg) :=
+apply_3 sz [:: xmm_xmm_xmmm ] args.
 
 Definition xmm_xmm_imm8_ sz (args: list asm_arg) :=
 apply_3 sz [:: xmm_xmm_imm8 ] args.

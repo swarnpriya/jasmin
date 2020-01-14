@@ -172,7 +172,11 @@ Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (a:arg_desc) (ty:stype) : e
       Let _ := assert (check_oreg or a) ErrType in
       match a with
       | Condt c   => Let b := eval_cond c s.(xrf) in ok (Vbool b)
-      | Imm sz' w => ok (Vword w)
+      | Imm sz' w => 
+        match ty with 
+        | sword sz => ok (Vword (sign_extend sz w))
+        | _        => type_error
+        end
       | Glob g    => Let w := get_global_word  gd g  in ok (Vword w)
       | Reg r     => ok (Vword (s.(xreg) r))
       | Adr adr   => 

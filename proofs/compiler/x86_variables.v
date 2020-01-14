@@ -466,14 +466,19 @@ Definition addr_of_pexpr ii s (e: pexpr) :=
     cierror ii (Cerr_assembler (AsmErr_string "Invalid address expression"))
   end.
 
-Definition assemble_word ii (sz:wsize) (e:pexpr) :=
+Definition assemble_word ii (sz:wsize) max_imm (e:pexpr) :=
   match e with
   | Papp1 (Oword_of_int sz') (Pconst z) =>
-    Let _ := assert (sz' ≤ Uptr)%CMP
-                    (ii, Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: invalid cast")) in
-    let w := sign_extend Uptr (wrepr sz' z) in
-    let w := zero_extend sz w in
-    ciok (Imm w)
+    match max_imm with
+    | None =>  cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for oprd, constant not allowed"))
+    | Some sz1 =>
+      let w := wrepr sz1 z in 
+      let w1 := sign_extend sz w in
+      let w2 := zero_extend sz (wrepr sz' z) in
+      Let _ := assert (w1 == w2) 
+                (ii, Cerr_assembler (AsmErr_string "Invalid pexpr for oprd: out of bound constant")) in 
+      ciok (Imm w)
+    end
   | Pvar x =>
     if xmm_register_of_var x is Some r then ok (XMM r)
     else Let s := reg_of_var ii x in
@@ -490,10 +495,10 @@ Definition assemble_word ii (sz:wsize) (e:pexpr) :=
   | _ => cierror ii (Cerr_assembler (AsmErr_string "Invalid pexpr for word"))
   end.
 
-Definition arg_of_pexpr ii (ty:stype) (e:pexpr) :=
+Definition arg_of_pexpr ii (ty:stype) max_imm (e:pexpr) :=
   match ty with
   | sbool => Let c := assemble_cond ii e in ok (Condt c)
-  | sword sz => assemble_word ii sz e
+  | sword sz => assemble_word ii sz max_imm e
   | sint  => cierror ii (Cerr_assembler (AsmErr_string "sint ???"))
   | sarr _ => cierror ii (Cerr_assembler (AsmErr_string "sarr ???"))
   end.
@@ -610,10 +615,10 @@ by case: op => // - [] //;
 rewrite /addr_of_pexpr /= (addr_ofs_eq_expr h1) (addr_ofs_eq_expr h2).
 Qed.
 
-Lemma assemble_word_eq_expr ii pe pe' sz1 o :
+Lemma assemble_word_eq_expr ii pe pe' sz1 max_imm o :
   eq_expr pe pe' →
-  assemble_word ii sz1 pe = ok o →
-  assemble_word ii sz1 pe = assemble_word ii sz1 pe'.
+  assemble_word ii sz1 max_imm pe = ok o →
+  assemble_word ii sz1 max_imm pe = assemble_word ii sz1 max_imm pe'.
 Proof.
 case: pe pe' o =>
   [ z | b | n | x | g | ws x pe | sz x pe | op pe | op pe1 pe2 | op pes | t pe1 pe2 pe3 ]
@@ -627,10 +632,10 @@ case: pe pe' o =>
   by move=> w; case: pe eq_e => // z /eq_expr_constL -> /=.
 Qed.
 
-Lemma arg_of_pexpr_eq_expr ii ty pe pe' o :
+Lemma arg_of_pexpr_eq_expr ii ty max_imm pe pe' o :
   eq_expr pe pe' →
-  arg_of_pexpr ii ty pe = ok o →
-  arg_of_pexpr ii ty pe = arg_of_pexpr ii ty pe'.
+  arg_of_pexpr ii ty max_imm pe = ok o →
+  arg_of_pexpr ii ty max_imm pe = arg_of_pexpr ii ty max_imm pe'.
 Proof.
 case: ty => //= [ | sz] heq; t_xrbindP.
 + by move=> c /(assemble_cond_eq_expr heq) ->. 

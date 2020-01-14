@@ -395,6 +395,12 @@ Canonical msb_flag_eqType := EqType msb_flag msb_flag_eqMixin.
 
 (* -------------------------------------------------------------------- *)
 
+Definition check_arg_dest (ad:arg_desc) (ty:stype) := 
+  match ad with
+  | ADImplicit _ => true
+  | ADExplicit _ _ => ty != sbool
+  end.
+ 
 Record instr_desc_t := mk_instr_desc {
   (* Info for x86 sem *)
   id_msb_flag : msb_flag;
@@ -406,7 +412,10 @@ Record instr_desc_t := mk_instr_desc {
   id_check    : list asm_arg -> bool;
   id_nargs    : nat;
   (* Info for jasmin *)
+  id_eq_size  : (size id_in == size id_tin) && (size id_out == size id_tout);
+  id_max_imm  : option wsize;
   id_tin_narr : all is_not_sarr id_tin; 
   id_str_jas  : unit -> string;
+  id_check_dest : all2 check_arg_dest id_out id_tout;
   id_wsize    : wsize;  (* ..... *)
 }.
