@@ -111,7 +111,7 @@ Variant sopn : Set :=
 | Osubcarry of wsize   (* cpu   : [sword; sword; sbool] -> [sbool;sword] *)
 
 (* Low level x86 operations *)
-| Oset0     of wsize  (* set register + flags to 0 (implemented using XOR x x) *)
+| Oset0     of wsize  (* set register + flags to 0 (implemented using XOR x x or VPXOR x x) *)
 | Ox86MOVZX32
 | Ox86      of asm_op  (* x86 instruction *)
 .
@@ -172,19 +172,16 @@ Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 Definition Omulu_instr     := mk_instr_w2_w2 "Omulu" (fun sz x y => ok (@wumul sz x y)).
 Definition Oaddcarry_instr := mk_instr_w2b_bw "Oaddcarry" waddcarry.
 Definition Osubcarry_instr := mk_instr_w2b_bw "Osubcarry" wsubcarry.
-Definition Oset0_instr     :=
-  mk_instr__b5w "Oset0" (fun sz => let vf := Some false in
-                 ok (::vf, vf, vf, vf, Some true & (0%R: word sz))).
-Definition Ox86MOVZX32_instr := sem_type.mk_instr (pp_s "Ox86_MOVZX32") [:: sword32] [:: sword64] (λ x : u32, ok (zero_extend U64 x)) U32.
 
-(* Definition xtype2stype (ty:xtype) :=
-  match ty with
-  | xword sz => sword sz
-  | xbool    => sbool
-  end.
- *)
-(* Lemma noarr_xtype (tin : seq (arg_desc * xtype)) : all is_not_sarr [seq xtype2stype i | i <- [seq i.2 | i <- tin]].
-Proof. elim: tin => [ | [ a [sz | ]] tin hrec] //=. Qed. *)
+Definition Oset0_instr sz  :=
+  if (sz <= U64)%CMP then 
+    mk_instr__b5w "Oset0" (fun sz => let vf := Some false in
+                            ok (::vf, vf, vf, vf, Some true & (0%R: word sz))) sz
+  else 
+    mk_instr__w  "Oset0" (fun sz => ok (0%R: word sz)) sz.
+
+Definition Ox86MOVZX32_instr := 
+  sem_type.mk_instr (pp_s "Ox86_MOVZX32") [:: sword32] [:: sword64] (λ x : u32, ok (zero_extend U64 x)) U32.
 
 Definition get_instr o :=
   match o with
@@ -192,7 +189,7 @@ Definition get_instr o :=
   | Oaddcarry sz => Oaddcarry_instr sz
   | Osubcarry sz => Osubcarry_instr sz
   | Oset0     sz => Oset0_instr sz
-  | Ox86MOVZX32   => Ox86MOVZX32_instr
+  | Ox86MOVZX32  => Ox86MOVZX32_instr
   | Ox86   instr =>
       let id := instr_desc instr in
       {|

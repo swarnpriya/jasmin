@@ -232,6 +232,14 @@ Definition is_sarr t :=
   | _      => false
   end.
 
+Definition is_word_type (t:stype) :=
+  if t is sword sz then Some sz else None.
+
+Lemma is_word_typeP ty ws :
+  is_word_type ty = Some ws -> ty = sword ws.
+Proof. by case: ty => //= w [->]. Qed.
+
+
 (* -------------------------------------------------------------------- *)
 Definition compat_type t1 t2 :=
   match t1 with

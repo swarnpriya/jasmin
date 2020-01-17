@@ -165,10 +165,6 @@ Section PROOF.
 
   (* TODO: MOVE *)
 
-  Lemma is_word_typeP ty ws :
-    is_word_type ty = Some ws -> ty = sword ws.
-  Proof. by case: ty => //= w [->]. Qed.
-
   Lemma cast_ptrP s e i : sem_pexpr gd s e = ok (Vint i) ->
     sem_pexpr gd s (cast_ptr e) = ok (Vword (wrepr U64 i)).
   Proof. by move=> h;rewrite /cast_ptr /cast_w /= h. Qed.

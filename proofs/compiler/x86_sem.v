@@ -335,27 +335,25 @@ Definition eval_special o args m :=
   | _, _ => type_error
   end.
 
+Definition eval_op o args m := 
+  if is_special o then
+    eval_special o args m
+  else
+    let id := instr_desc o in
+    exec_instr_op id args m.
+
 Definition eval_instr (i : asm) (s: x86_state) : exec x86_state :=
   match i with
   | LABEL _      => ok (st_write_ip (xip s).+1 s)
   | JMP   lbl    => eval_JMP lbl s
   | Jcc   lbl ct => eval_Jcc lbl ct s
   | AsmOp o args =>
-    if is_special o then
-      Let m := eval_special o args s.(xm) in
-      ok {|
-        xm := m;
-        xc := s.(xc);
-        xip := s.(xip).+1
-      |}
-    else
-    let id := instr_desc o in
-    Let m := exec_instr_op id args s.(xm) in
+    Let m := eval_op o args s.(xm) in
     ok {|
-        xm := m;
-        xc := s.(xc);
-        xip := s.(xip).+1
-      |}
+      xm := m;
+      xc := s.(xc);
+      xip := s.(xip).+1
+    |}
   end.
 
 (* -------------------------------------------------------------------- *)

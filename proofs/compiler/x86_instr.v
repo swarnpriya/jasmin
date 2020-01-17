@@ -517,7 +517,7 @@ rewrite /truncate_word hle => _ [<-] _ [<-] _ [<-] _ -> /=.
 case: ifP => // hsc [<-] [<-].
 rewrite /decode_addr.
 case: base offset => [ base | base ] [ offset | offset ] /=;
-rewrite ?(GRing.mulr0, GRing.addr0) -!(wadd_zero_extend, wmul_zero_extend) // ?check_scale_of //;
+rewrite ?(GRing.mulr0, GRing.addr0) !(wadd_zero_extend, wmul_zero_extend) // ?check_scale_of //;
 try update_set.
 set α := (_ + _)%R; set β := (_ + _)%R.
 replace α with β by ssrring.ssring; update_set.

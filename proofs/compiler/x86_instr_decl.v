@@ -355,11 +355,9 @@ Definition x86_BT sz (x y: word sz) : ex_tpl (b_ty) :=
   Let _  := check_size_8_64 sz in
   ok (Some (wbit x y)).
 
-Definition x86_LEA sz (disp base scale offset: word sz) : ex_tpl (w_ty sz) :=
-  Let _  := check_size_32_64 sz in
-  if check_scale (wunsigned scale) then
-    ok ((disp + base + scale * offset)%R)
-  else type_error.
+Definition x86_LEA sz (addr: word sz) : ex_tpl (w_ty sz) :=
+  Let _  := check_size_16_64 sz in
+  ok (addr).
 
 Definition x86_TEST sz (x y: word sz) : ex_tpl  b5_ty :=
   Let _  := check_size_8_64 sz in
@@ -722,7 +720,7 @@ Definition Ox86_INC_instr               := mk_instr_w_b4w_00 "INC" x86_INC      
 Definition Ox86_DEC_instr               := mk_instr_w_b4w_00 "DEC" x86_DEC            Checks.neg_inc_dec_not no_imm.
 Definition Ox86_SETcc_instr             := mk_instr (pp_s "SETcc") b_ty w8_ty         [:: E 0] [:: E 1] msb_dfl x86_SETcc Checks.setcc 2 U8 (no_imm U8).
 Definition Ox86_BT_instr                := mk_instr_w2_b "BT" x86_BT msb_dfl          [:: E 0; E 1] [:: F CF] 2 Checks.bt imm8.
-Definition Ox86_LEA_instr               := mk_instr_w4_w "LEA" x86_LEA msb_dfl        [:: E 1; E 2; E 3; E 4] [:: E 0] 5 fake_check max_32.
+Definition Ox86_LEA_instr               := mk_instr_w_w "LEA" x86_LEA msb_dfl         [:: E 1] [:: E 0] 2 Checks.lea no_imm.
 Definition Ox86_TEST_instr              := mk_instr_w2_b5 "TEST" x86_TEST msb_dfl     [:: E 0; E 1] 2 Checks.test max_32.
 Definition Ox86_CMP_instr               := mk_instr_w2_b5 "CMP" x86_CMP msb_dfl       [:: E 0; E 1] 2 Checks.cmp_and_or_xor max_32.
 Definition Ox86_AND_instr               := mk_instr_w2_b5w_010 "AND" x86_AND          Checks.cmp_and_or_xor max_32.

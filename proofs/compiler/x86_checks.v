@@ -160,6 +160,12 @@ Definition r_rm (sz:wsize) a b :=
   | _, _ => false
   end.
 
+Definition r_m (sz:wsize) a b := 
+  match a, b with
+  | Reg _, Adr _ => true
+  | _, _ => false
+  end.
+ 
 Definition r_imm_eq (sz: wsize) a b :=
   match a, b with
   | Reg _ , Imm sz' _ => (sz == sz')
@@ -348,6 +354,9 @@ Definition xmm_xmm_xmmm (sz : wsize) a b c :=
 
 Definition mov sz (args: list asm_arg) :=
 apply_2 sz [:: rm_r ; r_rm ; r_imm_eq ; rm_imm_near_eq ] args.
+
+Definition lea sz (args: list asm_arg) :=
+apply_2 sz [:: r_m ] args.
 
 Definition movsx_movzx sz sz' (args: list asm_arg) :=
 apply_2' sz sz' [:: r_rm_8_8; r_rm_16_16 ] args.

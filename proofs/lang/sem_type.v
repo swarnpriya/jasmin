@@ -195,6 +195,9 @@ Definition mk_instr_w2b_bw name semi sz :=
 Definition mk_instr__b5w name semi sz :=
   mk_instr (pp_sz name sz) [::] (b5w_ty sz) (semi sz) sz.
 
+Definition mk_instr__w name semi sz :=
+  mk_instr (pp_sz name sz) [::] ([::sword sz]) (semi sz) sz.
+
 Definition mk_instr_b_w name semi sz :=
   mk_instr (pp_sz name sz) (b_ty) (w_ty sz) (semi sz) sz.
 

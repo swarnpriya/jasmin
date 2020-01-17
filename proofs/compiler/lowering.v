@@ -274,7 +274,7 @@ Definition is_lval_in_memory (x: lval) : bool :=
 
 (* -------------------------------------------------------------------- *)
 
-Definition lea_const z := MkLea z   None     1%R None.
+Definition lea_const z := MkLea z None 1%R None.
 
 Definition lea_var x := MkLea 0%R (Some x) 1%R None.
 
@@ -321,22 +321,23 @@ Definition lea_sub l1 l2 :=
   | _   , _    => None
   end.
 
-Fixpoint mk_lea e :=
+Fixpoint mk_lea (sz:wsize) e :=
   match e with
-  | Papp1 (Oword_of_int sz') (Pconst z) => Some (lea_const (zero_extend Uptr (wrepr sz' z)))
+  | Papp1 (Oword_of_int sz') (Pconst z) => 
+      Some (lea_const (sign_extend Uptr (wrepr sz' z)))
   | Pvar  x          => Some (lea_var x)
-  | Papp2 (Omul (Op_w Uptr)) e1 e2 =>
-    match mk_lea e1, mk_lea e2 with
+  | Papp2 (Omul (Op_w sz')) e1 e2 =>
+    match mk_lea sz e1, mk_lea sz e2 with
     | Some l1, Some l2 => lea_mul l1 l2
     | _      , _       => None
     end
-  | Papp2 (Oadd (Op_w Uptr)) e1 e2 =>
-    match mk_lea e1, mk_lea e2 with
+  | Papp2 (Oadd (Op_w sz')) e1 e2 =>
+    match mk_lea sz e1, mk_lea sz e2 with
     | Some l1, Some l2 => lea_add l1 l2
     | _      , _       => None
     end
-  | Papp2 (Osub (Op_w Uptr)) e1 e2 =>
-    match mk_lea e1, mk_lea e2 with
+  | Papp2 (Osub (Op_w sz')) e1 e2 =>
+    match mk_lea sz e1, mk_lea sz e2 with
     | Some l1, Some l2 => lea_sub l1 l2
     | _      , _       => None
     end
@@ -344,8 +345,8 @@ Fixpoint mk_lea e :=
   end.
 
 Definition is_lea sz x e :=
-  if (sz == Uptr) && ~~ is_lval_in_memory x then
-    match mk_lea e with
+  if ((U16 ≤ sz)%CMP && (sz ≤ U64)%CMP) && ~~ is_lval_in_memory x then
+    match mk_lea sz e with
     | Some (MkLea d b sc o) =>
       let check o := match o with Some x => ~~(is_var_in_memory x) | None => true end in
       (* FIXME: check that d is not to big *)
@@ -574,7 +575,10 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
     else
       (* IF e is 0 then use Oset0 instruction *)
       if (e == @wconst szty 0) && ~~ is_lval_in_memory x && options.(use_set0) then
-        [:: MkI ii (Copn [:: f ; f ; f ; f ; f ; x] tg (Oset0 szty) [::]) ]
+        if (szty <= U64)%CMP then
+          [:: MkI ii (Copn [:: f ; f ; f ; f ; f ; x] tg (Oset0 szty) [::]) ]
+        else 
+          [:: MkI ii (Copn [:: x] tg (Oset0 szty) [::]) ]
       else copn (Ox86 (MOV szty)) [:: e ]
   | LowerCopn o e => copn o e
   | LowerInc o e => inc o e
@@ -586,7 +590,10 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
     let o := oapp Pvar (@wconst sz 0) o in
     let lea tt :=
       let ii := warning ii Use_lea in
-      [:: MkI ii (Copn [::x] tg (Ox86 (LEA sz)) [:: de; b; sce; o]) ] in
+      let add := Papp2 (Oadd (Op_w sz)) in
+      let mul := Papp2 (Omul (Op_w sz)) in
+      let e := add de (add b (mul sce o)) in
+      [:: MkI ii (Copn [::x] tg (Ox86 (LEA sz)) [:: e])] in
     if options.(use_lea) then lea tt
     (* d + b + sc * o *)
     else
