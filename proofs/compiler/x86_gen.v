@@ -1,7 +1,7 @@
-Require Import x86_instr linear_sem.
+Require Import x86_sem linear_sem.
 Import Utf8 Relation_Operators.
 Import all_ssreflect all_algebra.
-Import compiler_util expr psem x86_sem linear x86_variables x86_variables_proofs asmgen.
+Require Import compiler_util expr psem x86_sem linear x86_variables x86_variables_proofs asmgen.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -11,7 +11,9 @@ Unset Printing Implicit Defensive.
 Definition assemble_i (i: linstr) : ciexec asm :=
   let '{| li_ii := ii ; li_i := ir |} := i in
   match ir with
-  | Lopn ds op es => assemble_sopn ii ds op es
+  | Lopn ds op es => 
+    Let oa := assemble_sopn ii op ds es in
+    ok (AsmOp oa.1 oa.2)
 
   | Llabel lbl => ciok (LABEL lbl)
 
@@ -72,8 +74,7 @@ Lemma assemble_i_is_label a b lbl :
 Proof.
 rewrite /assemble_i /linear.is_label ; case a =>  ii [] /=.
 - move => lvs op es h.
-  have := assemble_sopn_is_sopn h => {h}.
-  by case b.
+  by move: h;t_xrbindP => ?? <-.
 - by move => lbl' [<-].
 - by move => lbl' [<-].
 by t_xrbindP => ? ? ? _ [<-].
@@ -108,11 +109,10 @@ Lemma assemble_iP gd i j ls ls' xs :
 Proof.
 rewrite /linear_sem.eval_instr /x86_sem.eval_instr; case => eqm eqc eqpc.
 case: i => ii [] /=.
-- move => lvs op pes ok_j; t_xrbindP => es ok_es <- {ls'} /=.
-  have [m2 [-> eqm2 /=]] := assemble_sopnP eqm ok_j ok_es.
-  have := assemble_sopn_is_sopn ok_j.
-  by case: j {ok_j} => //; (eexists; split; first by reflexivity); constructor => //=;
-    rewrite ?to_estate_of_estate ?eqpc.
+- move => lvs op pes; t_xrbindP => -[op' asm_args] hass <- m hsem <-.
+  have [s [-> eqm' /=]]:= assemble_sopnP hsem hass eqm.
+  (eexists; split; first by reflexivity).
+  by constructor => //=; rewrite ?to_estate_of_estate ?eqpc.
 - move => lbl [<-] [<-]; eexists; split; first by reflexivity.
   constructor => //.
   by rewrite /setpc /= eqpc.

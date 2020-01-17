@@ -203,6 +203,13 @@ Definition assemble_sopn ii op (outx : lvals) (inx : pexprs) :=
       end in
     assemble_x86_opn ii op outx [::Pvar x; Pvar x]
   | Ox86MOVZX32 =>
+    Let x := 
+      match outx with 
+      | [::Lvar x] =>  ok x
+      | _ => 
+        cierror ii 
+          (Cerr_assembler (AsmErr_string "assemble_sopn Ox86MOVZX32: destination is not a register")) 
+      end in
     assemble_x86_opn ii (MOV U32) outx inx 
   | Ox86 op =>
     assemble_x86_opn ii op outx inx 
@@ -433,7 +440,7 @@ Proof.
     rewrite Fv.setP_neq; last by apply /eqP => h; apply hne; apply var_of_flag_inj.
     by apply h4.
   + case: lv1 => //=; last by move=> ???? [<-].
-    move=> x hw [<-] /eqP hx.
+    move=> x hw [<-] /eqP hx /=.
     move: hw; rewrite /write_var hx /= /set_var /=.
     t_xrbindP => vm; rewrite /on_vu. 
     case heq : to_pword => [v | e]; last by case e.
@@ -689,73 +696,38 @@ Proof.
                id.(id_out) id.(id_tout)
                (0%R: word sz)
                MSB_CLEAR (refl_equal _) hw hlo hcd id.(id_check_dest)).
-  +  
-
-
-      rewrite /SF_of_word msb0 //.  
-
-      have -> : [:: Vbool false; Vbool false; VboolSF_of_word 0; PF_of_word 0; ZF_of_word 0; Vword 0] =
-                list_ltuple [:: false, false, SF_of_word 0, PF_of_word 0, ZF_of_word 0 & Vword 0].
-      apply: compile_lvals.
-Print SF_of_word.
-Print PF_of_word.
-Search _ msb.
-Search _ lsb.
-      Search wxor.
-      Search truncate_word.
- Lemma compile_lvals ii id_max_imm gd m lvs m' s loargs 
-  id_out id_tout (vt:sem_tuple id_tout) msb_flag: 
-  size id_out = size id_tout -> 
-  write_lvals gd m lvs (list_ltuple vt) = ok m' ->
-  lom_eqv m s ->
-  check_sopn_dests ii id_max_imm loargs lvs (zip id_out id_tout) ->
-  utils.all2 check_arg_dest id_out id_tout ->
-  exists s', 
-    mem_write_vals msb_flag s loargs id_out id_tout (list_ltuple vt) = ok s' ∧ lom_eqv m' s'.     
-        move: hcd => /=.
-h1 h2.
-Print Checks.cmp_and_or_xor.
- hca1 hca2 _ hlo.    
-    rewrite /eval_op /exec_instr_op /=. 
-Print check_sopn_arg.    
-(outx : lvals) (inx : pexprs) :=
-  match op with
-  | Omulu     _ 
-  | Oaddcarry _ 
-  | Osubcarry _ =>
-    cierror ii (Cerr_assembler (AsmErr_string "assemble_sopn : invalid op"))
-  (* Low level x86 operations *)
-  | Oset0 sz =>
-    match outx with
-    | [:: Lvar x] =>
-      if xmm_register_of_var x is Some r then 
-        let a := XMM r in ok (VPXOR sz, [:: a; a; a])
-      else 
-        Let r := reg_of_var ii x in
-        let sz := cmp_min U32 sz in
-        let a := Reg r in ok (XOR sz, [:: a; a; a])
-    | _ => cierror ii (Cerr_assembler (AsmErr_string "assemble_sopn set0: destination is not a register"))  
-    end
-  | Ox86MOVZX32 =>
-    assemble_x86_opn ii (MOV U32) outx inx 
-  | Ox86 op =>
-    assemble_x86_opn ii op outx inx 
-  end.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  + case: lvs => // -[] // x [] //.
+    rewrite /sem_sopn /exec_sopn /sopn_sem /=.
+    case: args => //= a args.
+    t_xrbindP => vs1 vs2 va hva vs3 h <- /=.
+    case: args h => /=; t_xrbindP; last by move=> *; subst.
+    move => <- ? wa htwa [<-] <-; t_xrbindP => m1 hwx ?;subst m1.
+    rewrite /assemble_x86_opn /is_lea /=.
+    t_xrbindP => asm_args' _ ? /assertP hidc ? /assertP /andP[hca hcd] ?? hlo;subst op' asm_args'.  
+    case: asm_args hidc hcd hca => // a0 [] // a1 []// hidc hcd.
+    rewrite /check_sopn_args /= andbT => hca1.
+    rewrite /eval_op /exec_instr_op /= /eval_instr_op /=.
+    rewrite /= in hidc;rewrite hidc.
+    have [v' /= [-> /= ->] /=]:= check_sopn_arg_sem_eval hlo hca1 hva htwa.
+    move: hcd; rewrite /check_sopn_dests /= /check_sopn_dest /= => /andP -[].
+    case: xmm_register_of_var => /=.
+    + by move=> ? /andP[] /eqP ?;subst a0.
+    case heq: reg_of_var => [r | ] //= /andP [] /eqP ? _ _; subst a0.
+    rewrite /mem_write_vals /=.
+    eexists; split; first reflexivity.
+    case: hlo => h1 h2 h3 h4.
+    move: hwx; rewrite /write_var /set_var.
+    have /= <- /= := var_of_reg_of_var heq.
+    move=> [<-].
+    constructor => //=.
+    + move=> r' v''; rewrite /get_var /on_vu /= /RegMap.set ffunE.
+      case: eqP => [-> | hne].
+      + by rewrite Fv.setP_eq word_extend_reg_id // zero_extend_u => -[<-].
+      rewrite Fv.setP_neq; last by apply /eqP => h; apply hne; apply var_of_register_inj.
+      by apply h2. 
+    + move=> r' v''; rewrite /get_var /on_vu /=.
+      by rewrite Fv.setP_neq //; apply h3.
+    move=> f v''; rewrite /get_var /on_vu /=.
+    by rewrite Fv.setP_neq //; apply h4. 
+  by move=> a; apply: assemble_x86_opnP.
+Qed.
