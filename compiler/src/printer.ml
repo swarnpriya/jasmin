@@ -1,6 +1,6 @@
 (* -------------------------------------------------------------------- *)
 open Prog
-
+module W = Wsize
 module T = Type
 module E = Expr
 module F = Format
@@ -44,7 +44,7 @@ let pp_gvar_i pp_var fmt v = pp_var fmt (L.unloc v)
 (* -------------------------------------------------------------------- *)
 
 let string_of_cmp_ty = function
-  | E.Cmp_w (Type.Unsigned, _) -> "u"
+  | E.Cmp_w (W.Unsigned, _) -> "u"
   | _        -> ""
 
 (* -------------------------------------------------------------------- *)
@@ -52,7 +52,7 @@ let string_of_cmp_ty = function
 let string_of_velem s ws ve = 
   let nws = int_of_ws ws in
   let nve = int_of_velem ve in
-  let s   = if s = T.Unsigned then "u" else "s" in
+  let s   = if s = W.Unsigned then "u" else "s" in
   Format.sprintf "%d%s%d" (nws/nve) s nve
 
 let string_of_op2 = function
@@ -78,12 +78,12 @@ let string_of_op2 = function
   | E.Ogt  k -> ">"  ^ string_of_cmp_ty k
   | E.Oge  k -> ">=" ^ string_of_cmp_ty k
 
-  | Ovadd (ve,ws) -> Format.sprintf "+%s"  (string_of_velem T.Unsigned ws ve)
-  | Ovsub (ve,ws) -> Format.sprintf "-%s"  (string_of_velem T.Unsigned ws ve)
-  | Ovmul (ve,ws) -> Format.sprintf "*%s"  (string_of_velem T.Unsigned ws ve)
-  | Ovlsr (ve,ws) -> Format.sprintf ">>%s" (string_of_velem T.Unsigned ws ve)
-  | Ovasr (ve,ws) -> Format.sprintf ">>%s" (string_of_velem T.Unsigned ws ve)
-  | Ovlsl (ve,ws) -> Format.sprintf "<<%s" (string_of_velem T.Signed   ws ve)
+  | Ovadd (ve,ws) -> Format.sprintf "+%s"  (string_of_velem W.Unsigned ws ve)
+  | Ovsub (ve,ws) -> Format.sprintf "-%s"  (string_of_velem W.Unsigned ws ve)
+  | Ovmul (ve,ws) -> Format.sprintf "*%s"  (string_of_velem W.Unsigned ws ve)
+  | Ovlsr (ve,ws) -> Format.sprintf ">>%s" (string_of_velem W.Unsigned ws ve)
+  | Ovasr (ve,ws) -> Format.sprintf ">>%s" (string_of_velem W.Unsigned ws ve)
+  | Ovlsl (ve,ws) -> Format.sprintf "<<%s" (string_of_velem W.Signed   ws ve)
 
 
 let string_of_op1 = function

@@ -665,9 +665,9 @@ Notation mk_instr_w_w name semi msb ain aout nargs check max_imm prc pp_asm :=
  ((fun sz =>
   mk_instr (pp_sz name sz) (w_ty sz) (w_ty sz) ain aout msb (semi sz) (check sz) nargs sz (max_imm sz) (pp_asm sz)), (name%string,prc)) (only parsing).
 
-Notation mk_instr_w_w'_10 name semi check max_imm prc pp_asm := 
+Notation mk_instr_w_w'_10 name sign semi check max_imm prc pp_asm := 
  ((fun szo szi =>
-  mk_instr (pp_sz_sz name szo szi) (w_ty szi) (w_ty szo) [:: E 1] [:: E 0] MSB_CLEAR (semi szi szo) (check szi szo) 2 szi (max_imm szi) (pp_asm szo szi)), (name%string,prc)) (only parsing).
+  mk_instr (pp_sz_sz name sign szi szo) (w_ty szi) (w_ty szo) [:: E 1] [:: E 0] MSB_CLEAR (semi szi szo) (check szi szo) 2 szi (max_imm szi) (pp_asm szi szo)), (name%string,prc)) (only parsing).
 
 Notation mk_instr_bw2_w_0211 name semi check max_imm prc pp_asm := 
  ((fun sz =>
@@ -823,8 +823,8 @@ Definition pp_cqo sz (args: asm_args) :=
      pp_aop_args := map_sz sz [::]; |}.
 
 Definition Ox86_MOV_instr               := mk_instr_w_w "MOV" x86_MOV msb_dfl         [:: E 1] [:: E 0] 2 Checks.mov (fun sz => Some sz) (primP MOV) (pp_iname "mov").
-Definition Ox86_MOVSX_instr             := mk_instr_w_w'_10 "MOVSX" x86_MOVSX         Checks.movsx_movzx max_32 (PrimX MOVSX) (pp_movx "movs").
-Definition Ox86_MOVZX_instr             := mk_instr_w_w'_10 "MOVZX" x86_MOVZX         Checks.movsx_movzx no_imm (PrimX MOVZX) (pp_movx "movz").
+Definition Ox86_MOVSX_instr             := mk_instr_w_w'_10 "MOVSX" true x86_MOVSX         Checks.movsx_movzx max_32 (PrimX MOVSX) (pp_movx "movs").
+Definition Ox86_MOVZX_instr             := mk_instr_w_w'_10 "MOVZX" false x86_MOVZX         Checks.movsx_movzx no_imm (PrimX MOVZX) (pp_movx "movz").
 Definition Ox86_CMOVcc_instr            := mk_instr_bw2_w_0211 "CMOVcc" x86_CMOVcc    Checks.cmovcc no_imm (primP CMOVcc) (pp_ct "cmov").
 
 Definition Ox86_ADD_instr               := mk_instr_w2_b5w_010 "ADD" x86_ADD          Checks.add_sub_adc_sbb max_32 (primP ADD) (pp_iname "add").
@@ -897,7 +897,7 @@ Definition pp_vpinsr ve args :=
      pp_aop_ext  := PP_viname ve false;
      pp_aop_args := zip [::U128; U128; rs; U8] args; |}.
 
-Definition Ox86_VPINSR_instr  := ((fun (sz:velem) => mk_instr (pp_ve "VPINSR" sz) (w128ww8_ty sz) w128_ty [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (x86_VPINSR sz) (Checks.xmm_xmm_rm_imm8_16_ sz) 4 U128 (no_imm sz) (pp_vpinsr sz)), ("VPINSR"%string, PrimV (fun ve _ => VPINSR ve))).
+Definition Ox86_VPINSR_instr  := ((fun (sz:velem) => mk_instr (pp_ve_sz "VPINSR" sz U128) (w128ww8_ty sz) w128_ty [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (x86_VPINSR sz) (Checks.xmm_xmm_rm_imm8_16_ sz) 4 U128 (no_imm sz) (pp_vpinsr sz)), ("VPINSR"%string, PrimV (fun ve _ => VPINSR ve))).
 
 Definition Ox86_VPSLL_instr             := mk_ve_instr_ww8_w_120  "VPSLL"       x86_VPSLL       Checks.xmm_xmm_imm8_ imm8 (PrimV VPSLL) (pp_viname "vpsll").
 Definition Ox86_VPSRL_instr             := mk_ve_instr_ww8_w_120  "VPSRL"       x86_VPSRL       Checks.xmm_xmm_imm8_ imm8 (PrimV VPSRL) (pp_viname "vpsrl").

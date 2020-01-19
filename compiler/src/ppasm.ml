@@ -2,7 +2,6 @@
 open Utils
 open Bigint.Notations
 open X86_decl
-open X86_instr_decl
 (* -------------------------------------------------------------------- *)
 module W = Wsize
 module LM = Type
@@ -300,24 +299,24 @@ let wregs_of_fundef (c : rset) (f : X86_sem.xfundef) =
 
 (* -------------------------------------------------------------------- *)
 let x86_64_callee_save = [
-  X86_sem.RBP;
-  X86_sem.RBX;
-  X86_sem.RSP; (* Why? *)
-  X86_sem.R12;
-  X86_sem.R13;
-  X86_sem.R14;
-  X86_sem.R15;
+  X86_decl.RBP;
+  X86_decl.RBX;
+  X86_decl.RSP; (* Why? *)
+  X86_decl.R12;
+  X86_decl.R13;
+  X86_decl.R14;
+  X86_decl.R15;
 ]
 
 (* -------------------------------------------------------------------- *)
 let align_of_ws =
   function
-  | Type.U8 -> 0
-  | Type.U16 -> 1
-  | Type.U32 -> 2
-  | Type.U64 -> 3
-  | Type.U128 -> 4
-  | Type.U256 -> 5
+  | W.U8 -> 0
+  | W.U16 -> 1
+  | W.U32 -> 2
+  | W.U64 -> 3
+  | W.U128 -> 4
+  | W.U256 -> 5
 
 let pp_align ws =
   let n = align_of_ws ws in
@@ -325,11 +324,11 @@ let pp_align ws =
 
 let decl_of_ws =
   function
-  | Type.U8 -> Some ".byte"
-  | Type.U16 -> Some ".word"
-  | Type.U32 -> Some ".long"
-  | Type.U64 -> Some ".quad"
-  | Type.U128 | Type.U256 -> None
+  | W.U8 -> Some ".byte"
+  | W.U16 -> Some ".word"
+  | W.U32 -> Some ".long"
+  | W.U64 -> Some ".quad"
+  | W.U128 | W.U256 -> None
 
 let bigint_to_bytes n z =
   let base = Bigint.of_int 256 in
@@ -349,7 +348,7 @@ let pp_const ws z =
     List.rev_map (fun b -> `Instr (".byte", [ Bigint.to_string b] ))
       (bigint_to_bytes (Prog.size_of_ws ws) z)
 
-let pp_glob_def fmt (gd:Expr.glob_decl) : unit =
+let pp_glob_def fmt (gd:Global.glob_decl) : unit =
   let (ws,n,z) = Conv.gd_of_cgd gd in
   let z = Prog.clamp ws z in
   let m = mangle n in
@@ -363,7 +362,7 @@ let pp_glob_def fmt (gd:Expr.glob_decl) : unit =
 
 (* -------------------------------------------------------------------- *)
 type 'a tbl = 'a Conv.coq_tbl
-type  gd_t  = Expr.glob_decl list 
+type  gd_t  = Global.glob_decl list 
 
 let pp_prog (tbl: 'info tbl) (fmt : Format.formatter) 
    ((gd:gd_t), (asm : X86_sem.xprog)) =
@@ -380,7 +379,7 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
       let name = string_of_funname tbl n in
       let stsz  = Conv.bi_of_z d.X86_sem.xfd_stk_size in
       let wregs = wregs_of_fundef Set.empty d in
-      let wregs = List.fold_right Set.remove [X86_sem.RBP; X86_sem.RSP] wregs in
+      let wregs = List.fold_right Set.remove [X86_decl.RBP; X86_decl.RSP] wregs in
       let wregs = List.filter (fun x -> Set.mem x wregs) x86_64_callee_save in
 
       pp_gens fmt [
