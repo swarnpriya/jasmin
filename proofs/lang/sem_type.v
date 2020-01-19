@@ -54,28 +54,7 @@ Definition sem_ot (t:stype) : Type :=
 
 Definition sem_tuple ts := ltuple (map sem_ot ts).
 
-(* ----------------------------------------------------------------------------- *)
-
+(* -------------------------------------------------------------------------- *)
 Definition is_not_sarr t := ~~ is_sarr t.
-
-Record Instruction := mkInstruction {
-  str  : unit -> string;
-  tin  : list stype;
-  tout : list stype;
-  semi : sem_prod tin (exec (sem_tuple tout));
-  tin_narr : all is_not_sarr tin;
-  wsizei : wsize;
-}.
-
-(* ----------------------------------------------------------------------------- *)
-
-Notation mk_instr str tin tout semi wsizei:=
-  {| str := str;
-     tin := tin;
-     tout := tout;
-     semi := semi;
-     tin_narr := refl_equal;
-     wsizei := wsizei;
-  |}.
 
 

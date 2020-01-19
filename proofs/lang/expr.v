@@ -169,33 +169,72 @@ Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 
 (* ----------------------------------------------------------------------------- *)
 
-Definition Omulu_instr  sz := 
-  sem_type.mk_instr (pp_sz "mulu" sz) 
-           (w2_ty sz sz) (w2_ty sz sz) (fun x y => ok (@wumul sz x y)) sz.
+Record instruction := mkInstruction {
+  str      : unit -> string;
+  tin      : list stype;
+  i_in     : seq arg_desc; 
+  tout     : list stype;
+  i_out    : seq arg_desc;
+  semi     : sem_prod tin (exec (sem_tuple tout));
+  tin_narr : all is_not_sarr tin;
+  wsizei   : wsize;
+}.
 
+Notation mk_instr str tin i_in tout i_out semi wsizei:=
+  {| str      := str;
+     tin      := tin;
+     i_in     := i_in;
+     tout     := tout;
+     i_out    := i_out;
+     semi     := semi;
+     tin_narr := refl_equal;
+     wsizei   := wsizei;
+  |}.
+
+(* ----------------------------------------------------------------------------- *)
+
+Definition Omulu_instr sz := 
+  mk_instr (pp_sz "mulu" sz) 
+           (w2_ty sz sz) [:: R RAX; E 0]
+           (w2_ty sz sz) [:: R RDX; R RAX] (fun x y => ok (@wumul sz x y)) sz.
+ 
 Definition Oaddcarry_instr sz := 
-  sem_type.mk_instr (pp_sz "addc" sz) 
-           [::sword sz; sword sz; sbool] (sbool :: (w_ty sz))  
+  mk_instr (pp_sz "addc" sz) 
+           [::sword sz; sword sz; sbool] 
+           [::E 0; E 1; F CF]
+           (sbool :: (w_ty sz))  
+           [:: F CF; E 0]
            (fun x y c => let p := @waddcarry sz x y c in ok (Some p.1, p.2))
            sz.
 
 Definition Osubcarry_instr sz:= 
-  sem_type.mk_instr (pp_sz "subc" sz) 
-           [::sword sz; sword sz; sbool] (sbool :: (w_ty sz))  
+  mk_instr (pp_sz "subc" sz) 
+           [::sword sz; sword sz; sbool] [::E 0; E 1; F CF]
+           (sbool :: (w_ty sz)) [:: F CF; E 0] 
            (fun x y c => let p := @wsubcarry sz x y c in ok (Some p.1, p.2))
            sz.
 
 Definition Oset0_instr sz  :=
   let name := pp_sz "set0" sz in
   if (sz <= U64)%CMP then 
-    sem_type.mk_instr name [::] (b5w_ty sz)
-                      (let vf := Some false in
-                       ok (::vf, vf, vf, vf, Some true & (0%R: word sz))) sz
+    mk_instr name 
+             [::] [::]
+             (b5w_ty sz) (implicit_flags ++ [::E 0])
+             (let vf := Some false in
+              ok (::vf, vf, vf, vf, Some true & (0%R: word sz)))
+             sz
   else 
-    sem_type.mk_instr name [::]  (w_ty sz) (ok (0%R: word sz)) sz.
+    mk_instr name 
+             [::] [::]  
+             (w_ty sz) [::E 0] 
+             (ok (0%R: word sz)) sz.
 
 Definition Ox86MOVZX32_instr := 
-  sem_type.mk_instr (pp_s "MOVZX32") [:: sword32] [:: sword64] (λ x : u32, ok (zero_extend U64 x)) U32.
+  mk_instr (pp_s "MOVZX32") 
+           [:: sword32] [:: E 1] 
+           [:: sword64] [:: E 0] 
+           (λ x : u32, ok (zero_extend U64 x)) 
+           U32.
 
 Definition get_instr o :=
   match o with
@@ -207,12 +246,14 @@ Definition get_instr o :=
   | Ox86   instr =>
       let id := instr_desc instr in
       {|
-        str  := id.(id_str_jas);
-        tin  := id.(id_tin);
-        tout := id.(id_tout);
-        semi := id.(id_semi);
+        str      := id.(id_str_jas);
+        tin      := id.(id_tin);
+        i_in     := id.(id_in);
+        i_out    := id.(id_out);
+        tout     := id.(id_tout);
+        semi     := id.(id_semi);
         tin_narr := id.(id_tin_narr);
-        wsizei := id.(id_wsize);
+        wsizei   := id.(id_wsize);
       |}
   end.
 
