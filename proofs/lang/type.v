@@ -45,7 +45,7 @@ Variant stype : Set :=
 | sword of wsize.
 
 (* -------------------------------------------------------------------- *)
-
+(*
 Definition string_of_stype (ty: stype) : string :=
   match ty with
   | sbool => "sbool"
@@ -53,7 +53,7 @@ Definition string_of_stype (ty: stype) : string :=
   | sarr n => "(sarr " ++ " ?)"
   | sword sz => "(sword " ++ string_of_wsize sz ++ ")"
   end.
-
+*)
 
 (* -------------------------------------------------------------------- *)
 Notation sword8   := (sword U8).

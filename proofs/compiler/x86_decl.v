@@ -368,7 +368,7 @@ Definition Imm_inj sz sz' w w' (e: @Imm sz w = @Imm sz' w') :
 Lemma asm_arg_eq_axiom : Equality.axiom asm_arg_beq.
 Proof.
   case => [t1 | sz1 w1 | g1 | r1 | a1 | xr1] [t2 | sz2 w2 | g2 | r2 | a2 | xr2]; apply: (iffP idP) => //=;
-   try (move => /eqP -> // || move=> [] -> //).
+   try (move => /eqP -> // || move => [] -> //).
   + by move=> /andP [] /eqP ? /eqP; subst => /wunsigned_inj ->.
   by move=> /Imm_inj [? ];subst => /= ->;rewrite !eqxx.
 Qed.
@@ -400,7 +400,21 @@ Definition check_arg_dest (ad:arg_desc) (ty:stype) :=
   | ADImplicit _ => true
   | ADExplicit _ _ => ty != sbool
   end.
- 
+
+Inductive pp_asm_op_ext :=
+  | PP_error
+  | PP_name 
+  | PP_iname of wsize 
+  | PP_iname2 of wsize & wsize 
+  | PP_viname of velem & bool (* long *)
+  | PP_ct of asm_arg.
+
+Record pp_asm_op := mk_pp_asm_op {
+  pp_aop_name : string;
+  pp_aop_ext  : pp_asm_op_ext;
+  pp_aop_args : seq (wsize * asm_arg);
+}.
+   
 Record instr_desc_t := mk_instr_desc {
   (* Info for x86 sem *)
   id_msb_flag : msb_flag;
@@ -418,4 +432,5 @@ Record instr_desc_t := mk_instr_desc {
   id_str_jas  : unit -> string;
   id_check_dest : all2 check_arg_dest id_out id_tout;
   id_wsize    : wsize;  (* ..... *)
+  id_pp_asm   : asm_args -> pp_asm_op; 
 }.

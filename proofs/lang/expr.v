@@ -169,19 +169,33 @@ Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 
 (* ----------------------------------------------------------------------------- *)
 
-Definition Omulu_instr     := mk_instr_w2_w2 "Omulu" (fun sz x y => ok (@wumul sz x y)).
-Definition Oaddcarry_instr := mk_instr_w2b_bw "Oaddcarry" waddcarry.
-Definition Osubcarry_instr := mk_instr_w2b_bw "Osubcarry" wsubcarry.
+Definition Omulu_instr  sz := 
+  sem_type.mk_instr (pp_sz "mulu" sz) 
+           (w2_ty sz sz) (w2_ty sz sz) (fun x y => ok (@wumul sz x y)) sz.
+
+Definition Oaddcarry_instr sz := 
+  sem_type.mk_instr (pp_sz "addc" sz) 
+           [::sword sz; sword sz; sbool] (sbool :: (w_ty sz))  
+           (fun x y c => let p := @waddcarry sz x y c in ok (Some p.1, p.2))
+           sz.
+
+Definition Osubcarry_instr sz:= 
+  sem_type.mk_instr (pp_sz "subc" sz) 
+           [::sword sz; sword sz; sbool] (sbool :: (w_ty sz))  
+           (fun x y c => let p := @wsubcarry sz x y c in ok (Some p.1, p.2))
+           sz.
 
 Definition Oset0_instr sz  :=
+  let name := pp_sz "set0" sz in
   if (sz <= U64)%CMP then 
-    mk_instr__b5w "Oset0" (fun sz => let vf := Some false in
-                            ok (::vf, vf, vf, vf, Some true & (0%R: word sz))) sz
+    sem_type.mk_instr name [::] (b5w_ty sz)
+                      (let vf := Some false in
+                       ok (::vf, vf, vf, vf, Some true & (0%R: word sz))) sz
   else 
-    mk_instr__w  "Oset0" (fun sz => ok (0%R: word sz)) sz.
+    sem_type.mk_instr name [::]  (w_ty sz) (ok (0%R: word sz)) sz.
 
 Definition Ox86MOVZX32_instr := 
-  sem_type.mk_instr (pp_s "Ox86_MOVZX32") [:: sword32] [:: sword64] (λ x : u32, ok (zero_extend U64 x)) U32.
+  sem_type.mk_instr (pp_s "MOVZX32") [:: sword32] [:: sword64] (λ x : u32, ok (zero_extend U64 x)) U32.
 
 Definition get_instr o :=
   match o with

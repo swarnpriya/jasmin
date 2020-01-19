@@ -185,10 +185,24 @@ elim: xs vs s1 s2 rs.
 move => x xs ih /= [] // v vs s1 s3 rs';
   t_xrbindP => s2 ok_s2 ok_s3 r ok_r rs ok_rs <- {rs'} h /List_Forall2_inv_l [v'] [vs'] [/=] /seq_eq_injL [<- {v'} <- {vs'}] [hv rec].
 apply: ih; eauto.
-have := write_var_compile_var MSB_CLEAR ok_s2 hv h.
-rewrite /compile_var (reg_of_var_register_of_var ok_r) => /(_ _ erefl) [_] [<-] /=.
-rewrite /mem_write_reg /= word_extend_reg_id // zero_extend_u -RegMap_set_id.
-by case: (xm1).
+move: ok_s2; rewrite /write_var /set_var /=.
+have <- /= := var_of_reg_of_var ok_r.
+t_xrbindP => vm;apply: on_vuP => // w hw <- <-.
+case: h => h1 h2 h3 h4; constructor => //=.
++ move=> r' v'; rewrite /get_var /on_vu /=.
+  case: (r =P r') => [<- | hne].
+  + rewrite Fv.setP_eq => -[<-] /=.
+    have hu1 : value_uincl (Vword (pw_word w)) v.
+    + have [sz [w' [-> -> /=]]]:= to_pwordI hw.
+      case: Sumbool.sumbool_of_bool => hle //=.
+      by apply word_uincl_zero_ext; apply cmp_nle_le; rewrite hle.
+    by apply (value_uincl_trans hu1 hv).
+  rewrite Fv.setP_neq; last by apply /eqP => h; apply hne; apply var_of_register_inj.
+  by apply h2. 
++ move=> r' v'; rewrite /get_var /on_vu /=.
+  by rewrite Fv.setP_neq //; apply h3.
+move=> f v'; rewrite /get_var /on_vu /=.
+by rewrite Fv.setP_neq //; apply h4.
 Qed.
 
 (* TODO: Move this *)

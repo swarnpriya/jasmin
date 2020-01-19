@@ -29,7 +29,7 @@
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
 Require Import Psatz xseq.
-Require Export array expr gen_map low_memory warray sem_type.
+Require Export array expr gen_map low_memory warray_ sem_type.
 Import Utf8.
 
 Set Implicit Arguments.

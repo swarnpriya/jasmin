@@ -98,25 +98,6 @@ Definition wsize_finMixin :=
 Canonical wsize_finType :=
   Eval hnf in FinType wsize wsize_finMixin.
 
-(* -------------------------------------------------------------- *)
-Definition string_of_wsize (sz: wsize) : string :=
-  match sz with
-  | U8 => "U8"
-  | U16 => "U16"
-  | U32 => "U32"
-  | U64 => "U64"
-  | U128 => "U128"
-  | U256 => "U256"
-  end.
-
-Definition string_of_velem (ve: velem) : string :=
-  match ve with
-  | VE8 => "VE8"
-  | VE16 => "VE16"
-  | VE32 => "VE32"
-  | VE64 => "VE64"
-  end.
-
 (* -------------------------------------------------------------------- *)
 Scheme Equality for velem.
 
@@ -182,3 +163,42 @@ Lemma wsize_nle_u64_check_128_256 sz :
   (sz ≤ U64)%CMP = false →
   check_size_128_256 sz = ok tt.
 Proof. by case: sz. Qed.
+
+(* -------------------------------------------------------------------- *)
+(* -------------------------------------------------------------- *)
+Definition string_of_wsize (sz: wsize) : string :=
+  match sz with
+  | U8 => "8"
+  | U16 => "16"
+  | U32 => "32"
+  | U64 => "64"
+  | U128 => "128"
+  | U256 => "256"
+  end.
+
+Definition string_of_ve_sz (ve:velem) (sz:wsize) : string := 
+  match ve, sz with
+  | VE8 , U128 => "16u8"
+  | VE16, U128 => "8u16"
+  | VE32, U128 => "4u32"
+  | VE64, U128 => "2u64"
+  | VE8 , U256 => "32u8"
+  | VE16, U256 => "16u16"
+  | VE32, U256 => "8u32"
+  | VE64, U256 => "4u64"
+  | _,    _    => "ERROR: please repport"
+  end.
+
+Definition pp_s (s: string) (_: unit) : string := s.
+
+Definition pp_sz (s: string) (sz: wsize) (_: unit) : string := 
+  s ++ "_" ++ string_of_wsize sz.
+
+Definition pp_ve_sz (s: string) (ve: velem) (sz: wsize) (_: unit) : string := 
+  s ++ "_" ++ string_of_ve_sz ve sz.
+
+Definition pp_sz_sz (s: string) (sign:bool) (sz sz': wsize) (_: unit) : string := 
+  s ++ "_u" ++ string_of_wsize sz ++ (if sign then "_s" else "_u")%string ++ string_of_wsize sz'.
+
+Definition pp_ve    (s: string) (ve: velem)             (_: unit)   : string := s ++ " " ++ string_of_velem ve.
+
