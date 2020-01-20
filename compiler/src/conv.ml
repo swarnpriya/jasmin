@@ -37,6 +37,8 @@ let z_of_int i = z_of_bi (B.of_int i)
 let bi_of_nat n =
   bi_of_z (BinInt.Z.of_nat n)
 
+let int_of_nat n = B.to_int (bi_of_nat n)
+
 let pos_of_int i = pos_of_bi (B.of_int i)
 let int_of_pos p = B.to_int (bi_of_pos p)
 
@@ -417,12 +419,12 @@ let fdef_of_cfdef tbl (fn, fd) =
     f_ret  = List.map (vari_of_cvari tbl) fd.C.f_res;
   }
 
-let cprog_of_prog info p =
+let cprog_of_prog (all_registers: var list) info p =
   let tbl = empty_tbl info in
   (* First add registers *)
   List.iter
     (fun x -> ignore (cvar_of_reg tbl x))
-    Regalloc.X64.all_registers;
+    all_registers;
   let fds = List.map (cfdef_of_fdef tbl) (snd p) in
   let gd  = List.map cgd_of_gd (fst p) in
   tbl, { C.p_globs = gd; C.p_funcs = fds }

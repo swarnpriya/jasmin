@@ -1,7 +1,6 @@
 (* ------------------------------------------------------------------------ *)
 open Utils
 open Wsize
-open Type
 module E = Expr
 module L = Location
 module B = Bigint

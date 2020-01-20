@@ -415,6 +415,9 @@ Record pp_asm_op := mk_pp_asm_op {
   pp_aop_args : seq (wsize * asm_arg);
 }.
    
+Inductive safe_cond := 
+  | NotZero of wsize & nat. (* the nth argument of size sz is not zero *)
+
 Record instr_desc_t := mk_instr_desc {
   (* Info for x86 sem *)
   id_msb_flag : msb_flag;
@@ -431,6 +434,7 @@ Record instr_desc_t := mk_instr_desc {
   id_tin_narr : all is_not_sarr id_tin; 
   id_str_jas  : unit -> string;
   id_check_dest : all2 check_arg_dest id_out id_tout;
+  id_safe     : seq safe_cond;
   id_wsize    : wsize;  (* ..... *)
   id_pp_asm   : asm_args -> pp_asm_op; 
 }.

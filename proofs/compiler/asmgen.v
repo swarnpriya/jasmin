@@ -571,7 +571,7 @@ rewrite /exec_instr_op /eval_instr_op Hid /=.
 move: vt Hvt Htuplet; rewrite /sopn_sem /get_instr -/id => {Hid}.
 case: id Hargs Hdest => /= msb_flag id_tin 
  id_in id_tout id_out id_semi id_check id_nargs /andP[] /eqP hsin /eqP hsout id_max_imm
- _ id_str_jas id_check_dest id_wsize id_pp Hargs Hdest vt happ ?;subst x.
+ _ id_str_jas id_check_dest id_safe id_wsize id_pp Hargs Hdest vt happ ?;subst x.
 elim: id_in id_tin hsin id_semi args vs Hargs happ Hvs; rewrite /sem_prod.
 + move=> [] //= _ id_semi [|a1 args] [|v1 vs] //= _ -> _ /=.
   by apply: compile_lvals Hm' Hlomeqv Hdest id_check_dest.

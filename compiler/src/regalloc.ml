@@ -413,8 +413,10 @@ struct
         | ADImplicit v -> 
           mallocate_one e (translate_var (Asmgen.var_of_implicit v)) acc
         | ADExplicit (_, Some r) -> 
-          mallocate_one e (translate_var (X86_variables..var_of_register r)) acc
+          mallocate_one e (translate_var (X86_variables.var_of_register r)) acc
         | ADExplicit (_, None) -> acc) a id.i_in es
+
+end
 
 type kind = Word | Vector | Unknown of ty
 
