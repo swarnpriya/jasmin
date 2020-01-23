@@ -33,7 +33,7 @@ type env = {
     model : model;
     alls : Ss.t;
     vars : (string * bool) Mv.t;  (* true means option type *)
-    glob : (string * Type.stype) Ms.t;
+    glob : (string * ty) Ms.t;
     funs : (string * (ty list * ty list)) Mf.t;  
     arrsz  : Sint.t;
     warrsz : Sint.t;
@@ -72,7 +72,7 @@ let rec read_mem_i s i =
   | Cassgn (x, _, _, e) -> read_mem_lval x || read_mem_e e
   | Copn (xs, _, _, es) -> read_mem_lvals xs || read_mem_es es
   | Cif (e, c1, c2)     -> read_mem_e e || read_mem_c s c1 || read_mem_c s c2
-  | Cwhile (c1, e, c2)  -> read_mem_c s c1 || read_mem_e e || read_mem_c s c2
+  | Cwhile (_, c1, e, c2)  -> read_mem_c s c1 || read_mem_e e || read_mem_c s c2
   | Ccall (_, xs, fn, es) -> read_mem_lvals xs || Sf.mem fn s || read_mem_es es
   | Cfor (_, (_, e1, e2), c) -> read_mem_e e1 || read_mem_e e2 || read_mem_c s c
 
@@ -85,7 +85,7 @@ let rec write_mem_i s i =
   | Cassgn (x, _, _, _)  -> write_mem_lval x 
   | Copn (xs, _, _, _)   -> write_mem_lvals xs 
   | Cif (_, c1, c2)      -> write_mem_c s c1 ||write_mem_c s c2
-  | Cwhile (c1, _, c2)   -> write_mem_c s c1 ||write_mem_c s c2
+  | Cwhile (_, c1, _, c2)   -> write_mem_c s c1 ||write_mem_c s c2
   | Ccall (_, xs, fn, _) -> write_mem_lvals xs || Sf.mem fn s 
   | Cfor (_, _, c)       -> write_mem_c s c 
 
@@ -101,19 +101,17 @@ let init_use fs =
 
 (* ------------------------------------------------------------------- *)
 let add64 x e = 
-  (Type.Coq_sword U64, Papp2 (E.Oadd ( E.Op_w U64), Pvar x, e))
+  (u64, Papp2 (E.Oadd ( E.Op_w U64), Pvar x, e))
 
-type leakage = 
-  | LK_MemAccess of expr list
-  | LK_Branch of expr
-  | LK_For of expr * expr
-  | LK_unit of expr * expr
+let int_of_word ws e = 
+  Papp1 (E.Oint_of_word ws, e)
 
 let rec leaks_e_rec leaks e =
   match e with
   | Pconst _ | Pbool _ | Parr_init _ |Pvar _ | Pglobal _ -> leaks
-  | Pload (_,x,e) -> snd (add64 x e) :: leaks_e_rec leaks e
-  | Papp1 (_, e) | Pget (_,_, e) -> leaks_e_rec leaks e
+  | Pload (_,x,e) -> leaks_e_rec (int_of_word U64 (snd (add64 x e)) :: leaks) e
+  | Pget (_,_, e) -> leaks_e_rec (e::leaks) e 
+  | Papp1 (_, e) -> leaks_e_rec leaks e
   | Papp2 (_, e1, e2) -> leaks_e_rec (leaks_e_rec leaks e1) e2
   | PappN (_, es) -> leaks_es_rec leaks es
   | Pif  (_, e1, e2, e3) -> leaks_e_rec (leaks_e_rec (leaks_e_rec leaks e1) e2) e3
@@ -124,8 +122,8 @@ let leaks_es es = leaks_es_rec [] es
 
 let leaks_lval = function
   | Lnone _ | Lvar _ -> []
-  | Laset (_,_, e) -> leaks_e_rec [] e
-  | Lmem (_, x,e) -> leaks_e_rec [snd (add64 x e)] e
+  | Laset (_,_, e) -> leaks_e_rec [e] e
+  | Lmem (_, x,e) -> leaks_e_rec [int_of_word U64 (snd (add64 x e))] e
 
 (* FIXME: generate this list automatically *)
 let ec_keyword = 
@@ -268,7 +266,8 @@ let ec_keyword =
  ; "last"
  ; "do"
  ; "strict"
- ; "expect" ]
+ ; "expect"
+ ; "interleave" ]
 
 let internal_keyword = 
   [ "safe"; "leakages"]
@@ -328,6 +327,13 @@ let ty_lval = function
   | Lmem (ws,_,_) -> Bty (U ws)
   | Laset(ws, _, _) -> Bty (U ws)
 
+let pp_ty _option fmt ty = 
+  match ty with
+  | Bty Bool -> Format.fprintf fmt "bool"
+  | Bty Int  -> Format.fprintf fmt "int"
+  | Bty (U ws) -> pp_sz_t fmt ws
+  | Arr(ws,n) -> Format.fprintf fmt "%a Array%i.t" pp_sz_t ws n
+
 let add_aux env tys = 
   let tbl = Hashtbl.create 10 in
   let do1 env ty = 
@@ -365,7 +371,7 @@ let add_glob env x ws =
   let ty = Bty (U ws) in
   { env with
     alls = Ss.add s env.alls;
-    glob = Ms.add x (s,Conv.cty_of_ty ty) env.glob }
+    glob = Ms.add x (s, ty) env.glob }
 
 let pp_oget option pp = 
   pp_maybe option (pp_enclose ~pre:"(oget " ~post:")") pp
@@ -455,42 +461,33 @@ let pp_op2 fmt = function
   
 
 let in_ty_op1 op =
-  fst (E.type_of_op1 op)
+  Conv.ty_of_cty (fst  (E.type_of_op1 op))
 
 let in_ty_op2 op =
-  fst (E.type_of_op2 op)
+  let t1, t2 = fst (E.type_of_op2 op) in
+  Conv.ty_of_cty t1, Conv.ty_of_cty t2
 
 let out_ty_op1 op =
-  snd (E.type_of_op1 op)
+  Conv.ty_of_cty (snd (E.type_of_op1 op))
 
 let out_ty_op2 op =
-  snd (E.type_of_op2 op)
+  Conv.ty_of_cty (snd (E.type_of_op2 op))
 
 let out_ty_opN op =
-  snd (E.type_of_opN op)
-
-let min_ty ty1 ty2 =
-  match ty1, ty2 with
-  | Coq_sword sz1, Coq_sword sz2 -> 
-    Coq_sword (Utils0.cmp_min wsize_cmp sz1 sz2)
-  | Coq_sint, Coq_sint -> Coq_sint
-  | Coq_sbool, Coq_sbool -> Coq_sbool
-  | Coq_sarr p1, Coq_sarr p2 -> 
-    assert (p1 = p2); ty1
-  | _, _ -> assert false
+  Conv.ty_of_cty (snd (E.type_of_opN op))
 
 let rec ty_expr = function
-  | Pconst _ -> Coq_sint
-  | Pbool _ -> Coq_sbool
-  | Parr_init n -> Coq_sarr (Conv.pos_of_bi n)
-  | Pvar x -> Conv.cty_of_ty x.L.pl_desc.v_ty
-  | Pglobal (sz,_) -> Coq_sword sz
-  | Pload (sz,_,_) -> Coq_sword sz
-  | Pget  (sz,_,_) -> Coq_sword sz
+  | Pconst _       -> tint 
+  | Pbool _        -> tbool
+  | Parr_init _    -> assert false 
+  | Pvar x         -> x.L.pl_desc.v_ty
+  | Pglobal (sz,_) -> tu sz
+  | Pload (sz,_,_) -> tu sz
+  | Pget  (sz,_,_) -> tu sz
   | Papp1 (op,_)   -> out_ty_op1 op
   | Papp2 (op,_,_) -> out_ty_op2 op
   | PappN (op, _)  -> out_ty_opN op
-  | Pif (ty,_,_,_) -> Conv.cty_of_ty ty
+  | Pif (ty,_,_,_) -> ty
 
 let wsize = function
   | Coq_sword sz -> sz
@@ -499,7 +496,7 @@ let wsize = function
 let pp_cast pp fmt (ty,ety,e) = 
   if ety = ty then pp fmt e 
   else 
-    Format.fprintf fmt "(%a %a)" pp_zeroext (wsize ety, wsize ty) pp e 
+    Format.fprintf fmt "(%a %a)" pp_zeroext (ws_of_ty ety, ws_of_ty ty) pp e 
 
 let check_array env x = 
   match (L.unloc x).v_ty with
@@ -533,7 +530,7 @@ let rec pp_expr env fmt (e:expr) =
     pp_ovar env fmt (L.unloc x)
 
   | Pglobal(sz, x) -> 
-    pp_cast (pp_glob env) fmt (Coq_sword sz, ty_glob env x, x)
+    pp_cast (pp_glob env) fmt (tu sz, ty_glob env x, x)
 
   | Pget(ws, x, e) -> 
     assert (check_array env x);
@@ -550,7 +547,7 @@ let rec pp_expr env fmt (e:expr) =
     pp_oget option pp fmt (x,e)
 
   | Pload (sz, x, e) -> 
-    Format.fprintf fmt "(loadW%a Glob.mem %a)" 
+    Format.fprintf fmt "(loadW%a Glob.mem (W64.to_uint %a))" 
       pp_size sz (pp_wcast env) (add64 x e)
 
   | Papp1 (op1, e) -> 
@@ -562,8 +559,20 @@ let rec pp_expr env fmt (e:expr) =
     Format.fprintf fmt "(%a %a %a)"
       (pp_wcast env) te1 pp_op2 op2 (pp_wcast env) te2
 
-  | PappN (_op, _es) ->
-    assert false (* TODO: nary *)
+  | PappN (op, es) ->
+    (* FIXME *)
+    begin match op with
+    | Opack (ws, we) ->
+      let i = int_of_pe we in
+      let rec aux fmt es = 
+        match es with
+        | [] -> assert false
+        | [e] -> Format.fprintf fmt "%a" (pp_expr env) e
+        | e::es -> 
+          Format.fprintf fmt "@[(%a %%%% 2^%i +@ 2^%i * %a)@]"
+            (pp_expr env) e i i aux es in
+      Format.fprintf fmt "(W%a.of_int %a)" pp_size ws aux (List.rev es)
+    end
 
   | Pif(_,e1,et,ef) -> 
     let ty = ty_expr e in
@@ -575,13 +584,6 @@ and pp_wcast env fmt (ty, e) =
 
 let pp_option option pp = 
   pp_maybe option (pp_enclose ~pre:"" ~post:" option") pp
-
-let pp_ty _option fmt ty = 
-  match ty with
-  | Bty Bool -> Format.fprintf fmt "bool"
-  | Bty Int  -> Format.fprintf fmt "int"
-  | Bty (U ws) -> pp_sz_t fmt ws
-  | Arr(ws,n) -> Format.fprintf fmt "%a Array%i.t" pp_sz_t ws n
 
 let pp_vdecl env option fmt x = 
   Format.fprintf fmt "%a:%a" 
@@ -625,12 +627,12 @@ let pp_opn fmt op =
   Format.fprintf fmt "%s" s
 
 let pp_lval1 env pp_e fmt (lv, (ety, e)) = 
-  let lty = Conv.cty_of_ty (ty_lval lv) in
+  let lty = ty_lval lv in
   let pp_e fmt e = pp_e fmt (lty, ety, e) in
   match lv with 
   | Lnone _ -> assert false
   | Lmem(ws, x, e1) -> 
-    Format.fprintf fmt "@[Glob.mem <-@ storeW%a Glob.mem %a %a;@]" pp_size ws
+    Format.fprintf fmt "@[Glob.mem <-@ storeW%a Glob.mem (W64.to_uint %a) %a;@]" pp_size ws
       (pp_wcast env) (add64 x e1) pp_e e
   | Lvar x  -> 
     Format.fprintf fmt "@[%a <-@ %a;@]" (pp_var env) (L.unloc x) pp_e e
@@ -643,9 +645,10 @@ let pp_lval1 env pp_e fmt (lv, (ety, e)) =
         (pp_var env) x (pp_expr env) e1 pp_e e
     else
       let nws = n * int_of_ws xws in
+      let nws8 = nws / 8 in
       Format.fprintf fmt 
         "@[%a =@ @[Array%i.init@ (WArray%i.get%i (WArray%i.set%i %a %a %a));@]@]"
-        (pp_var env) x n nws (int_of_ws xws) nws (int_of_ws ws)
+        (pp_var env) x n nws8 (int_of_ws xws) nws8 (int_of_ws ws)
         (pp_initi env) (x, n, xws) (pp_expr env) e1 pp_e e
  
 let pp_lval env fmt = function
@@ -681,7 +684,7 @@ module Normal = struct
   let rec init_aux_i env i = 
     match i.i_desc with
     | Cassgn _ -> env
-    | Cif(_, c1, c2) | Cwhile(c1, _, c2) -> init_aux (init_aux env c1) c2
+    | Cif(_, c1, c2) | Cwhile(_, c1, _, c2) -> init_aux (init_aux env c1) c2
     | Cfor(_,_,c) -> init_aux (add_aux env [tint]) c
     | Copn (lvs, _, op, _) -> 
       if List.length lvs = 1 then env 
@@ -704,11 +707,11 @@ module Normal = struct
     Format.fprintf fmt "@ %a" (pp_lval1 env (pp_cast pp_string)) (lv, (ety,aux))
 
   let pp_call env fmt lvs etys pp a = 
-    let ltys = List.map (fun lv -> Conv.cty_of_ty (ty_lval lv)) lvs in
+    let ltys = List.map (fun lv -> ty_lval lv) lvs in
     if check_lvals lvs && ltys = etys then 
       Format.fprintf fmt "@[%a %a;@]" (pp_lvals env) lvs pp a
     else
-      let auxs = get_aux env (List.map Conv.ty_of_cty etys) in
+      let auxs = get_aux env etys in
       Format.fprintf fmt "@[%a %a;@]" pp_aux_lvs auxs pp a;
       let tyauxs = List.combine etys auxs in
       List.iter2 (pp_assgn_i env fmt) lvs tyauxs
@@ -723,7 +726,7 @@ module Normal = struct
       pp_lval1 env pp_e fmt (lv , (ty_expr e, e))
 
     | Copn(lvs, _, op, es) ->
-      let otys,itys = E.sopn_tout op, E.sopn_tin op in
+      let otys,itys = List.map Conv.ty_of_cty (E.sopn_tout op), List.map Conv.ty_of_cty (E.sopn_tin op) in
       let pp_e fmt (op,es) = 
         Format.fprintf fmt "%a %a" pp_opn op 
           (pp_list "@ " (pp_wcast env)) (List.combine itys es) in
@@ -737,8 +740,6 @@ module Normal = struct
         
     | Ccall(_, lvs, f, es) ->
       let otys, itys = get_funtype env f in
-      let otys = List.map Conv.cty_of_ty otys in
-      let itys = List.map Conv.cty_of_ty itys in
       let pp_args fmt es = 
         pp_list ",@ " (pp_wcast env) fmt (List.combine itys es) in
       if lvs = [] then 
@@ -752,7 +753,7 @@ module Normal = struct
       Format.fprintf fmt "@[<v>if (%a) {@   %a@ } else {@   %a@ }@]"
         (pp_expr env) e (pp_cmd env) c1 (pp_cmd env) c2
       
-    | Cwhile(c1, e,c2) ->
+    | Cwhile(_, c1, e,c2) ->
       Format.fprintf fmt "@[<v>%a@ while (%a) {@   %a@ }@]"
         (pp_cmd env) c1 (pp_expr env) e (pp_cmd env) (c2@c1)
       
@@ -932,7 +933,7 @@ module Leak = struct
     | Ccall(_, lvs, _, _) -> 
       if lvs = [] then env 
       else add_aux env (List.map ty_lval lvs)
-    | Cif(_, c1, c2) | Cwhile(c1, _, c2) -> init_aux (init_aux env c1) c2
+    | Cif(_, c1, c2) | Cwhile(_, c1, _, c2) -> init_aux (init_aux env c1) c2
     | Cfor(_,_,c) -> 
       if for_safety env then
         init_aux (add_aux env [tint; tint]) c
@@ -966,7 +967,7 @@ module Leak = struct
     pp_lval1 env pp_e fmt (lv, (ety,aux))
 
   let pp_call env fmt lvs etys pp a = 
-    let auxs = get_aux env (List.map Conv.ty_of_cty etys) in
+    let auxs = get_aux env etys in
     Format.fprintf fmt "@[%a %a;@]" pp_aux_lvs auxs pp a;
     let tyauxs = List.combine etys auxs in
     List.iter2 (pp_assgn_i env fmt) lvs tyauxs
@@ -982,7 +983,7 @@ module Leak = struct
       pp_call env fmt [lv] [ty_expr e] pp e 
 
     | Copn(lvs, _, op, es) ->
-      let otys,itys = E.sopn_tout op, E.sopn_tin op in
+      let otys,itys = List.map Conv.ty_of_cty (E.sopn_tout op), List.map Conv.ty_of_cty (E.sopn_tin op) in
       let pp fmt (op, es) = 
         Format.fprintf fmt "<- %a %a" pp_opn op 
           (pp_list "@ " (pp_wcast env)) (List.combine itys es) in
@@ -991,8 +992,6 @@ module Leak = struct
       
     | Ccall(_, lvs, f, es) ->
       let otys, itys = get_funtype env f in
-      let otys = List.map Conv.cty_of_ty otys in
-      let itys = List.map Conv.cty_of_ty itys in
       let pp_args fmt es = 
         pp_list ",@ " (pp_wcast env) fmt (List.combine itys es) in
       pp_leaks_es env fmt es;
@@ -1008,7 +1007,7 @@ module Leak = struct
       Format.fprintf fmt "@[<v>if (%a) {@   %a@ } else {@   %a@ }@]"
         (pp_expr env) e (pp_cmd env) c1 (pp_cmd env) c2
       
-    | Cwhile(c1, e,c2) ->
+    | Cwhile(_, c1, e,c2) ->
       let pp_leak fmt e = 
         Format.fprintf fmt "@ %a" (pp_leaks_if env) e in
       Format.fprintf fmt "@[<v>%a%a@ while (%a) {@   %a%a@ }@]"
@@ -1109,7 +1108,7 @@ let pp_array_decl i =
   let file = Format.sprintf "Array%i.ec" i in
   let out = open_out file in
   let fmt = Format.formatter_of_out_channel out in
-  Format.fprintf fmt "@[<v>require import Jasmin_array.@ @ ";
+  Format.fprintf fmt "@[<v>from Jasmin require import JArray.@ @ ";
   Format.fprintf fmt "clone export PolyArray as Array%i  with op size <- %i.@]@." i i;
   close_out out
 
@@ -1117,7 +1116,7 @@ let pp_warray_decl i =
   let file = Format.sprintf "WArray%i.ec" i in
   let out = open_out file in
   let fmt = Format.formatter_of_out_channel out in
-  Format.fprintf fmt "@[<v>require import Jasmin_word_array.@ @ ";
+  Format.fprintf fmt "@[<v>from Jasmin require import JWord_array.@ @ ";
   Format.fprintf fmt "clone export WArray as WArray%i  with op size <- %i.@]@." i i;
   close_out out
 
@@ -1147,7 +1146,9 @@ let pp_prog fmt model globs funcs =
     | Normal -> () in
 
   Format.fprintf fmt 
-     "@[<v>require import List Jasmin_model Int IntDiv CoreMap.@ %a%a@ %a@ @ module M = {@   @[<v>%a%a@]@ }.@ @]@." 
+     "@[<v>%s.@ %s.@ @ %a%a@ %a@ @ module M = {@   @[<v>%a%a@]@ }.@ @]@." 
+    "require import List Int IntExtra IntDiv CoreMap"
+    "from Jasmin require import JModel"
     (pp_arrays "Array") env.arrsz
     (pp_arrays "WArray") env.warrsz
     (pp_list "@ @ " (pp_glob_decl env)) globs 
@@ -1165,7 +1166,7 @@ and used_func_i used i =
   | Cassgn _ | Copn _ -> used
   | Cif (_,c1,c2)     -> used_func_c (used_func_c used c1) c2
   | Cfor(_,_,c)       -> used_func_c used c
-  | Cwhile(c1,_,c2)   -> used_func_c (used_func_c used c1) c2
+  | Cwhile(_,c1,_,c2)   -> used_func_c (used_func_c used c1) c2
   | Ccall (_,_,f,_)   -> Ss.add f.fn_name used
 
 let extract fmt model ((globs,funcs):'a prog) tokeep = 

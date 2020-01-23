@@ -31,8 +31,7 @@ Definition get_loarg ii (outx: seq lval) (inx:seq pexpr) (d:source_position) : c
   match d with
   | InArgs x => o2e _ (onth inx x)
   | InRes  x => o2e _ (onth outx x) >>= pexpr_of_lval ii
-  end
-.
+  end.
 
 Definition nmap (T:Type) := nat -> option T.
 Definition nget (T:Type) (m:nmap T) (n:nat) := m n.

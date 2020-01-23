@@ -714,9 +714,9 @@ Fixpoint lower_i (i:instr) : cmd :=
        map (MkI ii) (rcons pre (Cif e (lower_cmd lower_i c1) (lower_cmd lower_i c2)))
   | Cfor v (d, lo, hi) c =>
      [:: MkI ii (Cfor v (d, lo, hi) (lower_cmd lower_i c))]
-  | Cwhile c e c' =>
+  | Cwhile a c e c' =>
      let '(pre, e) := lower_condition xH e in
-       map (MkI ii) [:: Cwhile ((lower_cmd lower_i c) ++ map (MkI xH) pre) e (lower_cmd lower_i c')]
+       map (MkI ii) [:: Cwhile a ((lower_cmd lower_i c) ++ map (MkI xH) pre) e (lower_cmd lower_i c')]
   | _ =>   map (MkI ii) [:: ir]
   end.
 

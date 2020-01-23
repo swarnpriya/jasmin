@@ -363,7 +363,7 @@ Section PROOF.
 
   Local Lemma Hwhile_true : sem_Ind_while_true p Pc Pi_r.
   Proof.
-    move=> s1 s2 s3 s4 c e c' Hsc Hc H Hsc' Hc' Hsw Hw ii /= sv0.
+    move=> s1 s2 s3 s4 a c e c' Hsc Hc H Hsc' Hc' Hsw Hw ii /= sv0.
     set dobody := (X in wloop X).
     case Hloop: wloop => [[sv1 [c1 c1']] /=|//].
     move: (wloopP Hloop) => [sv2 [sv2' [H1 [H2 H2']]]] Hwf vm1' Hvm.
@@ -389,7 +389,7 @@ Section PROOF.
 
   Local Lemma Hwhile_false : sem_Ind_while_false p Pc Pi_r.
   Proof.
-    move=> s1 s2 c e c' Hsc Hc H ii sv0 /=.
+    move=> s1 s2 a c e c' Hsc Hc H ii sv0 /=.
     set dobody := (X in wloop X).
     case Hloop: wloop => [[sv1 [c1 c1']] /=|//] Hwf vm1' Hvm.
     move: (wloopP Hloop) => [sv2 [sv2' [H1 [H2 H2']]]].
@@ -402,7 +402,7 @@ Section PROOF.
     exists vm2';split.
     + apply: eq_onI Hvm2'1;rewrite /sv4 read_eE;SvD.fsetdec.
     apply sem_seq1;constructor.
-    apply: (Ewhile_false _ Hvm2'2).
+    apply: (Ewhile_false _ _ Hvm2'2).
     have Hvm': vm2' =[read_e_rec sv0 e] (evm s2).
     + by apply: eq_onS; apply: eq_onI Hvm2'1;rewrite /sv4 !read_eE; SvD.fsetdec.
     by rewrite -eq_globs (read_e_eq_on _ _ Hvm');case: (s2) H.

@@ -224,14 +224,8 @@ Variant compiled_variable :=
 
 Scheme Equality for compiled_variable.
 
-Lemma compiled_variable_axiom : Equality.axiom compiled_variable_beq.
-Proof.
-  move=> x y;apply:(iffP idP).
-  + by apply: internal_compiled_variable_dec_bl.
-  by apply: internal_compiled_variable_dec_lb.
-Qed.
+Definition compiled_variable_eqMixin := comparableMixin compiled_variable_eq_dec.
 
-Definition compiled_variable_eqMixin := Equality.Mixin compiled_variable_axiom.
 Canonical compiled_variable_eqType := EqType compiled_variable compiled_variable_eqMixin.
 
 Definition compile_var (v: var) : option compiled_variable :=

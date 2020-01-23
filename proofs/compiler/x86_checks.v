@@ -179,6 +179,14 @@ Definition rm_imm_near_eq (sz: wsize) a b :=
   | _, _ => false
   end.
 
+Definition r_r_rm (sz:wsize) a b c := 
+  match a, b, c with
+  | Reg _, Reg _, Reg _ => true
+  | Reg _, Reg _, Adr _ => true
+  | Reg _, Reg _, Glob _ => true
+  | _, _, _ => false
+  end.
+ 
 Definition rm_imm8 (sz: wsize) a b :=
   match a, b with
   | Reg _, Imm U8 _ => true
@@ -367,6 +375,12 @@ apply_2 sz [:: r_rm_8 ] args.
 Definition add_sub_adc_sbb sz (args: list asm_arg) :=
 apply_2 sz [:: rm_imm_near_eq; rm_imm_8 ; rm_r ; r_rm ] args.
 
+Definition adcx sz (args: list asm_arg) := 
+apply_2 sz [:: r_rm] args.
+
+Definition mulx sz (args: list asm_arg) := 
+apply_3 sz [:: r_r_rm] args.
+  
 Definition neg_inc_dec_not sz (args: list asm_arg) :=
 apply_1 sz [:: rm ] args.
 

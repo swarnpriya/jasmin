@@ -43,6 +43,7 @@ let pos_of_int i = pos_of_bi (B.of_int i)
 let int_of_pos p = B.to_int (bi_of_pos p)
 
 let int64_of_bi bi = Word0.wrepr W.U64 (z_of_bi bi)
+let int32_of_bi bi = Word0.wrepr W.U32 (z_of_bi bi)
 
 let bi_of_int256 z  = bi_of_z (Word0.wsigned W.U256 z)
 let bi_of_int128 z  = bi_of_z (Word0.wsigned W.U128 z)
@@ -331,8 +332,8 @@ and cinstr_r_of_instr_r tbl p i tl =
     let c = cstmt_of_stmt tbl c [] in
     let ir = C.Cfor(x,d,c) in
     C.MkI(p, ir) :: tl
-  | Cwhile(c, e, c') ->
-    let ir = C.Cwhile(cstmt_of_stmt tbl c [], cexpr_of_expr tbl e,
+  | Cwhile(a, c, e, c') ->
+    let ir = C.Cwhile(a, cstmt_of_stmt tbl c [], cexpr_of_expr tbl e,
                       cstmt_of_stmt tbl c' []) in
     C.MkI(p,ir) :: tl
   | Ccall(ii, x, f, e) ->
@@ -370,8 +371,8 @@ and instr_r_of_cinstr_r tbl = function
     let c = stmt_of_cstmt tbl c in
     Cfor(x,d,c)
 
-  | Cwhile(c, e, c') ->
-    Cwhile(stmt_of_cstmt tbl c, expr_of_cexpr tbl e, stmt_of_cstmt tbl c')
+  | Cwhile(a, c, e, c') ->
+    Cwhile(a, stmt_of_cstmt tbl c, expr_of_cexpr tbl e, stmt_of_cstmt tbl c')
 
   | Ccall(ii, x, f, e) ->
     let ii = ii_of_cii ii in

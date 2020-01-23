@@ -74,8 +74,8 @@ let rec arrexp_i tbl i =
     | Cif(e,c1,c2)  -> Cif(arrexp_e tbl e, arrexp_c tbl c1, arrexp_c tbl c2)
     | Cfor(i,(d,e1,e2),c) ->
       Cfor(i, (d, arrexp_e tbl e1, arrexp_e tbl e2), arrexp_c tbl c)
-    | Cwhile(c, e, c') ->
-      Cwhile(arrexp_c tbl c, arrexp_e tbl e, arrexp_c tbl c')
+    | Cwhile(a, c, e, c') ->
+      Cwhile(a, arrexp_c tbl c, arrexp_e tbl e, arrexp_c tbl c')
     | Ccall(ii,x,f,e) -> Ccall(ii, arrexp_lvs tbl x, f, arrexp_es tbl e)
   in
   { i with i_desc }
@@ -124,7 +124,7 @@ let rec array_acces_i tbl i =
   | Cassgn (x, _, _, e) -> array_access_lv (array_access_e tbl e) x
   | Copn(xs,_,_,es) | Ccall(_,xs,_,es) -> 
     array_access_lvs (array_access_es tbl es) xs
-  | Cif(e, c1, c2) | Cwhile(c1,e,c2)  -> 
+  | Cif(e, c1, c2) | Cwhile(_, c1, e, c2)  -> 
     array_access_c (array_access_c (array_access_e tbl e) c1) c2
   | Cfor(_,(_,e1,e2), c) ->
     array_access_c (array_access_e (array_access_e tbl e1) e2) c
@@ -133,20 +133,26 @@ and array_access_c tbl c =
   List.fold_left array_acces_i tbl c
 
 let init_stk fc =
+  let fv = vars_fc fc in
+  let allocatable = Regalloc.X64.allocatables in
+  let free_regs = Sv.diff allocatable fv in
   let vars = Sv.elements (Sv.filter is_stack_var (vars_fc fc)) in
+  if vars == [] then 
+    [], 0, Sv.inter Regalloc.X64.callee_save fv, None
+  else
+
   let tbl = array_access_c Mv.empty fc.f_body in
-  let size v =
+  let get_size v =
      match v.v_ty with
      | Bty (U ws)  -> let s = size_of_ws ws in v, s, s
      | Arr (ws', n) -> 
        let ws = try Mv.find v tbl with Not_found -> assert false in
        v, size_of_ws ws, arr_size ws' n
      | _            -> assert false in
-  let vars = List.rev_map size vars in
+  let vars = List.rev_map get_size vars in
   let cmp (_, s1, _) (_, s2, _) = s2 - s1 in
-  let vars = List.sort cmp vars in 
-  let size = ref 0 in
 
+  let size = ref 0 in  
   (* FIXME: optimize this 
      if pos mod s <> 0 then a hole appear in the stack,
      in this case we can try to fill the hole with a variable 
@@ -159,8 +165,26 @@ let init_stk fc =
       else (pos/s + 1) * s in
     size := pos + n;
     (v,pos) in
-  let alloc = List.map init_var vars in
-  alloc, !size
+
+  if Sv.is_empty free_regs then
+    let saved_stack = V.mk "saved_stack" Stack (tu uptr) L._dummy in
+    let vars = get_size saved_stack :: vars in
+    let vars = List.sort cmp vars in 
+    let alloc = List.map init_var vars in
+    let is_saved_stack (v, _) = V.equal v saved_stack in
+    let (_, p_stack) = List.find is_saved_stack alloc in
+    let alloc = List.filter (fun p -> not (is_saved_stack p)) alloc in
+    let to_save = Sv.inter Regalloc.X64.callee_save fv in
+    alloc, !size, to_save, Some (`InStack p_stack)
+  else
+    let r = 
+      let s = Sv.diff free_regs Regalloc.X64.callee_save in
+      if Sv.is_empty s then Sv.any free_regs
+      else Sv.any s in
+    let vars = List.sort cmp vars in 
+    let alloc = List.map init_var vars in
+    let to_save = Sv.inter Regalloc.X64.callee_save (Sv.add r fv) in
+    alloc, !size, to_save, Some (`InReg r)
 
 let vstack = Regalloc.X64.rsp
 
@@ -170,6 +194,5 @@ let check_stack_var =
 let stk_alloc_func fc =
   List.iter (fun v -> check_stack_var "function argument" (L.mk_loc L._dummy v)) fc.f_args;
   List.iter (check_stack_var "function return") fc.f_ret;
-  let alloc, sz = init_stk fc in
-  alloc, sz 
+  init_stk fc 
 

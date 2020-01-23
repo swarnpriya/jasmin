@@ -23,6 +23,7 @@ val z_of_bi : Bigint.zint -> BinNums.coq_Z
 val bi_of_z : BinNums.coq_Z -> Bigint.zint
 
 val int64_of_bi : Bigint.zint -> Obj.t
+val int32_of_bi : Bigint.zint -> Obj.t
 val bi_of_int256 : Obj.t -> Bigint.zint
 val bi_of_int128 : Obj.t -> Bigint.zint
 val bi_of_int64 : Obj.t -> Bigint.zint

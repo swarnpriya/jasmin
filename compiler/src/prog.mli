@@ -104,7 +104,7 @@ type ('ty,'info) ginstr_r =
   | Copn   of 'ty glvals * assgn_tag * E.sopn * 'ty gexprs
   | Cif    of 'ty gexpr * ('ty,'info) gstmt * ('ty,'info) gstmt
   | Cfor   of 'ty gvar_i * 'ty grange * ('ty,'info) gstmt
-  | Cwhile of ('ty,'info) gstmt * 'ty gexpr * ('ty,'info) gstmt
+  | Cwhile of E.align * ('ty,'info) gstmt * 'ty gexpr * ('ty,'info) gstmt
   | Ccall  of inline_info * 'ty glvals * funname * 'ty gexprs
 
 and ('ty,'info) ginstr = {
@@ -250,9 +250,10 @@ val locals  : 'info func -> Sv.t
 (* -------------------------------------------------------------------- *)
 (* Functions on types                                                   *)
 
-val int_of_ws : wsize -> int
+val int_of_ws  : wsize -> int
 val size_of_ws : wsize -> int
-val int_of_pe : pelem -> int
+val uptr       : wsize 
+val int_of_pe  : pelem -> int
 
 val int_of_velem : velem -> int 
 

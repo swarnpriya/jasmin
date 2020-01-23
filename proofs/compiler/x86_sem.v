@@ -39,6 +39,7 @@ Unset Printing Implicit Defensive.
 
 
 Variant asm : Type :=
+| ALIGN
 | LABEL of label
   (* Jumps *)
 | JMP    of label          (* Unconditional jump *)
@@ -52,6 +53,11 @@ Record x86_mem : Type := X86Mem {
   xxreg: xregmap;
   xrf  : rflagmap;
 }.
+
+(* -------------------------------------------------------------------- *)
+(** Compatibility with ssreflect 1.7. *)
+Definition comparableMixin :=
+  ltac:( exact: comparableMixin || exact: comparableClass ).
 
 Record x86_state := X86State {
   xm   :> x86_mem;
@@ -136,7 +142,6 @@ Definition eval_Jcc lbl ct (s: x86_state) : x86_result_state :=
 (* -------------------------------------------------------------------- *)
 Definition st_get_rflag (rf : rflag) (s : x86_mem) :=
   if s.(xrf) rf is Def b then ok b else undef_error.
-
 
 (* -------------------------------------------------------------------- *)
 
@@ -344,6 +349,7 @@ Definition eval_op o args m :=
 
 Definition eval_instr (i : asm) (s: x86_state) : exec x86_state :=
   match i with
+  | ALIGN        
   | LABEL _      => ok (st_write_ip (xip s).+1 s)
   | JMP   lbl    => eval_JMP lbl s
   | Jcc   lbl ct => eval_Jcc lbl ct s
@@ -370,13 +376,18 @@ Definition x86sem : relation x86_state := clos_refl_trans x86_state x86sem1.
 End GLOB_DEFS.
 
 (* -------------------------------------------------------------------- *)
-(* TODO A METTRE DANS X86_DECL *)
+Variant saved_stack := 
+| SavedStackNone 
+| SavedStackReg of register  
+| SavedStackStk of Z.
+
 Record xfundef := XFundef {
  xfd_stk_size : Z;
  xfd_nstk : register;
  xfd_arg  : seq register;
  xfd_body : seq asm;
  xfd_res  : seq register;
+ xfd_extra : list register * saved_stack;
 }.
 
 Definition xprog : Type :=

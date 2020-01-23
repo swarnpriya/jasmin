@@ -721,12 +721,9 @@ let rec tt_expr ?(mode=`AllVar) (env : Env.env) pe =
     | `Glob (x, ty) -> P.Pglobal (tt_as_word (lc, ty), x), ty
     end
 
-  | S.PEFetch (ct, ({ pl_loc = xlc } as x), po) ->
-    let x = tt_var mode env x in
-    check_ty_u64 ~loc:xlc x.P.v_ty;
-    let e = tt_expr_cast64 ~mode env po in
-    let ct = ct |> omap_dfl tt_ws W.U64 in
-    P.Pload (ct, L.mk_loc xlc x, e), P.Bty (P.U ct)
+  | S.PEFetch me ->
+    let ct, x, e = tt_mem_access ~mode env me in
+    P.Pload (ct, x, e), P.Bty (P.U ct)
 
   | S.PEGet (ws, ({ L.pl_loc = xlc } as x), pi) ->
     let x  = tt_var mode env x in
@@ -798,6 +795,21 @@ and tt_expr_cast64 ?(mode=`AllVar) (env : Env.env) pe =
   let e, ty = tt_expr ~mode env pe in
   cast (L.loc pe) e ty P.u64
 
+and tt_mem_access ?(mode=`AllVar) (env : Env.env) 
+           (ct, ({ L.pl_loc = xlc } as x), e) = 
+  let x = tt_var mode env x in
+  check_ty_u64 ~loc:xlc x.P.v_ty;
+  let e = 
+    match e with
+    | None -> P.Papp1 (Oword_of_int U64, P.Pconst (P.B.zero)) 
+    | Some(k, e) -> 
+      let e = tt_expr_cast64 ~mode env e in
+      match k with
+      | `Add -> e
+      | `Sub -> Papp1(E.Oneg (E.Op_w U64), e) in
+  let ct = ct |> omap_dfl tt_ws U64 in
+  (ct,L.mk_loc xlc x,e)
+
 (* -------------------------------------------------------------------- *)
 and tt_type (env : Env.env) (pty : S.ptype) : P.pty =
   match L.unloc pty with
@@ -818,7 +830,6 @@ let tt_expr_ty (env : Env.env) pe ty =
 
 let tt_expr_bool env pe = tt_expr_ty env pe P.tbool
 let tt_expr_int  env pe = tt_expr_ty env pe P.tint
-
 
 (* -------------------------------------------------------------------- *)
 let tt_vardecl (env : Env.env) ((sto, xty), x) =
@@ -867,12 +878,9 @@ let tt_lvalue (env : Env.env) { L.pl_desc = pl; L.pl_loc = loc; } =
     check_ty_eq ~loc:(L.loc pi) ~from:ity ~to_:P.tint;
     loc, (fun _ -> P.Laset (ws, L.mk_loc xlc x, i)), Some ty 
 
-  | S.PLMem (ct, ({ pl_loc = xlc } as x), po) ->
-    let x = tt_var `AllVar env x in
-    check_ty_u64 ~loc:xlc x.P.v_ty;
-    let e = tt_expr_cast64 ~mode:`AllVar env po in
-    let ct = ct |> omap_dfl tt_ws W.U64 in
-    loc, (fun _ -> P.Lmem (ct, L.mk_loc xlc x, e)), Some (P.Bty (P.U ct))
+  | S.PLMem me ->
+    let ct, x, e = tt_mem_access ~mode:`AllVar env me in
+    loc, (fun _ -> P.Lmem (ct, x, e)), Some (P.Bty (P.U ct))
 
 (* -------------------------------------------------------------------- *)
 
@@ -1252,11 +1260,12 @@ let rec tt_instr (env : Env.env) (pi : S.pinstr) : unit P.pinstr  =
       let d    = match d with `Down -> P.DownTo | `Up -> P.UpTo in
       P.Cfor (L.mk_loc lx vx, (d, i1, i2), s)
 
-    | PIWhile (s1, c, s2) ->
+    | PIWhile (a, s1, c, s2) ->
       let c  = tt_expr_bool env c in
       let s1 = omap_dfl (tt_block env) [] s1 in
       let s2 = omap_dfl (tt_block env) [] s2 in
-      P.Cwhile (s1, c, s2) in
+      let a = if a = `NoAlign then E.NoAlign else E.Align in
+      P.Cwhile (a, s1, c, s2) in
   { P.i_desc = instr; P.i_loc = L.loc pi, []; P.i_info = (); }
 
 (* -------------------------------------------------------------------- *)

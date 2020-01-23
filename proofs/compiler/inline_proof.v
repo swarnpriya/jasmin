@@ -78,8 +78,8 @@ Section INCL.
       apply: rbindP => -[Xc1 c1'] /Hc1 -> /=.
       by apply: rbindP => -[Xc2 c2'] /Hc2 -> /= [] <- <-.
     + move=> i dir lo hi c Hc ii X1 c0 X2 /=.
-      by apply: rbindP => -[Xc c'] /Hc -> /=.
-    + move=> c e c' Hc Hc' ii X1 c0 X2 /=.
+      by apply: rbindP => -[Xc c'] /Hc -> /=.     
+    + move=> a c e c' Hc Hc' ii X1 c0 X2 /=.
       apply: rbindP => -[Xc1 c1] /Hc -> /=.
       by apply: rbindP => -[Xc1' c1'] /Hc' -> /=.
     move=> i xs f es ii X1 c' X2 /=.
@@ -189,9 +189,9 @@ Section SUBSET.
   Local Lemma Sfor   : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir,lo,hi) c).
   Proof. by move=> i d lo hi c Hc ii X2 Xc;apply:rbindP => Xc' /Hc ? [<-]. Qed.
 
-  Local Lemma Swhile : forall c e c', Pc c -> Pc c' -> Pr (Cwhile c e c').
+  Local Lemma Swhile : forall a c e c', Pc c -> Pc c' -> Pr (Cwhile a c e c').
   Proof.
-    move=> c e c' Hc Hc' ii X2 Xc;apply:rbindP=> Xc' /Hc ?.
+    move=> a c e c' Hc Hc' ii X2 Xc;apply:rbindP=> Xc' /Hc ?.
     by apply: rbindP=> Hc'' /Hc' ? [<-].
   Qed.
 
@@ -351,12 +351,12 @@ Section WF.
     + move=> i dir lo hi c Hc s1 s2 /sem_iE [vlo] [vhi] [hlo hhi hfor].
       elim: hfor Hc => // ???? ???? Hw Hsc Hsf Hrec Hc.
       by move=> /wf_write_var -/(_ _ _ _ Hw) -/(Hc _ _ Hsc);apply: Hrec Hc.
-    + move=> c e c' Hc Hc' s1 s2 H.
-      move: {1 2}(Cwhile c e c') H (refl_equal (Cwhile c e c'))=> i;elim=> //=.
-      move=> ??????? Hsc ? Hsc' Hsw Hrec [???];subst.
+    + move=> a c e c' Hc Hc' s1 s2 H.
+      move: {1 2}(Cwhile a c e c') H (refl_equal (Cwhile a c e c'))=> i;elim=> //=.
+      move=> ???????? Hsc ? Hsc' Hsw Hrec [????];subst.
       move=> /(Hc _ _ Hsc).
       by move=> /(Hc' _ _ Hsc'); apply Hrec.
-    + move=> ????? Hsc ? [???];subst.
+    + move=> ?????? Hsc ? [????];subst.
       exact: (Hc _ _ Hsc).
     move=> i xs f es s1 s2 /sem_iE [vs] [m2] [rs] [_ _ ok_s2] hw.
     by apply: wf_write_lvals ok_s2.
@@ -609,7 +609,7 @@ Section PROOF.
 
   Local Lemma Hwhile_true : sem_Ind_while_true p Pc Pi_r.
   Proof.
-    move => s1 s2 s3 s4 c e c'.
+    move => s1 s2 s3 s4 a c e c'.
     case: s1 => sm1 svm1 Hsc Hc Hse Hsc' Hc' _ Hw ii X1 X2 cw Hi.
     move: (Hi) => /=;set X3 := Sv.union _ _;apply: rbindP => -[Xc c1] Hc1.
     apply: rbindP => -[Xc' c1'] Hc1' [] ??;subst X1 cw => vm1 Hwf Hvm1.
@@ -630,7 +630,7 @@ Section PROOF.
 
   Local Lemma Hwhile_false : sem_Ind_while_false p Pc Pi_r.
   Proof.
-    move => s1 s2 c e c'.
+    move => s1 s2 a c e c'.
     case: s1 s2 => sm1 svm1 [sm2 svm2] Hsc Hc Hse ii X1 X2 cw /=.
     set X3 := Sv.union _ _;apply: rbindP => -[Xc c1] Hc1.
     apply: rbindP => -[Xc' c1'] Hc1' [] ??;subst X1 cw => vm1 Hwf Hvm1.
@@ -975,7 +975,7 @@ Section REMOVE_INIT.
 
   Local Lemma Rwhile_true : sem_Ind_while_true p Pc Pi_r.
   Proof.
-    move=> s1 s2 s3 s4 c e c' _ Hc H _ Hc' _ Hw ii vm1 Hvm1 Hwf;move: H.
+    move=> s1 s2 s3 s4 a c e c' _ Hc H _ Hc' _ Hw ii vm1 Hvm1 Hwf;move: H.
     have [vm2 [Hs2 Hvm2 Hwf2]] := Hc _ Hvm1 Hwf.
     move=> /(sem_pexpr_uincl Hvm2) [] v' H1 /value_uincl_bool1 H2;subst.
     have [vm3 [H4 Hvm3 ]]:= Hc' _ Hvm2 Hwf2.
@@ -986,7 +986,7 @@ Section REMOVE_INIT.
 
   Local Lemma Rwhile_false : sem_Ind_while_false p Pc Pi_r.
   Proof.
-    move=> s1 s2 c e c' _ Hc H ii vm1 Hvm1 Hwf; move: H.
+    move=> s1 s2 a c e c' _ Hc H ii vm1 Hvm1 Hwf; move: H.
     have [vm2 [Hs2 Hvm2 Hwf2]] := Hc _ Hvm1 Hwf.
     move=> /(sem_pexpr_uincl Hvm2) [] v' H1 /value_uincl_bool1 ?;subst.
     by exists vm2;split=> //=;apply sem_seq1;constructor;apply: Ewhile_false=> //;rewrite H1.

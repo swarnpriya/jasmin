@@ -95,6 +95,9 @@ Variant asm_op : Type :=
 | SAR    of wsize    (*   signed / right *)
 | SHLD   of wsize    (* unsigned (double) / left *)
 | SHRD   of wsize    (* unsigned (double) / right *)
+| MULX    of wsize  (* mul unsigned, doesn't affect arithmetic flags *)
+| ADCX    of wsize  (* add with carry flag, only writes carry flag *)
+| ADOX    of wsize  (* add with overflow flag, only writes overflow flag *)
 
 | BSWAP  of wsize                     (* byte swap *)
 
@@ -340,6 +343,15 @@ Definition x86_ADC sz (v1 v2 : word sz) (c: bool) : ex_tpl (b5w_ty sz) :=
     (add_carry sz (wunsigned v1) (wunsigned v2) c)
     (wunsigned v1 + wunsigned v2 + c)%Z
     (wsigned   v1 + wsigned   v2 + c)%Z).
+
+Definition x86_ADCX sz (v1 v2: word sz) (c:bool) : ex_tpl (bw_ty sz) := 
+  Let _ :=  check_size_32_64 sz in
+  let (c,w) := waddcarry v1 v2 c in
+  ok (Some c, w).
+    
+Definition x86_MULX sz (v1 v2: word sz) : ex_tpl (w2_ty sz sz) := 
+  Let _ := check_size_32_64 sz in
+  ok (wumul v1 v2).
 
 Definition sub_borrow sz (x y c: Z) : word sz :=
   wrepr sz (x - y - c).
@@ -696,6 +708,9 @@ Notation mk_instr_w2_b5w_010 name semi check max_imm prc pp_asm := ((fun sz =>
 Notation mk_instr_w2b_b5w_010 name semi check max_imm prc pp_asm := ((fun sz =>
   mk_instr (pp_sz name sz) (w2b_ty sz sz) (b5w_ty sz) ([:: E 0; E 1] ++ [::iCF]) (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) 2 sz (max_imm sz) [::] (pp_asm sz)), (name%string,prc))  (only parsing).
 
+Notation mk_instr_w2b_bw name semi flag check max_imm prc pp_asm := ((fun sz =>
+  mk_instr (pp_sz name sz) (w2b_ty sz sz) (bw_ty sz) ([:: E 0; E 1] ++ [::F flag]) ([::F flag; E 0]) MSB_CLEAR (semi sz) (check sz) 2 sz (max_imm sz) [::] (pp_asm sz)), (name%string,prc))  (only parsing).
+
 Notation mk_instr_w2_b5w2 name semi msb ain aout nargs check max_imm prc pp_asm := ((fun sz =>
   mk_instr (pp_sz name sz) (w2_ty sz sz) (b5w2_ty sz) ain (implicit_flags ++ aout) msb (semi sz) (check sz) nargs sz (max_imm sz) [::] (pp_asm sz)), (name%string,prc))  (only parsing).
 
@@ -846,6 +861,17 @@ Definition Ox86_IDIV_instr              := mk_instr_w3_b5w2_da0ad "IDIV" x86_IDI
 Definition Ox86_CQO_instr               := mk_instr_w_w "CQO" x86_CQO msb_dfl         [:: R RAX] [:: R RDX] 0 Checks.none_sz no_imm (primP CQO) pp_cqo.
 
 Definition Ox86_ADC_instr               := mk_instr_w2b_b5w_010 "ADC" x86_ADC         Checks.add_sub_adc_sbb max_32 (primP ADC) (pp_iname "adc").
+
+Definition Ox86_ADCX_instr              := mk_instr_w2b_bw "ADCX" x86_ADCX CF Checks.adcx no_imm (primP ADCX) (pp_iname "adcx").
+Definition Ox86_ADOX_instr              := mk_instr_w2b_bw "ADOX" x86_ADCX OF Checks.adcx no_imm (primP ADOX) (pp_iname "adox").
+Definition Ox86_MULX_instr              := 
+  let name := "MULX"%string in
+   ((fun (sz:wsize) => 
+     mk_instr (pp_sz name sz) (w2_ty sz sz) (w2_ty sz sz)
+         [::R RDX; E 2] [:: E 0; E 1] MSB_CLEAR 
+         (@x86_MULX sz) (Checks.mulx sz) 3 sz (no_imm sz) [::] (pp_iname name sz)),
+    (name, PrimP U64 MULX)).
+
 Definition Ox86_SBB_instr               := mk_instr_w2b_b5w_010 "SBB" x86_SBB         Checks.add_sub_adc_sbb max_32 (primP SBB) (pp_iname "sbb").
 Definition Ox86_NEG_instr               := mk_instr_w_b5w "NEG" x86_NEG msb_dfl       [:: E 0] [:: E 0] 1 Checks.neg_inc_dec_not no_imm (primP NEG) (pp_iname "neg").
 Definition Ox86_INC_instr               := mk_instr_w_b4w_00 "INC" x86_INC            Checks.neg_inc_dec_not no_imm (primP INC) (pp_iname "inc").
@@ -948,6 +974,9 @@ Definition instr_desc o : instr_desc_t :=
   | DIV sz             => Ox86_DIV_instr.1 sz
   | IDIV sz            => Ox86_IDIV_instr.1 sz
   | ADC sz             => Ox86_ADC_instr.1 sz
+  | ADCX sz            => Ox86_ADCX_instr.1 sz
+  | ADOX sz            => Ox86_ADOX_instr.1 sz
+  | MULX sz            => Ox86_MULX_instr.1 sz
   | SBB sz             => Ox86_SBB_instr.1 sz
   | NEG sz             => Ox86_NEG_instr.1 sz
   | INC sz             => Ox86_INC_instr.1 sz
@@ -1023,6 +1052,9 @@ Definition prim_string :=
    Ox86_DIV_instr.2;
    Ox86_IDIV_instr.2;
    Ox86_ADC_instr.2;
+   Ox86_ADCX_instr.2;
+   Ox86_ADOX_instr.2;
+   Ox86_MULX_instr.2;
    Ox86_SBB_instr.2;
    Ox86_NEG_instr.2;
    Ox86_INC_instr.2;

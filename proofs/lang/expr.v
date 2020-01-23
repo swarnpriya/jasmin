@@ -166,7 +166,6 @@ Qed.
 Definition sopn_eqMixin     := Equality.Mixin sopn_eq_axiom.
 Canonical  sopn_eqType      := Eval hnf in EqType sopn sopn_eqMixin.
 
-
 (* ----------------------------------------------------------------------------- *)
 
 Record instruction := mkInstruction {
@@ -716,13 +715,31 @@ Canonical  inline_info_eqType      := Eval hnf in EqType inline_info inline_info
 
 (* -------------------------------------------------------------------- *)
 
+Variant align := 
+  | Align
+  | NoAlign.
+
+Scheme Equality for align.
+
+Lemma align_eq_axiom : Equality.axiom align_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_align_dec_bl.
+  by apply: internal_align_dec_lb.
+Qed.
+
+Definition align_eqMixin     := Equality.Mixin align_eq_axiom.
+Canonical  align_eqType      := Eval hnf in EqType align align_eqMixin.
+
+(* -------------------------------------------------------------------- *)
+
 Inductive instr_r :=
 | Cassgn : lval -> assgn_tag -> stype -> pexpr -> instr_r
 | Copn   : lvals -> assgn_tag -> sopn -> pexprs -> instr_r
 
 | Cif    : pexpr -> seq instr -> seq instr  -> instr_r
 | Cfor   : var_i -> range -> seq instr -> instr_r
-| Cwhile : seq instr -> pexpr -> seq instr -> instr_r
+| Cwhile : align -> seq instr -> pexpr -> seq instr -> instr_r
 | Ccall  : inline_info -> lvals -> funname -> pexprs -> instr_r
 
 with instr := MkI : instr_info -> instr_r ->  instr.
@@ -767,8 +784,8 @@ Fixpoint instr_r_beq i1 i2 :=
     (e1 == e2) && all2 instr_beq c11 c21 && all2 instr_beq c12 c22
   | Cfor i1 (dir1,lo1,hi1) c1, Cfor i2 (dir2,lo2,hi2) c2 =>
     (i1 == i2) && (dir1 == dir2) && (lo1 == lo2) && (hi1 == hi2) && all2 instr_beq c1 c2
-  | Cwhile c1 e1 c1' , Cwhile c2 e2 c2' =>
-    all2 instr_beq c1 c2 && (e1 == e2) && all2 instr_beq c1' c2'
+  | Cwhile a1 c1 e1 c1' , Cwhile a2 c2 e2 c2' =>
+    (a1 == a2) && all2 instr_beq c1 c2 && (e1 == e2) && all2 instr_beq c1' c2'
   | Ccall ii1 x1 f1 arg1, Ccall ii2 x2 f2 arg2 =>
     (ii1 == ii2) && (x1==x2) && (f1 == f2) && (arg1 == arg2)
   | _, _ => false
@@ -793,8 +810,8 @@ Lemma instr_r_eq_axiom : Equality.axiom instr_r_beq.
 Proof.
   rewrite /Equality.axiom.
   fix Hrec 1;case =>
-    [x1 t1 ty1 e1|x1 t1 o1 e1|e1 c11 c12|x1 [[dir1 lo1] hi1] c1|c1 e1 c1'|ii1 x1 f1 arg1]
-    [x2 t2 ty2 e2|x2 t2 o2 e2|e2 c21 c22|x2 [[dir2 lo2] hi2] c2|c2 e2 c2'|ii2 x2 f2 arg2] /=;
+    [x1 t1 ty1 e1|x1 t1 o1 e1|e1 c11 c12|x1 [[dir1 lo1] hi1] c1|a1 c1 e1 c1'|ii1 x1 f1 arg1]
+    [x2 t2 ty2 e2|x2 t2 o2 e2|e2 c21 c22|x2 [[dir2 lo2] hi2] c2|a2 c2 e2 c2'|ii2 x2 f2 arg2] /=;
   try by constructor.
   + apply (@equivP ((t1 == t2) && (ty1 == ty2) && (x1 == x2) && (e1 == e2)));first by apply idP.
     split=> [/andP [] /andP [] /andP [] /eqP -> /eqP-> /eqP-> /eqP-> | [] <- <- <- <- ] //.
@@ -810,9 +827,9 @@ Proof.
       all2 instr_beq c1 c2)); first by apply idP.
     have H := reflect_all2 (instr_eq_axiom_ Hrec).
     split=> [/andP[]/andP[]/andP[]/andP[]| []] /eqP->/eqP->/eqP->/eqP->/H-> //.
-  + apply (@equivP  (all2 instr_beq c1 c2 && (e1 == e2) && all2 instr_beq c1' c2')); first by apply idP.
+  + apply (@equivP  ((a1 == a2) && all2 instr_beq c1 c2 && (e1 == e2) && all2 instr_beq c1' c2')); first by apply idP.
     have H := reflect_all2 (instr_eq_axiom_ Hrec).
-    split=> [/andP[]/andP[]/H->/eqP->/H-> | []/H->/eqP->/H->] //.
+    split=> [/andP[]/andP[]/andP[]/eqP->/H->/eqP->/H-> | []/eqP->/H->/eqP->/H->] //.
   apply (@equivP ((ii1 == ii2) && (x1 == x2) && (f1 == f2) && (arg1 == arg2)));first by apply idP.
   by split=> [/andP[]/andP[]/andP[]| []]/eqP->/eqP->/eqP->/eqP->.
 Qed.
@@ -914,7 +931,7 @@ Section RECT.
   Hypothesis Hopn : forall xs t o es, Pr (Copn xs t o es).
   Hypothesis Hif  : forall e c1 c2, Pc c1 -> Pc c2 -> Pr (Cif e c1 c2).
   Hypothesis Hfor : forall v dir lo hi c, Pc c -> Pr (Cfor v (dir,lo,hi) c).
-  Hypothesis Hwhile : forall c e c', Pc c -> Pc c' -> Pr (Cwhile c e c').
+  Hypothesis Hwhile : forall a c e c', Pc c -> Pc c' -> Pr (Cwhile a c e c').
   Hypothesis Hcall: forall i xs f es, Pr (Ccall i xs f es).
 
   Section C.
@@ -937,7 +954,7 @@ Section RECT.
     | Copn xs t o es => Hopn xs t o es
     | Cif e c1 c2  => @Hif e c1 c2 (cmd_rect_aux instr_Rect c1) (cmd_rect_aux instr_Rect c2)
     | Cfor i (dir,lo,hi) c => @Hfor i dir lo hi c (cmd_rect_aux instr_Rect c)
-    | Cwhile c e c'   => @Hwhile c e c' (cmd_rect_aux instr_Rect c) (cmd_rect_aux instr_Rect c')
+    | Cwhile a c e c'   => @Hwhile a c e c' (cmd_rect_aux instr_Rect c) (cmd_rect_aux instr_Rect c')
     | Ccall ii xs f es => @Hcall ii xs f es
     end.
 
@@ -967,7 +984,7 @@ Fixpoint write_i_rec s i :=
   | Copn xs _ _ _   => vrvs_rec s xs
   | Cif   _ c1 c2   => foldl write_I_rec (foldl write_I_rec s c2) c1
   | Cfor  x _ c     => foldl write_I_rec (Sv.add x s) c
-  | Cwhile c _ c'   => foldl write_I_rec (foldl write_I_rec s c') c
+  | Cwhile _ c _ c'   => foldl write_I_rec (foldl write_I_rec s c') c
   | Ccall _ x _ _   => vrvs_rec s x
   end
 with write_I_rec s i :=
@@ -1024,7 +1041,7 @@ Proof.
            (fun c => forall s, Sv.Equal (foldl write_I_rec s c) (Sv.union s (write_c c)))) =>
      /= {c s}
     [ i ii Hi | | i c Hi Hc | x tg ty e | xs t o es | e c1 c2 Hc1 Hc2
-    | v dir lo hi c Hc | c e c' Hc Hc' | ii xs f es] s;
+    | v dir lo hi c Hc | a c e c' Hc Hc' | ii xs f es] s;
     rewrite /write_I /write_i /write_c /=
     ?Hc1 ?Hc2 /write_c_rec ?Hc ?Hc' ?Hi -?vrv_recE -?vrvs_recE //;
     by SvD.fsetdec.
@@ -1064,8 +1081,8 @@ Proof.
   rewrite /write_i /= -/(write_c_rec _ c) write_c_recE ;SvD.fsetdec.
 Qed.
 
-Lemma write_i_while c e c' :
-   Sv.Equal (write_i (Cwhile c e c')) (Sv.union (write_c c) (write_c c')).
+Lemma write_i_while a c e c' :
+   Sv.Equal (write_i (Cwhile a c e c')) (Sv.union (write_c c) (write_c c')).
 Proof.
   rewrite /write_i /= -/(write_c_rec _ c) write_c_recE;SvD.fsetdec.
 Qed.
@@ -1127,7 +1144,7 @@ Fixpoint read_i_rec (s:Sv.t) (i:instr_r) : Sv.t :=
   | Cfor x (dir, e1, e2) c =>
     let s := foldl read_I_rec s c in
     read_e_rec (read_e_rec s e2) e1
-  | Cwhile c e c' =>
+  | Cwhile a c e c' =>
     let s := foldl read_I_rec s c in
     let s := foldl read_I_rec s c' in
     read_e_rec s e
@@ -1203,7 +1220,7 @@ Proof.
            (fun c => forall s, Sv.Equal (foldl read_I_rec s c) (Sv.union s (read_c c))))
            => /= {c s}
    [ i ii Hi | | i c Hi Hc | x tg ty e | xs t o es | e c1 c2 Hc1 Hc2
-    | v dir lo hi c Hc | c e c' Hc Hc' | ii xs f es] s;
+    | v dir lo hi c Hc | a c e c' Hc Hc' | ii xs f es] s;
     rewrite /read_I /read_i /read_c /=
      ?read_rvE ?read_eE ?read_esE ?read_rvsE ?Hc2 ?Hc1 /read_c_rec ?Hc' ?Hc ?Hi //;
     by SvD.fsetdec.
@@ -1242,8 +1259,8 @@ Proof.
   rewrite /read_i /= -/read_c_rec !read_eE read_cE;SvD.fsetdec.
 Qed.
 
-Lemma read_i_while c e c' :
-   Sv.Equal (read_i (Cwhile c e c'))
+Lemma read_i_while a c e c' :
+   Sv.Equal (read_i (Cwhile a c e c'))
             (Sv.union (read_c c) (Sv.union (read_e e) (read_c c'))).
 Proof.
   rewrite /read_i /= -/read_c_rec !read_eE read_cE;SvD.fsetdec.

@@ -551,8 +551,8 @@ Module CBEA.
     apply: rbindP => b;apply: rbindP => w /He [ve ->] /=.
     move=> /value_uincl_bool H/H [_ ->] /=.
     t_xrbindP => vt2 v2 /He11 [] v2' -> Hv2' ht2 vt3 v3 /He12 [] v3' -> Hv3' ht3 <- /=.
-    have [? [-> ?]]:= truncate_value_uincl Hv2' ht2.
-    have [? [-> ?] /=]:= truncate_value_uincl Hv3' ht3.
+    have [? -> ?]:= truncate_value_uincl Hv2' ht2.
+    have [? -> ? /=]:= truncate_value_uincl Hv3' ht3.
     eexists; first reflexivity.
     by case: (b).
   Qed.

@@ -1032,7 +1032,7 @@ Section PROPER.
     by rewrite /RelationPairs.RelCompFun /= Hw => _ ->.
   Qed.
 
-  Local Lemma Wwhile c e c': Pc c -> Pc c' -> Pr (Cwhile c e c').
+  Local Lemma Wwhile a c e c': Pc c -> Pc c' -> Pr (Cwhile a c e c').
   Proof.
     move=> Hc Hc' ii m1 m2 Heq /=.
     set ww1 := remove_cpm _ _;set ww2 := remove_cpm _ _.
@@ -1224,7 +1224,7 @@ Section PROOF.
 
   Local Lemma Hwhile_true : sem_Ind_while_true p Pc Pi_r.
   Proof.
-    move=> s1 s2 s3 s4 c e c' Hc1 Hc He Hc1' Hc' Hw1 Hw m ii Hm /=.
+    move=> s1 s2 s3 s4 a c e c' Hc1 Hc He Hc1' Hc' Hw1 Hw m ii Hm /=.
     set ww := write_i _;set m' := remove_cpm _ _.
     case Heq1: const_prop => [m'' c0] /=.
     case Heq2: const_prop => [m_ c0'] /=.
@@ -1236,7 +1236,7 @@ Section PROOF.
       by apply: sem_app;eauto.
     have /Hw -/(_ ii) /=:= valid_cpm_rm eq1_3 Hm.
     have H1 := remove_cpm2 m ww.
-    have /= : Mvarc_eq (const_prop const_prop_i (remove_cpm m' (write_i (Cwhile c e c'))) c)
+    have /= : Mvarc_eq (const_prop const_prop_i (remove_cpm m' (write_i (Cwhile a c e c'))) c)
                (m'', c0).
     + by have := const_prop_m H1 (refl_equal c); rewrite Heq1.
     case: const_prop  => m2'' c2 [].
@@ -1256,11 +1256,11 @@ Section PROOF.
     have [vm3 [hc0' hvm3]]:= Hc0' _ hvm2.
     have H :  forall e0,
       sem_pexpr gd s2 e0 = ok (Vbool true) ->
-      (exists vm2,
-        sem p' {| emem := emem s3; evm := vm3 |} [:: MkI ii (Cwhile c0 e0 c0')]
+      (exists vm2, 
+        sem p' {| emem := emem s3; evm := vm3 |} [:: MkI ii (Cwhile a c0 e0 c0')] 
            {| emem := emem s4; evm := vm2 |} ∧ vm_uincl (evm s4) vm2) ->
-      exists vm2,
-        sem p' {| emem := emem s1; evm := vm1 |} [:: MkI ii (Cwhile c0 e0 c0')]
+      exists vm2, 
+        sem p' {| emem := emem s1; evm := vm1 |} [:: MkI ii (Cwhile a c0 e0 c0')] 
            {| emem := emem s4; evm := vm2 |} ∧ vm_uincl (evm s4) vm2.
     + move=> e0 He0 [vm5] [] /sem_seq1_iff /sem_IE Hsw hvm5;exists vm5;split => //.
       apply:sem_seq1;constructor.
@@ -1271,7 +1271,7 @@ Section PROOF.
 
   Local Lemma Hwhile_false : sem_Ind_while_false p Pc Pi_r.
   Proof.
-    move=> s1 s2 c e c' Hc1 Hc He m ii Hm /=.
+    move=> s1 s2 a c e c' Hc1 Hc He m ii Hm /=.
     set ww := write_i _;set m' := remove_cpm _ _.
     case Heq1: const_prop => [m'' c0] /=.
     case Heq2: const_prop => [m_ c0'] /=.

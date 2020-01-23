@@ -3,7 +3,6 @@
 
 -R 3rdparty Jasmin
 -R compiler Jasmin
--R logic Jasmin
 -R lang Jasmin
 -R ssrmisc Jasmin
 
@@ -38,7 +37,6 @@ compiler/stack_alloc_proof.v
 compiler/unrolling.v
 compiler/unrolling_proof.v
 compiler/x86_gen.v
-compiler/x86_instr.v
 compiler/x86_sem.v
 compiler/x86_variables.v
 compiler/x86_variables_proofs.v
@@ -60,9 +58,4 @@ lang/utils.v
 lang/var.v
 lang/warray.v
 lang/word.v
-lang/x86_instr_t.v
-#lang/prog_notation.v
-#logic/Ssem.v
-#logic/Ssem_props.v
-#logic/equiv_sem.v
-#logic/wp.v
+

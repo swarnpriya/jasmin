@@ -259,6 +259,9 @@ let pp_name_ext pp_op =
 (* -------------------------------------------------------------------- *)
 let pp_instr name (i : X86_sem.asm) =
   match i with
+  | ALIGN ->
+    `Instr (".p2align", ["5"])
+    
   | LABEL lbl ->
     `Label (pp_label name lbl)
   | JMP lbl -> 
@@ -273,6 +276,7 @@ let pp_instr name (i : X86_sem.asm) =
     let args = pp_asm_args pp.pp_aop_args in
     `Instr(name, args)
 
+
 (* -------------------------------------------------------------------- *)
 let pp_instr name (fmt : Format.formatter) (i : X86_sem.asm) =
   pp_gen fmt (pp_instr name i)
@@ -282,33 +286,7 @@ let pp_instrs name (fmt : Format.formatter) (is : X86_sem.asm list) =
   List.iter (Format.fprintf fmt "%a\n%!" (pp_instr name)) is
 
 (* -------------------------------------------------------------------- *)
-type rset = X86_decl.register Set.t
 
-(* TODO: generate from instr_desc *)
-let wregs_of_instr (c : rset) (i : X86_sem.asm) =
- assert false
-
-(* -------------------------------------------------------------------- *)
-let wregs_of_instrs (c : rset) (is : X86_sem.asm list) =
-  List.fold_left wregs_of_instr c is
-
-(* -------------------------------------------------------------------- *)
-let wregs_of_fundef (c : rset) (f : X86_sem.xfundef) =
-  let c = wregs_of_instrs c f.X86_sem.xfd_body in
-  List.fold_right Set.add f.X86_sem.xfd_res c
-
-(* -------------------------------------------------------------------- *)
-let x86_64_callee_save = [
-  X86_decl.RBP;
-  X86_decl.RBX;
-  X86_decl.RSP; (* Why? *)
-  X86_decl.R12;
-  X86_decl.R13;
-  X86_decl.R14;
-  X86_decl.R15;
-]
-
-(* -------------------------------------------------------------------- *)
 let align_of_ws =
   function
   | W.U8 -> 0
@@ -375,30 +353,57 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
      `Instr (".globl", [string_of_funname tbl n])])
     asm;
 
+  let open X86_decl in
+  let open X86_instr_decl in
+  let open X86_sem in
+  let open Prog in
   List.iter (fun (n, d) ->
       let name = string_of_funname tbl n in
-      let stsz  = Conv.bi_of_z d.X86_sem.xfd_stk_size in
-      let wregs = wregs_of_fundef Set.empty d in
-      let wregs = List.fold_right Set.remove [X86_decl.RBP; X86_decl.RSP] wregs in
-      let wregs = List.filter (fun x -> Set.mem x wregs) x86_64_callee_save in
-
+      let stsz  = Conv.bi_of_z d.xfd_stk_size in
+      let tosave, saved_stack = d.xfd_extra in
       pp_gens fmt [
         `Label (mangle (string_of_funname tbl n));
-        `Label name;
-        `Instr ("pushq", ["%rbp"])];
+        `Label name
+      ];
       List.iter (fun r ->
         pp_gens fmt [`Instr ("pushq", [pp_register `U64 r])])
-        wregs;
-      if not (Bigint.equal stsz Bigint.zero) then
-        pp_gens fmt [`Instr ("subq", [pp_imm stsz; "%rsp"])];
-      pp_instrs name fmt d.X86_sem.xfd_body;
-      if not (Bigint.equal stsz Bigint.zero) then
-        pp_gens fmt [`Instr ("addq", [pp_imm stsz; "%rsp"])];
+        tosave;
+      begin match saved_stack with
+      | SavedStackNone  -> 
+        assert (Bigint.equal stsz Bigint.zero);
+        pp_instrs name fmt d.X86_sem.xfd_body;
+      | SavedStackReg r ->
+        pp_instrs name fmt
+          [ AsmOp(MOV uptr, [Reg r; Reg RSP]);
+            AsmOp(SUB uptr, [Reg RSP; Imm(U32, Conv.int32_of_bi stsz)]);
+            AsmOp(AND uptr, [Reg RSP; Imm(U32, 
+                                          Conv.int32_of_bi (B.of_int (-32)))]);
+          ];
+        pp_instrs name fmt d.X86_sem.xfd_body;
+        pp_instrs name fmt 
+          [ AsmOp(MOV uptr, [Reg RSP; Reg r]) ]
+  
+      | SavedStackStk p -> 
+        let adr = 
+          Adr { ad_disp  = Conv.int64_of_bi (Conv.bi_of_z p);
+                ad_base   = Some RSP;
+                ad_scale  = Scale1;
+                ad_offset = None } in
+        pp_instrs name fmt 
+          [ AsmOp(MOV uptr, [Reg RBP; Reg RSP]);
+            AsmOp(SUB uptr, [Reg RSP; Imm(U32, Conv.int32_of_bi stsz)]);
+            AsmOp(AND uptr, [Reg RSP; Imm(U32, 
+                                          Conv.int32_of_bi (B.of_int (-32)))]);
+            AsmOp(MOV uptr, [adr; Reg RBP])
+          ];
+        pp_instrs name fmt d.X86_sem.xfd_body;
+        pp_instrs name fmt
+          [ AsmOp(MOV uptr, [Reg RSP; adr]) ] 
+      end;
       List.iter (fun r ->
-        pp_gens fmt [`Instr ("popq", [pp_register `U64 r])])
-        (List.rev wregs);
-      pp_gens fmt [`Instr ("popq", ["%rbp"]); `Instr ("ret", [])])
-    asm;
+          pp_gens fmt [`Instr ("popq", [pp_register `U64 r])])
+        (List.rev tosave);
+      pp_gens fmt [`Instr ("ret", [])]) asm;
 
   if not (List.is_empty gd) then
     pp_gens fmt [`Instr (".data", [])];
