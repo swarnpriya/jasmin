@@ -937,7 +937,7 @@ Definition Ox86_IDIV_instr :=
   mk_instr_w3_b5w2_da0ad "IDIV" x86_IDIV check_mul no_imm (primP IDIV) (pp_iname "idiv").
 
 Definition Ox86_CQO_instr := 
-  mk_instr_w_w "CQO" x86_CQO msb_dfl [:: R RAX] [:: R RDX] 0 (fun _ => [::]) no_imm (primP CQO) pp_cqo.
+  mk_instr_w_w "CQO" x86_CQO msb_dfl [:: R RAX] [:: R RDX] 0 (fun _ => [:: [::]]) no_imm (primP CQO) pp_cqo.
 
 Definition Ox86_ADC_instr := 
   mk_instr_w2b_b5w_010 "ADC" x86_ADC check_add omax_32 (primP ADC) (pp_iname "adc").
@@ -1045,7 +1045,7 @@ Definition Ox86_MOVD_instr :=
   mk_instr_w_w128_10 "MOVD" x86_MOVD check_movd no_imm (primP MOVD) pp_movd.
 
 Definition Ox86_VMOVDQU_instr := 
-  mk_instr_w_w "VMOVDQU" x86_VMOVDQU MSB_CLEAR [:: E 1] [:: E 0] 2 check_movd no_imm (PrimP U128 VMOVDQU) (pp_name "vmoddqu").
+  mk_instr_w_w "VMOVDQU" x86_VMOVDQU MSB_CLEAR [:: E 1] [:: E 0] 2 check_movd no_imm (PrimP U128 VMOVDQU) (pp_name "vmovdqu").
 
 Definition check_xmm_xmm_xmmm (_:wsize) := [:: xmm_xmm_xmmm].
 
@@ -1061,9 +1061,18 @@ Definition Ox86_VPMULU_instr := ((fun sz => mk_instr (pp_s "VPMULU") (w2_ty sz s
 
 (* 128 *)
 Definition check_vpextr (_:wsize) :=  [:: [:: rm false; xmm; i U8] ].
+
+Definition pp_viname_t name ve (ts:seq wsize) args := 
+  {| pp_aop_name := name;
+     pp_aop_ext  := PP_viname ve false;
+     pp_aop_args := zip ts args; |}.
+
 Definition Ox86_VPEXTR_instr := 
-  ((fun sz => mk_instr (pp_sz "VPEXTR" sz) w128w8_ty (w_ty sz) [:: E 1 ; E 2] [:: E 0] msb_dfl (@x86_VPEXTR sz) 
-                       (check_vpextr sz) 3 U128 (no_imm U128) [::] (pp_viname "vpextr" (if sz == U32 then  VE32 else VE64) sz)), 
+  ((fun sz => 
+      let ve := if sz == U32 then  VE32 else VE64 in
+      mk_instr (pp_sz "VPEXTR" sz) w128w8_ty (w_ty sz) [:: E 1 ; E 2] [:: E 0] msb_dfl (@x86_VPEXTR sz) 
+                       (check_vpextr sz) 3 U128 (imm8 U128) [::]
+                       (pp_viname_t "vpextr" ve [:: sz; U128; U8])),
     ("VPEXTR"%string, (primP VPEXTR))).
 
 Definition pp_vpinsr ve args := 
@@ -1075,7 +1084,7 @@ Definition pp_vpinsr ve args :=
 Definition check_vpinsr (_:wsize) :=  [:: [:: xmm; xmm; rm true; i U8] ].
 Definition Ox86_VPINSR_instr  := 
   ((fun (sz:velem) => mk_instr (pp_ve_sz "VPINSR" sz U128) (w128ww8_ty sz) w128_ty [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (x86_VPINSR sz) 
-                               (check_vpinsr sz) 4 U128 (no_imm sz) [::] (pp_vpinsr sz)), 
+                               (check_vpinsr sz) 4 U128 (imm8 sz) [::] (pp_vpinsr sz)), 
    ("VPINSR"%string, PrimV (fun ve _ => VPINSR ve))).
 
 Definition check_xmm_xmm_imm8 (_:wsize) := [:: [:: xmm; xmm; i U8]].
@@ -1137,14 +1146,14 @@ Definition Ox86_VPBROADCAST_instr       :=
 
 Definition Ox86_VBROADCASTI128_instr    := 
   (mk_instr (pp_s "VBROADCAST_2u128") w128_ty w256_ty [:: E 1] [:: E 0] MSB_CLEAR (x86_VPBROADCAST U256) 
-            ([:: [::xmm; m true]]) 2 U256 (no_imm U256) [::] (pp_name_ty "vpbroadcasti128" [::U256; U128]), 
-   ("VBROADCAST_2u128"%string, (PrimM VBROADCASTI128))).
+            ([:: [::xmm; m true]]) 2 U256 (no_imm U256) [::] (pp_name_ty "vbroadcasti128" [::U256; U128]), 
+   ("VPBROADCAST_2u128"%string, (PrimM VBROADCASTI128))).
 
 Definition check_xmmm_xmm_imm8 (_:wsize) := [:: [:: xmmm false; xmm; i U8]].
 
 Definition Ox86_VEXTRACTI128_instr := 
   mk_instr_pp "VEXTRACTI128" w256w8_ty w128_ty [:: E 1; E 2] [:: E 0] MSB_CLEAR x86_VEXTRACTI128
-              (check_xmmm_xmm_imm8 U256) 3 U256 (imm8 U256) (PrimM VEXTRACTI128) (pp_name_ty "vpextracti128" [::U128; U256; U8]).
+              (check_xmmm_xmm_imm8 U256) 3 U256 (imm8 U256) (PrimM VEXTRACTI128) (pp_name_ty "vextracti128" [::U128; U256; U8]).
 
 Definition Ox86_VINSERTI128_instr := 
   mk_instr_pp "VINSERTI128" w256w128w8_ty w256_ty [:: E 1; E 2; E 3] [:: E 0] MSB_CLEAR x86_VINSERTI128
