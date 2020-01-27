@@ -1669,15 +1669,17 @@ Section PROOF.
         have Hsc1 : sem_pexpr gd s1' (wconst sc) = ok (Vword sc). 
         + by rewrite /wconst /= /sem_sop1 /= wrepr_unsigned. 
         move: Hwb; rewrite /= truncate_word_u wrepr_unsigned => -[?];subst wb.
-        rewrite zero_extend0 !GRing.add0r GRing.mulrC in Hw.
-        have := mulr_ok Hvo Hsc1 hle1 hsz2 _.
- Hw.
-  
-        exists s2'; split => //; apply sem_seq1; constructor; constructor.
-        move: Hvb Hwb Hw';rewrite Eob /sem_sopn /sem_pexprs /exec_sopn /sopn_sem /= zero_extend0 GRing.add0r Hvo /= Hwo /=. 
-        rewrite /truncate_word hsz2 !zero_extend_wrepr //= /x86_IMULt /check_size_16_64 hsz1 hsz2 /=.
-        move=> [<-]; rewrite /to_word truncate_word_u => -[<-].
-        by rewrite wrepr0 GRing.add0r GRing.mulrC => ->.
+        rewrite zero_extend0 !GRing.add0r GRing.mulrC in Hw'.
+        have [] := mulr_ok Hvo Hsc1 hle1 hsz2 _ Hw' Heq; first by rewrite hsz1.
+        move=> hsub; t_xrbindP => vo vs hvs hvo hw.
+        case: (opn_5flags_correct ii tag (Some U32) _ _ hvs hvo hw).
+        + apply: disjoint_w Hdisje .
+          apply: SvP.MP.subset_trans hrl.
+          apply: (SvP.MP.subset_trans hsub).
+          rewrite /read_e /= /read_lea /= /oo read_eE.
+          by case: (o) => [ ?|]; rewrite /= /read_e /=;SvD.fsetdec.
+        + by apply Hdisjl.
+        by move=> s2'' []; eauto using eq_exc_freshT.
       case: eqP => [ Eoo | _]; last by exists s2'.
       move: Hvo Hwo Hw'; rewrite Eoo => - [<-] {Eoo oo elea Hlea Hlea'}.
       rewrite wrepr_unsigned /= truncate_word_u => - [?]; subst wo.
