@@ -249,7 +249,7 @@ let pp_ext = function
   | PP_error            -> assert false 
   | PP_name             -> ""
   | PP_iname ws         -> pp_instr_wsize ws
-  | PP_iname2(ws1, ws2) -> Printf.sprintf "%s%s" (pp_instr_wsize ws1) (pp_instr_wsize ws2)
+  | PP_iname2(ws1, ws2) -> Printf.sprintf "%s%s" (pp_instr_wsize ws2) (pp_instr_wsize ws1)
   | PP_viname (ve,long) -> if long then pp_instr_velem_long ve else pp_instr_velem ve
   | PP_ct ct            -> pp_ct (match ct with Condt ct -> ct | _ -> assert false) 
 

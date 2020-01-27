@@ -33,7 +33,7 @@ f = #SHLD(f, e, n);
 [p + 0] = f;
 }
 
-export
+/*export
 fn test_shrd(reg u64 p) {
 reg u8 n;
 reg u16 a, b;
@@ -67,3 +67,4 @@ f = #SHRD(f, e, n);
 
 [p + 0] = f;
 }
+*/

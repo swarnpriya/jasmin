@@ -371,6 +371,16 @@ Definition is_andn  a b :=
   | None  , None   => None
   end.
 
+Definition mulr sz a b :=
+  match is_wconst sz a with
+  | Some _ => (IMULri sz, [:: b ; a ])
+  | _      =>
+    match is_wconst sz b with
+    | Some _ => (IMULri sz, [:: a ; b ])
+    | _      => (IMULr sz,  [:: a ; b ])
+    end
+ end.
+
 Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
   let chk (b: bool) r := if b then r else LowerAssgn in
   let kb b sz := chk (b && (sz == sz')) in
@@ -429,14 +439,8 @@ Definition lower_cassgn_classify sz' e x : lower_cassgn_t :=
       match is_lea sz x e with
       | Some l => LowerLea sz l
       | _      =>
-        match is_wconst sz a with
-        | Some _ => LowerFopn (Ox86 (IMULri sz)) [:: b ; a ] (Some U32)
-        | _      =>
-        match is_wconst sz b with
-        | Some _ => LowerFopn (Ox86 (IMULri sz)) [:: a ; b ] (Some U32)
-        | _ => LowerFopn (Ox86 (IMULr sz)) [:: a ; b ] (Some U32)
-        end
-        end
+        let (op, args) := mulr sz a b in
+        LowerFopn (Ox86 op) args (Some U32)
       end
     | Odiv (Cmp_w u sz) =>
       let opn :=
@@ -604,7 +608,8 @@ Definition lower_cassgn (ii:instr_info) (x: lval) (tg: assgn_tag) (ty: stype) (e
           [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (ADD sz)) [:: b ; o])]
         else if b == @wconst sz 0 then
           (* sc * o *)
-          [::MkI ii (Copn [:: f ; f ; f ; f ; f; x ] tg (Ox86 (IMULr sz)) [:: o; sce])]
+          let (op, args) := mulr sz o sce in
+          map (MkI ii) (opn_5flags (Some U32) vi f x tg (Ox86 op) args)
         else lea tt
       else if o == @wconst sz 0 then
           (* d + b *)

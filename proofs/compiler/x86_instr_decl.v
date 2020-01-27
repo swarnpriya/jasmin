@@ -764,7 +764,7 @@ Notation mk_instr_ww8_b5w_0c0 name semi check max_imm prc pp_asm := ((fun sz =>
   mk_instr (pp_sz name sz) (ww8_ty sz) (b5w_ty sz) [:: E 0; ADExplicit 1 (Some RCX)] (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) 2 sz (max_imm sz) [::] (pp_asm sz)), (name%string,prc))  (only parsing).
 
 Notation mk_instr_w2w8_b5w_01c0 name semi check max_imm prc pp_asm := ((fun sz =>
-  mk_instr (pp_sz name sz) (w2w8_ty sz) (b5w_ty sz) [:: E 0; E 1; ADExplicit 2 (Some RCX)] (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) 2 sz (max_imm sz) [::] (pp_asm sz)), (name%string,prc))  (only parsing).
+  mk_instr (pp_sz name sz) (w2w8_ty sz) (b5w_ty sz) [:: E 0; E 1; ADExplicit 2 (Some RCX)] (implicit_flags ++ [:: E 0]) MSB_CLEAR (semi sz) (check sz) 3 sz (max_imm sz) [::] (pp_asm sz)), (name%string,prc))  (only parsing).
 
 Notation mk_instr_w2w8_w_1230 name semi check max_imm prc pp_asm := ((fun sz =>
   mk_instr (pp_sz name sz) (w2w8_ty sz) (w_ty sz) [:: E 1 ; E 2 ; E 3] [:: E 0] MSB_CLEAR (semi sz) (check sz) 4 sz (max_imm sz) [::] (pp_asm sz)), (name%string,prc))  (only parsing).
@@ -1040,12 +1040,13 @@ Definition pp_movd sz args :=
  pp_name_ty (if sz == U64 then "movq"%string else "movd"%string) 
             ([::U128; sz]) args.
 
-Definition check_movd (_:wsize) := [::xmmm_xmm; xmm_xmmm].
+Definition check_movd (_:wsize) := [:: [::xmm; rm true]].
 Definition Ox86_MOVD_instr := 
   mk_instr_w_w128_10 "MOVD" x86_MOVD check_movd no_imm (primP MOVD) pp_movd.
 
+Definition check_vmovdqu (_:wsize) := [:: xmm_xmmm; xmmm_xmm].
 Definition Ox86_VMOVDQU_instr := 
-  mk_instr_w_w "VMOVDQU" x86_VMOVDQU MSB_CLEAR [:: E 1] [:: E 0] 2 check_movd no_imm (PrimP U128 VMOVDQU) (pp_name "vmovdqu").
+  mk_instr_w_w "VMOVDQU" x86_VMOVDQU MSB_CLEAR [:: E 1] [:: E 0] 2 check_vmovdqu no_imm (PrimP U128 VMOVDQU) (pp_name "vmovdqu").
 
 Definition check_xmm_xmm_xmmm (_:wsize) := [:: xmm_xmm_xmmm].
 

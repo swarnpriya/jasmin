@@ -965,6 +965,37 @@ Section PROOF.
   Lemma check_size_128_256_ge sz : (U128 <= sz)%CMP -> check_size_128_256 sz = ok tt.
   Proof. by move=> h; rewrite /check_size_128_256 h wsize_ge_U256. Qed.
 
+  Lemma mulr_ok l sz w1 w2 (z1 : word w1) (z2:word w2) e1 e2 o e' s s': 
+    sem_pexpr gd s e1 = ok (Vword z1) ->
+    sem_pexpr gd s e2 = ok (Vword z2) ->
+    (sz ≤ w1)%CMP ->
+    (sz ≤ w2)%CMP -> 
+    (U16 ≤ sz)%CMP && (sz ≤ U64)%CMP ->
+    write_lval gd l (Vword (zero_extend sz z1 * zero_extend sz z2)) s = ok s'->
+    mulr sz e1 e2 = (o, e') -> 
+    Sv.Subset (read_es e') (read_e (Papp2 (Omul (Op_w sz )) e1 e2))
+      ∧ Let x := Let x := sem_pexprs gd s e' in exec_sopn (Ox86 o) x
+        in write_lvals gd s
+             [:: Lnone (var_info_of_lval l) sbool; Lnone (var_info_of_lval l) sbool;
+                 Lnone (var_info_of_lval l) sbool; Lnone (var_info_of_lval l) sbool;
+                 Lnone (var_info_of_lval l) sbool; l] x = ok s'. 
+  Proof.
+    rewrite /mulr => ok_v1 ok_v2 hle1 hle2 hsz64 Hw.
+    case Heq: (is_wconst _ _) => [z | ].
+    * have := is_wconstP gd s Heq; t_xrbindP => v1 h1 hz [<- <-].
+      split; first done.
+      rewrite /= ok_v1 ok_v2 /= /exec_sopn /sopn_sem /= /truncate_word hle1 hle2.
+      by rewrite /x86_IMULt /check_size_16_64 hsz64 /= GRing.mulrC Hw.
+    case Heq2: (is_wconst _ _) => [z | ].
+    * have := is_wconstP gd s Heq2; t_xrbindP => v2 h2 hz [<- <-].
+      split; first by rewrite read_es_swap.
+      rewrite /= ok_v1 ok_v2 /= /exec_sopn /sopn_sem /= /truncate_word hle1 hle2 /=.
+      by rewrite /x86_IMULt /check_size_16_64 hsz64 /= Hw.
+    move=> [<- <-];split; first by rewrite read_es_swap.
+    rewrite /= ok_v1 ok_v2 /= /exec_sopn /sopn_sem /= /truncate_word hle1 hle2 /=.
+    by rewrite /x86_IMULt /check_size_16_64 hsz64 /= Hw.
+  Qed.
+
   Lemma lower_cassgn_classifyP e l s s' v ty v' (Hs: sem_pexpr gd s e = ok v)
       (Hv': truncate_val ty v = ok v')
       (Hw: write_lval gd l v' s = ok s'):
@@ -1139,20 +1170,10 @@ Section PROOF.
           rewrite -(zero_extend_u (zero_extend sz'' z1 * zero_extend sz'' z2)).
           apply (mk_leaP hsz2 (cmp_le_refl _) hlea).
           by rewrite /= ok_v1 ok_v2 /= /sem_sop2 /= /truncate_word hle1 hle2.
-        move => {Heq}.
-        case Heq: (is_wconst _ _) => [z | ].
-        * have := is_wconstP gd s Heq; t_xrbindP => v1 h1 hz.
-          split; first done.
-          rewrite /= ok_v1 ok_v2 /= /exec_sopn /sopn_sem /= /truncate_word hle1 hle2.
-          by rewrite /x86_IMULt /check_size_16_64 hsz64 /= GRing.mulrC Hw.
-        case Heq2: (is_wconst _ _) => [z | ].
-        * have := is_wconstP gd s Heq2; t_xrbindP => v2 h2 hz.
-          split; first by rewrite read_es_swap.
-          rewrite /= ok_v1 ok_v2 /= /exec_sopn /sopn_sem /= /truncate_word hle1 hle2 /=.
-          by rewrite /x86_IMULt /check_size_16_64 hsz64 /= Hw.
-        split; first by rewrite read_es_swap.
-        rewrite /= ok_v1 ok_v2 /= /exec_sopn /sopn_sem /= /truncate_word hle1 hle2 /=.
-        by rewrite /x86_IMULt /check_size_16_64 hsz64 /= Hw.
+        move => {Heq}. 
+        case Heq : mulr => [o e'].
+        by apply: mulr_ok ok_v1 ok_v2 hle1 hle2 hsz64 Hw Heq.
+
       (* Osub Op_w *)
       + rewrite /= /sem_sop2 /=; t_xrbindP => v1 ok_v1 v2 ok_v2.
         move => ? /to_wordI [w1] [z1] [hle1 ??]; subst.
@@ -1642,6 +1663,16 @@ Section PROOF.
           move: Hw'; rewrite /sem_sopn /sem_pexprs /exec_sopn /sopn_sem /= Hvb Hvo /= Hwb Hwo /= /x86_ADD /=.
           by rewrite /check_size_8_64 hsz2 /= zero_extend0 zero_extend1 GRing.add0r GRing.mul1r => ->.
         case: eqP => [ Eob | _ ]; last by exists s2'.
+        case Heq : mulr => [o1 e'].
+        move: Hvb; rewrite Eob /= /sem_sop1 /= => -[?]; subst vb.
+        have [sz1 [w1 [hle1 ??]]]:= to_wordI Hwo;subst vo wo.
+        have Hsc1 : sem_pexpr gd s1' (wconst sc) = ok (Vword sc). 
+        + by rewrite /wconst /= /sem_sop1 /= wrepr_unsigned. 
+        move: Hwb; rewrite /= truncate_word_u wrepr_unsigned => -[?];subst wb.
+        rewrite zero_extend0 !GRing.add0r GRing.mulrC in Hw.
+        have := mulr_ok Hvo Hsc1 hle1 hsz2 _.
+ Hw.
+  
         exists s2'; split => //; apply sem_seq1; constructor; constructor.
         move: Hvb Hwb Hw';rewrite Eob /sem_sopn /sem_pexprs /exec_sopn /sopn_sem /= zero_extend0 GRing.add0r Hvo /= Hwo /=. 
         rewrite /truncate_word hsz2 !zero_extend_wrepr //= /x86_IMULt /check_size_16_64 hsz1 hsz2 /=.
