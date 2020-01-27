@@ -58,7 +58,7 @@ Definition compile_arg ii max_imm (ade: (arg_desc * stype) * pexpr) (m: nmap asm
     Let a := arg_of_pexpr ii ad.2 max_imm e in
     Let _ :=
       assert (check_oreg o a)
-             (ii, Cerr_assembler (AsmErr_string "compile_arg : bad forced register")) in
+             (ii, Cerr_assembler (AsmErr_string "compile_arg : bad forced register")) in                 
     match nget m n with
     | None => ok (nset m n a)
     | Some a' =>
@@ -176,8 +176,9 @@ Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) :=
     let id := instr_desc op in
     let max_imm := id.(id_max_imm) in
     Let asm_args := assemble_x86_opn_aux ii op outx inx in
+    let s := id.(id_str_jas) tt in
     Let _ := assert (id_check id asm_args) 
-       (ii, Cerr_assembler (AsmErr_string "assemble_x86_opn : invalid instruction (check)")) in 
+       (ii, Cerr_assembler (AsmErr_string ("assemble_x86_opn : invalid instruction (check) " ++ s))) in 
     Let _ := assert (check_sopn_args ii max_imm asm_args inx (zip id.(id_in) id.(id_tin)) &&
                      check_sopn_dests ii max_imm asm_args outx (zip id.(id_out) id.(id_tout)))
        (ii, Cerr_assembler (AsmErr_string "assemble_x86_opn: cannot check, please repport")) in    
@@ -664,7 +665,8 @@ Proof.
       t_xrbindP => asm_args' _ ? /assertP hidc ? /assertP /andP[hca hcd] ??;subst op' asm_args'.  
       move: hca; rewrite /check_sopn_args /= => /and3P [].
       rewrite /check_sopn_arg /=.
-      case: asm_args hidc hcd => //= a0 [ // | ] a1 [] //= hidc hcd.
+      case: asm_args hidc hcd => //= a0 [ // | ] a1 [] //= hidc hcd;
+       last by rewrite /check_args_kinds /= !andbF. 
       case: xmm_register_of_var => /=.
       + by move=> r; rewrite /compat_imm !orbF !andbT=> /eqP ? /eqP ?; subst a0 a1.
       case: reg_of_var => //= r; rewrite /compat_imm !orbF !andbT => /eqP ? /eqP ? _; subst a0 a1.
@@ -673,19 +675,20 @@ Proof.
       set id := instr_desc (XOR sz) => hlo.
       rewrite /SF_of_word msb0.
       by apply: (@compile_lvals ii id.(id_max_imm) gd m lvs m' s [:: Reg r; Reg r]
-               id.(id_out) id.(id_tout)
-               (let vf := Some false in (::vf, vf, vf, vf, Some true & (0%R: word sz)))
-               MSB_CLEAR (refl_equal _) hw hlo hcd id.(id_check_dest)).
+             id.(id_out) id.(id_tout)
+             (let vf := Some false in (::vf, vf, vf, vf, Some true & (0%R: word sz)))
+             MSB_CLEAR (refl_equal _) hw hlo hcd id.(id_check_dest)).
     t_xrbindP => ? []// ?? [<-] /= <-.
     move=> hw x hx; rewrite /assemble_x86_opn /is_lea /=.
     t_xrbindP => asm_args' _ ? /assertP hidc ? /assertP /andP[hca hcd] ??;subst op' asm_args'.  
     move: hca; rewrite /check_sopn_args /= => /and3P [].
     rewrite /check_sopn_arg /=.
-    case: asm_args hidc hcd => //= a0 [// | ] a1 [] //= a2 [] //=. 
-    case: ifP => // /eqP hidc _ hcd.
+    case: asm_args hidc hcd => //= a0 [// | ] a1 [] //= a2 [] //=;
+      last by rewrite /check_args_kinds /= !andbF.  
+    rewrite orbF => hidc hcd.
     case: xmm_register_of_var => /=; last first.
     + case: reg_of_var => //= r ; rewrite /compat_imm !orbF !andbT=> /eqP ? /eqP ?; subst a1 a2.
-      by move: hidc; rewrite /Checks.xmm_xmm_xmm; case: (a0).
+      by move: hidc; rewrite /check_args_kinds /= andbF.
     move=> r;rewrite /compat_imm !orbF !andbT => /eqP ? /eqP ? _; subst a1 a2.
     rewrite /eval_op /exec_instr_op /= /eval_instr_op /=.
     rewrite /truncate_word /x86_VPXOR hidc /= /x86_u128_binop /check_size_128_256 wsize_ge_U256. 
@@ -703,7 +706,8 @@ Proof.
     move => <- ? wa htwa [<-] <-; t_xrbindP => m1 hwx ?;subst m1.
     rewrite /assemble_x86_opn /is_lea /=.
     t_xrbindP => asm_args' _ ? /assertP hidc ? /assertP /andP[hca hcd] ?? hlo;subst op' asm_args'.  
-    case: asm_args hidc hcd hca => // a0 [] // a1 []// hidc hcd.
+    case: asm_args hidc hcd hca => // a0 [] // a1 []// hidc hcd;
+      last by rewrite /check_args_kinds /= !andbF.                               
     rewrite /check_sopn_args /= andbT => hca1.
     rewrite /eval_op /exec_instr_op /= /eval_instr_op /=.
     rewrite /= in hidc;rewrite hidc.

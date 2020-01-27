@@ -56,7 +56,7 @@ Definition none_sz (sz:wsize) (_:list asm_arg) : bool := true.
 Fixpoint rec_1 (sz: wsize) (lf : list (wsize -> asm_arg -> bool)) (a: asm_arg) :=
   match lf with
   | [::]    => false
-  | f :: lf => if (f sz a) == true then true else rec_1 sz lf a
+  | f :: lf => if (f sz a) then true else rec_1 sz lf a
   end.
 
 Definition apply_1 (sz: wsize) (f: list (wsize -> asm_arg -> bool)) (args: list asm_arg) : bool :=
@@ -69,7 +69,7 @@ Definition apply_1 (sz: wsize) (f: list (wsize -> asm_arg -> bool)) (args: list 
 Fixpoint rec_2 (sz: wsize) (lf : list (wsize -> asm_arg -> asm_arg -> bool)) (a b: asm_arg) :=
   match lf with
   | [::]    => false
-  | f :: lf => if (f sz a b) == true then true else rec_2 sz lf a b
+  | f :: lf => if (f sz a b) then true else rec_2 sz lf a b
   end.
 
 Definition apply_2 (sz: wsize) (f: list (wsize -> asm_arg -> asm_arg -> bool)) (args: list asm_arg) : bool :=
@@ -81,7 +81,7 @@ Definition apply_2 (sz: wsize) (f: list (wsize -> asm_arg -> asm_arg -> bool)) (
 Fixpoint rec_2' (szi szo: wsize) (lf : list (wsize -> wsize -> asm_arg -> asm_arg -> bool)) (a b: asm_arg) :=
   match lf with
   | [::]    => false
-  | f :: lf => if (f szi szo a b) == true then true else rec_2' szi szo lf a b
+  | f :: lf => if (f szi szo a b) then true else rec_2' szi szo lf a b
   end.
 
 Definition apply_2' (szi szo: wsize) (f: list (wsize -> wsize -> asm_arg -> asm_arg -> bool)) (args: list asm_arg) : bool :=
@@ -271,21 +271,35 @@ Definition xmm_xmm (sz: wsize) a b :=
   | _ , _ => false
   end.
 
+Definition xmm_xmmm (sz : wsize) a b :=
+  match a, b with
+  | XMM _, XMM _ => true 
+  | XMM _, Adr _ => true 
+  | _, _ => false
+  end.
+
+Definition xmmm_xmm (sz : wsize) a b :=
+  match b, a with
+  | XMM _, XMM _ => true 
+  | XMM _, Adr _ => true 
+  | _, _ => false
+  end.
+
 (* ----------------------------------- *)
 
 Definition r_rm_imm8_8 (sz : wsize) a b c :=
   match a, b, c with
-  | Reg _, Reg _, Imm U8 _ => (sz > U8)
-  | Reg _, Adr _, Imm U8 _ => (sz > U8)
-  | Reg _, Glob _, Imm U8 _ => (sz > U8)
+  | Reg _, Reg _, Imm U8 _ => true 
+  | Reg _, Adr _, Imm U8 _ => true 
+  | Reg _, Glob _, Imm U8 _ => true 
   | _ , _, _ => false
   end.
 
 Definition r_rm_imm_8_eq (sz : wsize) a b c :=
   match a, b, c with
-  | Reg _, Reg _, Imm sz' _ => (sz > U8) && (sz == sz')
-  | Reg _, Adr _, Imm sz' _ => (sz > U8) && (sz == sz')
-  | Reg _, Glob _, Imm sz' _ => (sz > U8) && (sz == sz')
+  | Reg _, Reg _, Imm sz' _ => near_eq sz sz'
+  | Reg _, Adr _, Imm sz' _ => near_eq sz sz' 
+  | Reg _, Glob _, Imm sz' _ => near_eq sz sz' 
   | _ , _, _ => false
   end.
 
@@ -421,8 +435,8 @@ apply_1 sz [:: r_16 ] args.
 Definition movd_movq sz (args: list asm_arg) :=
 apply_2 sz [:: xmm_rm_16 ; rm_xmm_16 ] args. (* but it looks like our definition of movd is only [movd xmm rm] *)
 
-Definition xmm_xmm_ sz (args: list asm_arg) :=
-apply_2 sz [:: xmm_xmm ] args.
+Definition vmovdqu sz (args: list asm_arg) :=
+apply_2 sz [:: xmm_xmmm; xmmm_xmm ] args.
 
 Definition xmm_xmm_xmm_ sz (args: list asm_arg) :=
 apply_3 sz [:: xmm_xmm_xmm ] args.
