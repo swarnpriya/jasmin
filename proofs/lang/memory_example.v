@@ -120,19 +120,6 @@ Instance A : alignment :=
 
 End Align.
 
-Definition align_below (p: pointer) (ws: wsize) : pointer :=
-  wand p (wrepr Uptr (- wsize_size ws)).
-
-Lemma is_align_align_below p ws :
-  is_align (align_below p ws) ws.
-Proof.
-Admitted.
-
-Lemma align_below_le p ws :
-  wle Unsigned (align_below p ws) p.
-Proof.
-Admitted.
-
 (** Pointer arithmetic *)
 Definition add (p:pointer) (o:Z) := (p + wrepr U64  o)%R.
 
@@ -441,18 +428,14 @@ Module MemoryI : MemoryT.
   (** Initial memory: empty with pre-allocated blocks.
     The stack is rooted at the higest aligned pointer below the lowest allocated address.
    *)
-  Definition init_mem_alloc (s: seq (pointer * Z)) :=
+  Definition init_mem_alloc (s: seq (pointer * Z)) : Mz.t unit :=
     foldl (fun a pz => set_alloc true a (wunsigned pz.1) pz.2) (Mz.empty _) s.
 
-  Definition init_mem_stk_root (s: seq (pointer * Z)) : pointer :=
-    align_below (foldl (λ p q, if wlt Unsigned p q.1 then p else q.1) ((-1)%R) s) U256.
+  Definition all_above (s: seq (pointer * Z)) (stk: pointer) : bool :=
+    all (λ '(p, _), wlt Unsigned stk p) s.
 
-  Lemma init_mem_stk_root_aligned s :
-    is_align (init_mem_stk_root s) U256.
-  Proof. exact: is_align_align_below. Qed.
-
-  Lemma init_mem_framesP s :
-    valid_frames (init_mem_stk_root s) [::].
+  Lemma init_mem_framesP stk :
+    valid_frames stk [::].
   Proof. apply/lezP; exact: (proj1 (wunsigned_range _)). Qed.
 
   Lemma init_mem_stk_allocP stk_root s x :
@@ -460,24 +443,48 @@ Module MemoryI : MemoryT.
     is_zalloc (init_mem_alloc s) x.
   Proof. Psatz.lia. Qed.
 
-  Lemma init_mem_stk_freeP s x :
-    0 <= x < wunsigned (init_mem_stk_root s) - 0 →
+  Lemma init_mem_stk_freeP_aux s stk m :
+    all_above s stk →
+    ∀ x,
+      0 <= x <= wunsigned stk →
+      is_zalloc (foldl (λ a pz, set_alloc true a (wunsigned pz.1) pz.2) m s) x = is_zalloc m x.
+  Proof.
+    rewrite /all_above.
+    elim: s m => //= - [p z] s ih m /andP[] /ltzP ok_p {}/ih ih x x_range.
+    rewrite (ih _ _ x_range) {ih} set_allocP /=.
+    move: ok_p; rewrite -/(wunsigned stk) -/(wunsigned p) => ok_p.
+    case: andP => //; rewrite !zify.
+    Psatz.lia.
+  Qed.
+
+  Lemma init_mem_stk_freeP s stk x :
+   all_above s stk →
+    0 <= x < wunsigned stk - 0 →
     is_zalloc (init_mem_alloc s) x = false.
   Proof.
-    rewrite /init_mem_stk_root.
-  Admitted.
+    move => all_above x_range.
+    rewrite /init_mem_alloc (init_mem_stk_freeP_aux (Mz.empty _) all_above) //; Psatz.lia.
+  Qed.
   Arguments init_mem_stk_freeP : clear implicits.
 
-  Definition init_mem (s: seq (pointer * Z)) : mem :=
-    {| data := Mz.empty _;
-       alloc := init_mem_alloc s;
-       stk_root := init_mem_stk_root s;
-       stk_root_aligned := init_mem_stk_root_aligned s;
-       frames := [::];
-       framesP := init_mem_framesP s;
-       stk_allocP := init_mem_stk_allocP s;
-       stk_freeP := init_mem_stk_freeP s;
-    |}.
+  Definition init_mem (s: seq (pointer * Z)) (stk: pointer) : exec mem :=
+    match Sumbool.sumbool_of_bool (is_align stk U256) with
+    | right _ => Error ErrStack
+    | left stk_align =>
+    match Sumbool.sumbool_of_bool (all_above s stk) with
+    | right _ => Error ErrStack
+    | left stk_below =>
+      ok
+        {| data := Mz.empty _;
+           alloc := init_mem_alloc s;
+           stk_root := stk;
+           stk_root_aligned := stk_align;
+           frames := [::];
+           framesP := init_mem_framesP stk;
+           stk_allocP := init_mem_stk_allocP s;
+           stk_freeP p := init_mem_stk_freeP s stk p stk_below;
+        |}
+    end end.
 
   Instance M : memory mem :=
     Memory read_mem write_mem valid_pointer
@@ -886,8 +893,6 @@ Module MemoryI : MemoryT.
     case: (frames m) => //= f fr.
     by case: (stack_blocks_rec _ _).
   Qed.
-
-  Compute is_ok (alloc_stack (init_mem [:: (wrepr Uptr 1000, 42)]) 256).
 
 End MemoryI.
 

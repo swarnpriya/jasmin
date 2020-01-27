@@ -321,7 +321,7 @@ Class memory (mem: Type) : Type :=
     ; frames : mem -> seq (pointer * Z)
     ; alloc_stack : mem -> Z -> exec mem
     ; free_stack : mem -> Z -> mem
-    ; init : seq (pointer * Z) → mem
+    ; init : seq (pointer * Z) → pointer → exec mem
     }.
 
 Arguments read_mem : simpl never.
