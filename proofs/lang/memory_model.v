@@ -317,9 +317,8 @@ Class memory (mem: Type) : Type :=
       read_mem  : mem -> pointer -> forall (s:wsize), exec (word s)
     ; write_mem : mem -> pointer -> forall (s:wsize), word s -> exec mem
     ; valid_pointer : mem -> pointer -> wsize -> bool
-    ; top_stack : mem -> pointer
-    ; caller     : mem -> pointer -> option pointer
-    ; frame_size : mem -> pointer -> option Z
+    ; stack_root : mem -> pointer
+    ; frames : mem -> seq (pointer * Z)
     ; alloc_stack : mem -> Z -> exec mem
     ; free_stack : mem -> Z -> mem
     ; init : seq (pointer * Z) → mem
@@ -328,6 +327,9 @@ Class memory (mem: Type) : Type :=
 Arguments read_mem : simpl never.
 Arguments write_mem {_ _} _ _ _ _ : simpl never.
 Arguments valid_pointer : simpl never.
+
+Definition top_stack {mem: Type} {M: memory mem} (m: mem) : pointer :=
+  (head (stack_root m, 0) (frames m)).1.
 
 Section SPEC.
   Context (AL: alignment) mem (M: memory mem)
@@ -345,14 +347,12 @@ Section SPEC.
     ass_fresh    : forall p s, valid_pointer m p s ->
       (wunsigned p + wsize_size s <= wunsigned pstk \/
        wunsigned pstk + sz <= wunsigned p)%Z;
-    ass_caller   : forall p, caller m' p = if p == pstk then Some (top_stack m) else caller m p;
-    ass_size     : forall p, frame_size m' p = if p == pstk then Some sz else frame_size m p;
+    ass_frames : frames m' = (pstk, sz) :: frames m;
   }.
 
   Record stack_stable : Prop := mkSS {
-    ss_top    : top_stack m = top_stack m';
-    ss_caller : forall p, caller m p = caller m' p;
-    ss_size   : forall p, frame_size m p = frame_size m' p;
+    ss_root: stack_root m = stack_root m';
+    ss_frames: frames m = frames m';
   }.
 
   Record free_stack_spec : Prop := mkFSS {
@@ -360,10 +360,7 @@ Section SPEC.
     fss_valid    : forall p s,
       valid_pointer m' p s <->
       (valid_pointer m p s /\ (disjoint_zrange (top_stack m) sz p (wsize_size s)));
-    fss_top      : caller m (top_stack m) = Some (top_stack m');
-    fss_caller   : forall p, caller m' p = if p == top_stack m then None else caller m p;
-    fss_size     : forall p,
-      frame_size m' p = if p == top_stack m then None else frame_size m p;
+    fss_frames : frames m' = behead (frames m);
    }.
 
 End SPEC.
@@ -437,7 +434,7 @@ Parameter write_mem_stable : forall m m' p s v,
   write_mem m p s v = ok m' -> stack_stable m m'.
 
 Parameter free_stackP : forall m sz,
-  frame_size m (top_stack m) = Some sz ->
+  omap snd (ohead (frames m)) = Some sz ->
   free_stack_spec m sz (free_stack m sz).
 
 End MemoryT.
