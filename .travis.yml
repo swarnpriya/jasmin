@@ -14,7 +14,7 @@ before_install:
 branches:
   only:
   - master
-  - array_cast
+  - x86_extracted
 notifications:
   email:
   - false

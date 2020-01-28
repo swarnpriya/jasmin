@@ -20,7 +20,7 @@ JSJOBS    ?= 2
 CHECKPY   ?=
 CHECK     := $(CHECKPY) scripts/runtest --jobs="$(JSJOBS)"
 CHECK     += config/tests.config
-CHECKCATS ?= all 
+CHECKCATS ?= all safety
 
 # --------------------------------------------------------------------
 PREFIX ?= /usr/local
