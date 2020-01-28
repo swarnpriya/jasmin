@@ -334,7 +334,7 @@ Proof.
     rewrite /compat_imm orbF => /eqP <- w /get_globalI [z hz ->] /= ht.
     by rewrite /get_global_word hz /=; eauto.
   + move=> sz x p; case: eqP => [<- | //].
-    t_xrbindP => r hr addr haddr h; case: h hcomp => <-.
+    t_xrbindP => r hr addr haddr h; move: h hcomp => <-.
     rewrite /compat_imm orbF => /eqP <- w1 wp vp hget htop wp' vp' hp hp' wr hwr <- /= htr.
     have <- := addr_of_pexprP eqm hr hget htop hp hp' haddr.
     by case: eqm => <- ???; rewrite hwr /=; eauto.
