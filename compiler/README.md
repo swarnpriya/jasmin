@@ -18,15 +18,18 @@ via the opam OCaml packages manager.
 
           $> opam pin add -ny jasmin .
 
-  3. Optionally, use opam to install the system dependencies:
+  3. Add the Coq remotes:
+
+          $> opam repo add coq-released https://coq.inria.fr/opam/released
+          $> opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+
+  4. Optionally, use opam to install the system dependencies:
 
           $> opam install depext
           $> opam depext jasmin
 
-  4. Install Jasmin dependencies:
+  5. Install Jasmin dependencies:
 
-          $> opam repo add coq-released https://coq.inria.fr/opam/released
-          $> opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
           $> opam install --deps-only jasmin
 
 Opam can be easily installed from source or via your packages manager:
