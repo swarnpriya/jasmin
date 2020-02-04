@@ -621,9 +621,8 @@ let pp_ret env fmt xs =
   Format.fprintf fmt "@[return (%a);@]"
     (pp_list ",@ " (fun fmt x -> pp_ovar env fmt (L.unloc x))) xs
 
-let pp_opn fmt op = 
+let pp_opn fmt op =
   let s = Printer.pp_opn op in
-  let s = String.sub s 1 (String.length s - 1) in
   Format.fprintf fmt "%s" s
 
 let pp_lval1 env pp_e fmt (lv, (ety, e)) = 
