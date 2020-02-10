@@ -78,7 +78,7 @@ Section INCL.
       apply: rbindP => -[Xc1 c1'] /Hc1 -> /=.
       by apply: rbindP => -[Xc2 c2'] /Hc2 -> /= [] <- <-.
     + move=> i dir lo hi c Hc ii X1 c0 X2 /=.
-      by apply: rbindP => -[Xc c'] /Hc -> /=.     
+      by apply: rbindP => -[Xc c'] /Hc -> /=.
     + move=> a c e c' Hc Hc' ii X1 c0 X2 /=.
       apply: rbindP => -[Xc1 c1] /Hc -> /=.
       by apply: rbindP => -[Xc1' c1'] /Hc' -> /=.

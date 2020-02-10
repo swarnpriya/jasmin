@@ -1256,11 +1256,11 @@ Section PROOF.
     have [vm3 [hc0' hvm3]]:= Hc0' _ hvm2.
     have H :  forall e0,
       sem_pexpr gd s2 e0 = ok (Vbool true) ->
-      (exists vm2, 
-        sem p' {| emem := emem s3; evm := vm3 |} [:: MkI ii (Cwhile a c0 e0 c0')] 
+      (exists vm2,
+        sem p' {| emem := emem s3; evm := vm3 |} [:: MkI ii (Cwhile a c0 e0 c0')]
            {| emem := emem s4; evm := vm2 |} ∧ vm_uincl (evm s4) vm2) ->
-      exists vm2, 
-        sem p' {| emem := emem s1; evm := vm1 |} [:: MkI ii (Cwhile a c0 e0 c0')] 
+      exists vm2,
+        sem p' {| emem := emem s1; evm := vm1 |} [:: MkI ii (Cwhile a c0 e0 c0')]
            {| emem := emem s4; evm := vm2 |} ∧ vm_uincl (evm s4) vm2.
     + move=> e0 He0 [vm5] [] /sem_seq1_iff /sem_IE Hsw hvm5;exists vm5;split => //.
       apply:sem_seq1;constructor.

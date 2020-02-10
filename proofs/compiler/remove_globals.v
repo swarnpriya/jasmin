@@ -86,8 +86,8 @@ Section REMOVE.
     | Copn _ _ _ _ | Ccall _ _ _ _ => ok gd
     | Cif _ c1 c2 =>
       Let gd := foldM extend_glob_i gd c1 in
-      foldM extend_glob_i gd c2 
-    | Cwhile _ c1 _ c2 => 
+      foldM extend_glob_i gd c2
+    | Cwhile _ c1 _ c2 =>
       Let gd := foldM extend_glob_i gd c1 in
       foldM extend_glob_i gd c2
     | Cfor _ _ c =>
@@ -265,14 +265,14 @@ Section REMOVE.
           let env := merge_env env1 env2 in
           ok (env, [::MkI ii (Cif e c1 c2)])
         | Cwhile a c1 e c2 =>
-          let check_c env := 
+          let check_c env :=
             Let envc1 := remove_glob remove_glob_i env c1 in
             let env1 := envc1.1 in
             Let e := remove_glob_e ii env1 e in
             Let envc2 := remove_glob remove_glob_i env1 c2 in
             ok (Check2_r e envc1 envc2) in
           Let lr := loop2 check_c Loop.nb env in
-          let: (Loop2_r e c1 c2 env) := lr in                               
+          let: (Loop2_r e c1 c2 env) := lr in
           ok (env, [::MkI ii (Cwhile a c1 e c2)])
         | Cfor xi (d,e1,e2) c =>
           if is_glob xi.(v_var) then cferror (Ferr_remove_glob ii xi)

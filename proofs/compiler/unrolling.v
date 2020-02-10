@@ -56,7 +56,7 @@ Fixpoint unroll_i (i:instr) : cmd :=
       let cs := map (fun n => assgn ii i (Pconst n) :: c') l in
       flatten cs
     | _, _       => [:: MkI ii (Cfor i (dir, low, hi) c') ]
-    end     
+    end
   | Cwhile a c e c'  => [:: MkI ii (Cwhile a (unroll_cmd unroll_i c) e (unroll_cmd unroll_i c')) ]
   | Ccall _ _ _ _  => [:: i ]
   end.

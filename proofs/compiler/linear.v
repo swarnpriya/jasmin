@@ -117,13 +117,13 @@ Fixpoint snot e :=
   | _ => Papp1 Onot e
   end.
 
-Definition add_align ii a (lc:lcmd) := 
+Definition add_align ii a (lc:lcmd) :=
   match a with
   | NoAlign => lc
   | Align   =>  MkLI ii Lalign :: lc
   end.
 
-Definition align ii a (lc:ciexec (label * lcmd)) : ciexec (label * lcmd) := 
+Definition align ii a (lc:ciexec (label * lcmd)) : ciexec (label * lcmd) :=
   Let p := lc in
   ok (p.1, add_align ii a p.2).
 
@@ -163,9 +163,9 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
     | Some true =>
       let L1 := lbl in
       let lbl := next_lbl L1 in
-      align ii a ( 
-      MkLI ii (Llabel L1) >; linear_c linear_i c ;; 
-                             linear_c linear_i c' lbl 
+      align ii a (
+      MkLI ii (Llabel L1) >; linear_c linear_i c ;;
+                             linear_c linear_i c' lbl
                              (MkLI ii (Lgoto L1) :: lc))
 
     | Some false =>
@@ -183,7 +183,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
       let L2 := next_lbl L1 in
       let lbl := next_lbl L2 in
                              MkLI ii (Lgoto L1) >;
-      align ii a (MkLI ii (Llabel L2) >; linear_c linear_i c' ;; 
+      align ii a (MkLI ii (Llabel L2) >; linear_c linear_i c' ;;
       MkLI ii (Llabel L1) >; linear_c linear_i c lbl
                              (MkLI ii (Lcond e L2) :: lc))
       end

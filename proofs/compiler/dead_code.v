@@ -119,7 +119,7 @@ Fixpoint dead_code_i (i:instr) (s:Sv.t) {struct i} : ciexec (Sv.t * cmd) :=
     ciok (read_e_rec (read_e_rec s e2) e1,[:: MkI ii (Cfor x (dir,e1,e2) c) ])
 
   | Cwhile a c e c' =>
-    let dobody s_o := 
+    let dobody s_o :=
       let s_o' := read_e_rec s_o e in
       Let sci := dead_code_c dead_code_i c s_o' in
       let: (s_i, c) := sci in
