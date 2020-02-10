@@ -25,8 +25,6 @@ clean: sub-clean this-clean
 
 distclean: sub-distclean this-distclean
 
-_CoqProject:
-	./configure.sh
 # --------------------------------------------------------------------
 .PHONY: this-config this-build this-distclean this-clean
 
