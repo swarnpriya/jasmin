@@ -184,17 +184,38 @@ Definition check_ty_val (ty:stype) (v:value) :=
 
 (* ** Variable map
  * -------------------------------------------------------------------- *)
+Variant var_scope := 
+  | Global
+  | Local.
 
-Notation vmap     := (Fv.t (fun t => exec (sem_t t))).
+Scheme Equality for var_scope.
+
+Lemma var_scope_eq_axiom : Equality.axiom var_scope_beq.
+Proof.
+  move=> x y;apply:(iffP idP).
+  + by apply: internal_var_scope_dec_bl.
+  by apply: internal_var_scope_dec_lb.
+Qed.
+
+Definition var_scope_eqMixin     := Equality.Mixin var_scope_eq_axiom.
+Canonical  var_scope_eqType      := Eval hnf in EqType var_scope var_scope_eqMixin.
+
+Notation vmap     := (Fv.t (fun t => exec ( var_scope * sem_t t))).
+
+Definition is_mut (m:vmap) x = 
+  match m.[x] with
+  | Ok (Global, _ ) => false
+  | _ => true
+  end.
 
 Definition undef_addr t :=
-  match t return exec (sem_t t) with
+  match t return exec (var_scope * sem_t t) with
   | sbool | sint | sword _ => undef_error
-  | sarr n => ok (WArray.empty n)
+  | sarr n => ok (Local * WArray.empty n)
   end.
 
 Definition vmap0 : vmap :=
-  @Fv.empty (fun t => exec (sem_t t)) (fun x => undef_addr x.(vtype)).
+  @Fv.empty (fun t => exec (var_scope * sem_t t)) (fun x => undef_addr x.(vtype)).
 
 Definition on_vu t r (fv: t -> r) (fu:exec r) (v:exec t) : exec r :=
   match v with
@@ -213,12 +234,21 @@ Proof. by case: v => [a | []] Hfv Hfu //=;[case; apply: Hfv | apply Hfu]. Qed.
 Definition get_var (m:vmap) x :=
   on_vu (@to_val (vtype x)) undef_error (m.[x]%vmap).
 
-(* Assigning undefined value is allowed only for bool *)
+(* Assigning undefined value is allowed only for bool *) 
 Definition set_var (m:vmap) x v : exec vmap :=
-  on_vu (fun v => m.[x<-ok v]%vmap)
-        (if is_sbool x.(vtype) then ok m.[x<-undef_addr x.(vtype)]%vmap
+  Let _ := assert (is_mut m x) type_error in
+  on_vu (fun v => m.[x<-ok(Local, v)]%vmap)
+        (if is_sbool x.(vtype) then ok m.[x<- undef_addr x.(vtype)]%vmap
          else type_error)
         (of_val (vtype x) v).
+
+
+Definition initglob_var (m:vmap) x v : exec vmap :=
+  on_vu (fun v => m.[x<-ok (Global, v)]%vmap)
+        (type_error)
+        (of_val (vtype x) v).
+
+
 
 Lemma set_varP (m m':vmap) x v P :
    (forall t, of_val (vtype x) v = ok t -> m.[x <- ok t]%vmap = m' -> P) ->
