@@ -177,14 +177,14 @@ Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (a:arg_desc) (ty:stype) : e
       Let _ := assert (check_oreg or a) ErrType in
       match a with
       | Condt c   => Let b := eval_cond c s.(xrf) in ok (Vbool b)
-      | Imm sz' w => 
-        match ty with 
+      | Imm sz' w =>
+        match ty with
         | sword sz => ok (Vword (sign_extend sz w))
         | _        => type_error
         end
       | Glob g    => Let w := get_global_word  gd g  in ok (Vword w)
       | Reg r     => ok (Vword (s.(xreg) r))
-      | Adr adr   => 
+      | Adr adr   =>
         match ty with
         | sword sz => Let w := read_mem s.(xmem) (decode_addr s adr) sz in ok (Vword w)
         | _        => type_error
@@ -316,7 +316,7 @@ Definition mem_write_val (f:msb_flag) (args:asm_args) (aty: arg_desc * stype) (v
   Let v := oof_val aty.2 v in
   mem_write_ty f s args aty.1 v.
 
-Definition mem_write_vals 
+Definition mem_write_vals
   (f:msb_flag) (s:x86_mem) (args:asm_args) (a: seq arg_desc) (ty: seq stype) (vs:values) :=
   fold2 ErrType (mem_write_val f args) (zip a ty) vs s.
 
@@ -340,7 +340,7 @@ Definition eval_special o args m :=
   | _, _ => type_error
   end.
 
-Definition eval_op o args m := 
+Definition eval_op o args m :=
   if is_special o then
     eval_special o args m
   else
@@ -349,7 +349,7 @@ Definition eval_op o args m :=
 
 Definition eval_instr (i : asm) (s: x86_state) : exec x86_state :=
   match i with
-  | ALIGN        
+  | ALIGN
   | LABEL _      => ok (st_write_ip (xip s).+1 s)
   | JMP   lbl    => eval_JMP lbl s
   | Jcc   lbl ct => eval_Jcc lbl ct s
@@ -376,9 +376,9 @@ Definition x86sem : relation x86_state := clos_refl_trans x86_state x86sem1.
 End GLOB_DEFS.
 
 (* -------------------------------------------------------------------- *)
-Variant saved_stack := 
-| SavedStackNone 
-| SavedStackReg of register  
+Variant saved_stack :=
+| SavedStackNone
+| SavedStackReg of register
 | SavedStackStk of Z.
 
 Record xfundef := XFundef {
