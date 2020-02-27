@@ -94,23 +94,23 @@ let arrexp_func fc =
 (* The variables are allocated in decreasing order of (base) size;
    this ensures that the alignment constraints are satisfied. *)
 
-let add_var tbl ws x = 
+let add_var tbl ws x =
   if is_stack_var x then
     let ws' = Mv.find_default Wsize.U8 x tbl in
     if size_of_ws ws' <= size_of_ws ws then Mv.add x ws tbl
-    else tbl 
+    else tbl
   else tbl
 
-let rec array_access_e tbl e = 
+let rec array_access_e tbl e =
   match e with
   | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ | Pvar _ -> tbl
   | Pget(ws, x, e) -> array_access_e (add_var tbl ws (L.unloc x)) e
-  | Pload (_,_,e) | Papp1 (_,e) -> array_access_e tbl e 
+  | Pload (_,_,e) | Papp1 (_,e) -> array_access_e tbl e
   | Papp2(_,e1,e2) -> array_access_e (array_access_e tbl e1) e2
   | PappN (_,es) -> array_access_es tbl es
   | Pif(_, e1,e2,e3) -> array_access_es tbl [e1;e2;e3]
 
-and array_access_es tbl es = List.fold_left array_access_e tbl es 
+and array_access_es tbl es = List.fold_left array_access_e tbl es
 
 let array_access_lv tbl = function
  | Lnone _ | Lvar _ -> tbl
@@ -119,17 +119,17 @@ let array_access_lv tbl = function
 
 let array_access_lvs =  List.fold_left array_access_lv
 
-let rec array_acces_i tbl i = 
+let rec array_acces_i tbl i =
   match i.i_desc with
   | Cassgn (x, _, _, e) -> array_access_lv (array_access_e tbl e) x
-  | Copn(xs,_,_,es) | Ccall(_,xs,_,es) -> 
+  | Copn(xs,_,_,es) | Ccall(_,xs,_,es) ->
     array_access_lvs (array_access_es tbl es) xs
-  | Cif(e, c1, c2) | Cwhile(_, c1, e, c2)  -> 
+  | Cif(e, c1, c2) | Cwhile(_, c1, e, c2)  ->
     array_access_c (array_access_c (array_access_e tbl e) c1) c2
   | Cfor(_,(_,e1,e2), c) ->
     array_access_c (array_access_e (array_access_e tbl e1) e2) c
 
-and array_access_c tbl c = 
+and array_access_c tbl c =
   List.fold_left array_acces_i tbl c
 
 let init_stk fc =
@@ -137,7 +137,7 @@ let init_stk fc =
   let allocatable = Regalloc.X64.allocatables in
   let free_regs = Sv.diff allocatable fv in
   let vars = Sv.elements (Sv.filter is_stack_var (vars_fc fc)) in
-  if vars == [] then 
+  if vars == [] then
     [], 0, Sv.inter Regalloc.X64.callee_save fv, None
   else
 
@@ -145,22 +145,22 @@ let init_stk fc =
   let get_size v =
      match v.v_ty with
      | Bty (U ws)  -> let s = size_of_ws ws in v, s, s
-     | Arr (ws', n) -> 
+     | Arr (ws', n) ->
        let ws = try Mv.find v tbl with Not_found -> assert false in
        v, size_of_ws ws, arr_size ws' n
      | _            -> assert false in
   let vars = List.rev_map get_size vars in
   let cmp (_, s1, _) (_, s2, _) = s2 - s1 in
 
-  let size = ref 0 in  
-  (* FIXME: optimize this 
+  let size = ref 0 in
+  (* FIXME: optimize this
      if pos mod s <> 0 then a hole appear in the stack,
-     in this case we can try to fill the hole with a variable 
+     in this case we can try to fill the hole with a variable
      of a smaller size allowing to align the next pos
    *)
   let init_var (v, s, n) =
     let pos = !size in
-    let pos = 
+    let pos =
       if pos mod s = 0 then pos
       else (pos/s + 1) * s in
     size := pos + n;
@@ -169,7 +169,7 @@ let init_stk fc =
   if Sv.is_empty free_regs then
     let saved_stack = V.mk "saved_stack" Stack (tu uptr) L._dummy in
     let vars = get_size saved_stack :: vars in
-    let vars = List.sort cmp vars in 
+    let vars = List.sort cmp vars in
     let alloc = List.map init_var vars in
     let is_saved_stack (v, _) = V.equal v saved_stack in
     let (_, p_stack) = List.find is_saved_stack alloc in
@@ -177,11 +177,11 @@ let init_stk fc =
     let to_save = Sv.inter Regalloc.X64.callee_save fv in
     alloc, !size, to_save, Some (`InStack p_stack)
   else
-    let r = 
+    let r =
       let s = Sv.diff free_regs Regalloc.X64.callee_save in
       if Sv.is_empty s then Sv.any free_regs
       else Sv.any s in
-    let vars = List.sort cmp vars in 
+    let vars = List.sort cmp vars in
     let alloc = List.map init_var vars in
     let to_save = Sv.inter Regalloc.X64.callee_save (Sv.add r fv) in
     alloc, !size, to_save, Some (`InReg r)
@@ -194,5 +194,5 @@ let check_stack_var =
 let stk_alloc_func fc =
   List.iter (fun v -> check_stack_var "function argument" (L.mk_loc L._dummy v)) fc.f_args;
   List.iter (check_stack_var "function return") fc.f_ret;
-  init_stk fc 
+  init_stk fc
 
