@@ -114,37 +114,53 @@ Qed.
 (* ** Variable map
  * -------------------------------------------------------------------- *)
 
-Notation vmap     := (Fv.t (fun t => exec (psem_t t))).
+Notation vmap     := (Fv.t (fun t => exec (var_scope * psem_t t))).
 
 Definition pundef_addr t :=
-  match t return exec (psem_t t) with
+  match t return exec (var_scope * psem_t t) with
   | sbool | sint | sword _ => undef_error
-  | sarr n => ok (@WArray.empty n)
+  | sarr n => ok (Local, @WArray.empty n)
   end.
 
 Definition vmap0 : vmap :=
-  @Fv.empty (fun t => exec (psem_t t)) (fun x => pundef_addr x.(vtype)).
+  @Fv.empty (fun t => exec (var_scope * psem_t t)) (fun x => pundef_addr x.(vtype)).
 
 (* An access to a undefined value, leads to an error *)
 Definition get_var (m:vmap) x :=
-  on_vu (@pto_val (vtype x)) undef_error (m.[x]%vmap).
+  on_vu (fun p => @pto_val (vtype x) (snd p)) undef_error (m.[x]%vmap).
+
+Definition is_mut (m:vmap) x := 
+  match m.[x]%vmap with
+  | Ok (Global, _ ) => false
+  | _ => true
+  end.
 
 (* Assigning undefined value is allowed only for bool *)
 Definition set_var (m:vmap) x v : exec vmap :=
-  on_vu (fun v => m.[x<-ok v]%vmap)
+  Let _ := assert (is_mut m x) ErrType in
+  on_vu (fun v => m.[x<-ok(Local, v)]%vmap)
         (if is_sbool x.(vtype) then ok m.[x<-pundef_addr x.(vtype)]%vmap
          else type_error)
         (pof_val (vtype x) v).
 
 Lemma set_varP (m m':vmap) x v P :
-   (forall t, pof_val (vtype x) v = ok t -> m.[x <- ok t]%vmap = m' -> P) ->
-   ( is_sbool x.(vtype) -> pof_val (vtype x) v = undef_error ->
-     m.[x<-pundef_addr x.(vtype)]%vmap = m' -> P) ->
+   (is_mut m x -> forall t, pof_val (vtype x) v = ok t -> m.[x <- ok(Local, t)]%vmap = m' -> P) ->
+   (is_mut m x -> is_sbool x.(vtype) -> pof_val (vtype x) v = undef_error ->
+   m.[x<-pundef_addr x.(vtype)]%vmap = m' -> P) ->
    set_var m x v = ok m' -> P.
 Proof.
-  move=> H1 H2;apply on_vuP => //.
+  move=> H1 H2;rewrite /set_var; t_xrbindP => _ /assertP hmut;apply on_vuP; first by apply H1.
   by case:ifPn => // hb herr []; apply : H2.
 Qed.
+
+Definition init_glob_var (m:vmap) x v : exec vmap :=
+  on_vu (fun v => m.[x<-ok (Global, v)]%vmap)
+        (type_error)
+        (pof_val (vtype x) v).
+
+Definition init_globals (gd: glob_decls) := 
+  foldM (fun (g:glob_decl) (m:vmap) =>
+           init_glob_var m g.(g_var) (glob2val g.(g_val))) vmap0 gd.
 
 (* ** Parameter expressions
  * -------------------------------------------------------------------- *)
@@ -167,15 +183,12 @@ Notation "'Let' ( n , t ) ':=' s '.[' x ']' 'in' body" :=
 
 Section SEM_PEXPR.
 
-Context (gd: glob_decls).
-
 Fixpoint sem_pexpr (s:estate) (e : pexpr) : exec value :=
   match e with
   | Pconst z => ok (Vint z)
   | Pbool b  => ok (Vbool b)
   | Parr_init n => ok (Varr (WArray.empty n))
   | Pvar v => get_var s.(evm) v
-  | Pglobal g => get_global gd g
   | Pget ws x e =>
       Let (n, t) := s.[x] in
       Let i := sem_pexpr s e >>= to_int in
@@ -247,16 +260,15 @@ End SEM_PEXPR.
 Section SEM.
 
 Variable P:prog.
-Notation gd := (p_globs P).
 
 Definition sem_range (s : estate) (r : range) :=
   let: (d,pe1,pe2) := r in
-  Let i1 := sem_pexpr gd s pe1 >>= to_int in
-  Let i2 := sem_pexpr gd s pe2 >>= to_int in
+  Let i1 := sem_pexpr s pe1 >>= to_int in
+  Let i2 := sem_pexpr s pe2 >>= to_int in
   ok (wrange d i1 i2).
 
-Definition sem_sopn gd o m lvs args :=
-  sem_pexprs gd m args >>= exec_sopn o >>= write_lvals gd m lvs.
+Definition sem_sopn o m lvs args :=
+  sem_pexprs m args >>= exec_sopn o >>= write_lvals m lvs.
 
 Inductive sem : estate -> cmd -> estate -> Prop :=
 | Eskip s :
@@ -272,47 +284,47 @@ with sem_I : estate -> instr -> estate -> Prop :=
 
 with sem_i : estate -> instr_r -> estate -> Prop :=
 | Eassgn s1 s2 (x:lval) tag ty e v v' :
-    sem_pexpr gd s1 e = ok v ->
+    sem_pexpr s1 e = ok v ->
     truncate_val ty v = ok v' →
-    write_lval gd x v' s1 = ok s2 ->
+    write_lval x v' s1 = ok s2 ->
     sem_i s1 (Cassgn x tag ty e) s2
 
 | Eopn s1 s2 t o xs es:
-    sem_sopn gd o s1 xs es = ok s2 ->
+    sem_sopn o s1 xs es = ok s2 ->
     sem_i s1 (Copn xs t o es) s2
 
 | Eif_true s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e = ok (Vbool true) ->
+    sem_pexpr s1 e = ok (Vbool true) ->
     sem s1 c1 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
 | Eif_false s1 s2 e c1 c2 :
-    sem_pexpr gd s1 e = ok (Vbool false) ->
+    sem_pexpr s1 e = ok (Vbool false) ->
     sem s1 c2 s2 ->
     sem_i s1 (Cif e c1 c2) s2
 
 | Ewhile_true s1 s2 s3 s4 a c e c' :
     sem s1 c s2 ->
-    sem_pexpr gd s2 e = ok (Vbool true) ->
+    sem_pexpr s2 e = ok (Vbool true) ->
     sem s2 c' s3 ->
     sem_i s3 (Cwhile a c e c') s4 ->
     sem_i s1 (Cwhile a c e c') s4
 
 | Ewhile_false s1 s2 a c e c' :
     sem s1 c s2 ->
-    sem_pexpr gd s2 e = ok (Vbool false) ->
+    sem_pexpr s2 e = ok (Vbool false) ->
     sem_i s1 (Cwhile a c e c') s2
 
 | Efor s1 s2 (i:var_i) d lo hi c vlo vhi :
-    sem_pexpr gd s1 lo = ok (Vint vlo) ->
-    sem_pexpr gd s1 hi = ok (Vint vhi) ->
+    sem_pexpr s1 lo = ok (Vint vlo) ->
+    sem_pexpr s1 hi = ok (Vint vhi) ->
     sem_for i (wrange d vlo vhi) s1 c s2 ->
     sem_i s1 (Cfor i (d, lo, hi) c) s2
 
 | Ecall s1 m2 s2 ii xs f args vargs vs :
-    sem_pexprs gd s1 args = ok vargs ->
+    sem_pexprs s1 args = ok vargs ->
     sem_call s1.(emem) f vargs m2 vs ->
-    write_lvals gd {|emem:= m2; evm := s1.(evm) |} xs vs = ok s2 ->
+    write_lvals {|emem:= m2; evm := s1.(evm) |} xs vs = ok s2 ->
     sem_i s1 (Ccall ii xs f args) s2
 
 with sem_for : var_i -> seq Z -> estate -> cmd -> estate -> Prop :=
@@ -326,10 +338,11 @@ with sem_for : var_i -> seq Z -> estate -> cmd -> estate -> Prop :=
     sem_for i (w :: ws) s1 c s3
 
 with sem_call : mem -> funname -> seq value -> mem -> seq value -> Prop :=
-| EcallRun m1 m2 fn f vargs vargs' s1 vm2 vres vres' :
+| EcallRun m1 m2 fn f vargs vargs' s1 vm0 vm2 vres vres' :
     get_fundef (p_funcs P) fn = Some f ->
     mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs ->
-    write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1 ->
+    init_globals (p_globs P) = ok vm0 ->
+    write_vars f.(f_params) vargs (Estate m1 vm0) = ok s1 ->
     sem s1 f.(f_body) (Estate m2 vm2) ->
     mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres ->
     mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ->
@@ -354,22 +367,22 @@ Lemma sem_iE s i s' :
   match i with
   | Cassgn lv _ ty e =>
     ∃ v v',
-    [/\ sem_pexpr gd s e = ok v, truncate_val ty v = ok v' & write_lval gd lv v' s = ok s' ]
-  | Copn lvs _ op es => sem_sopn gd op s lvs es = ok s'
+    [/\ sem_pexpr s e = ok v, truncate_val ty v = ok v' & write_lval lv v' s = ok s' ]
+  | Copn lvs _ op es => sem_sopn op s lvs es = ok s'
   | Cif e th el =>
-    ∃ b, sem_pexpr gd s e = ok (Vbool b) ∧ sem s (if b then th else el) s'
+    ∃ b, sem_pexpr s e = ok (Vbool b) ∧ sem s (if b then th else el) s'
   | Cfor i (d, lo, hi) c =>
     ∃ vlo vhi,
-    [/\ sem_pexpr gd s lo = ok (Vint vlo), sem_pexpr gd s hi = ok (Vint vhi) &
+    [/\ sem_pexpr s lo = ok (Vint vlo), sem_pexpr s hi = ok (Vint vhi) &
         sem_for i (wrange d vlo vhi) s c s' ]
   | Cwhile a c e c' =>
     ∃ si b,
-       [/\ sem s c si, sem_pexpr gd si e = ok (Vbool b) &
+       [/\ sem s c si, sem_pexpr si e = ok (Vbool b) &
                        if b then ∃ sj, sem si c' sj ∧ sem_i sj (Cwhile a c e c') s' else si = s' ]
   | Ccall _ xs f es =>
     ∃ vs m2 rs,
-    [/\ sem_pexprs gd s es = ok vs, sem_call s.(emem) f vs m2 rs &
-       write_lvals gd {|emem:= m2; evm := s.(evm) |} xs rs = ok s' ]
+    [/\ sem_pexprs s es = ok vs, sem_call s.(emem) f vs m2 rs &
+       write_lvals {|emem:= m2; evm := s.(evm) |} xs rs = ok s' ]
   end.
 Proof.
   case => {s i s'} //.
@@ -386,18 +399,19 @@ Lemma sem_callE m1 fn vargs' m2 vres' :
   sem_call m1 fn vargs' m2 vres' ->
   ∃ f,
     get_fundef (p_funcs P) fn = Some f ∧
-  ∃ vargs s1 vm2 vres,
+  ∃ vargs s1 vm0 vm2 vres,
   [/\
-    mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs,
-    write_vars f.(f_params) vargs (Estate m1 vmap0) = ok s1,
+    mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs /\
+    init_globals (p_globs P) = ok vm0,
+    write_vars f.(f_params) vargs (Estate m1 vm0) = ok s1,
     sem s1 f.(f_body) (Estate m2 vm2),
     mapM (fun (x:var_i) => get_var vm2 x) f.(f_res) = ok vres &
     mapM2 ErrType truncate_val f.(f_tyout) vres = ok vres' ].
 Proof.
-  case => { m1 fn vargs' m2 vres' } m1 m2 fn f vargs vargs' s1 vm2 vres vres'.
-  move => hf ha hw hc hr ht.
+  case => { m1 fn vargs' m2 vres' } m1 m2 fn f vargs vargs' s1 vm0 vm2 vres vres'.
+  move => hf ha hi hw hc hr ht.
   exists f; split => //.
-  by exists vargs, s1, vm2, vres.
+  by exists vargs, s1, vm0, vm2, vres.
 Qed.
 
 (* -------------------------------------------------------------------- *)
@@ -438,37 +452,37 @@ Section SEM_IND.
 
   Definition sem_Ind_assgn : Prop :=
     forall (s1 s2 : estate) (x : lval) (tag : assgn_tag) ty (e : pexpr) v v',
-      sem_pexpr gd s1 e = ok v →
+      sem_pexpr s1 e = ok v →
       truncate_val ty v = ok v' →
-      write_lval gd x v' s1 = ok s2 →
+      write_lval x v' s1 = ok s2 →
       Pi_r s1 (Cassgn x tag ty e) s2.
 
   Definition sem_Ind_opn : Prop :=
     forall (s1 s2 : estate) t (o : sopn) (xs : lvals) (es : pexprs),
-      sem_sopn gd o s1 xs es = ok s2 →
+      sem_sopn o s1 xs es = ok s2 →
       Pi_r s1 (Copn xs t o es) s2.
 
   Definition sem_Ind_if_true : Prop :=
     forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
-    sem_pexpr gd s1 e = ok (Vbool true) ->
+    sem_pexpr s1 e = ok (Vbool true) ->
     sem s1 c1 s2 -> Pc s1 c1 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
   Definition sem_Ind_if_false : Prop :=
     forall (s1 s2 : estate) (e : pexpr) (c1 c2 : cmd),
-    sem_pexpr gd s1 e = ok (Vbool false) ->
+    sem_pexpr s1 e = ok (Vbool false) ->
     sem s1 c2 s2 -> Pc s1 c2 s2 -> Pi_r s1 (Cif e c1 c2) s2.
 
   Definition sem_Ind_while_true : Prop :=
     forall (s1 s2 s3 s4 : estate) a (c : cmd) (e : pexpr) (c' : cmd),
     sem s1 c s2 -> Pc s1 c s2 ->
-    sem_pexpr gd s2 e = ok (Vbool true) ->
+    sem_pexpr s2 e = ok (Vbool true) ->
     sem s2 c' s3 -> Pc s2 c' s3 ->
     sem_i s3 (Cwhile a c e c') s4 -> Pi_r s3 (Cwhile a c e c') s4 -> Pi_r s1 (Cwhile a c e c') s4.
 
   Definition sem_Ind_while_false : Prop :=
     forall (s1 s2 : estate) a (c : cmd) (e : pexpr) (c' : cmd),
     sem s1 c s2 -> Pc s1 c s2 ->
-    sem_pexpr gd s2 e = ok (Vbool false) ->
+    sem_pexpr s2 e = ok (Vbool false) ->
     Pi_r s1 (Cwhile a c e c') s2.
 
   Hypotheses
@@ -483,8 +497,8 @@ Section SEM_IND.
   Definition sem_Ind_for : Prop :=
     forall (s1 s2 : estate) (i : var_i) (d : dir)
            (lo hi : pexpr) (c : cmd) (vlo vhi : Z),
-      sem_pexpr gd s1 lo = ok (Vint vlo) ->
-      sem_pexpr gd s1 hi = ok (Vint vhi) ->
+      sem_pexpr s1 lo = ok (Vint vlo) ->
+      sem_pexpr s1 hi = ok (Vint vhi) ->
       sem_for i (wrange d vlo vhi) s1 c s2 ->
       Pfor i (wrange d vlo vhi) s1 c s2 -> Pi_r s1 (Cfor i (d, lo, hi) c) s2.
 
@@ -508,17 +522,18 @@ Section SEM_IND.
     forall (s1 : estate) (m2 : mem) (s2 : estate)
            (ii : inline_info) (xs : lvals)
            (fn : funname) (args : pexprs) (vargs vs : seq value),
-      sem_pexprs gd s1 args = ok vargs →
+      sem_pexprs s1 args = ok vargs →
       sem_call (emem s1) fn vargs m2 vs -> Pfun (emem s1) fn vargs m2 vs →
-      write_lvals gd {| emem := m2; evm := evm s1 |} xs vs = ok s2 →
+      write_lvals {| emem := m2; evm := evm s1 |} xs vs = ok s2 →
       Pi_r s1 (Ccall ii xs fn args) s2.
 
   Definition sem_Ind_proc : Prop :=
     forall (m1 m2 : mem) (fn:funname) (f : fundef) (vargs vargs': seq value)
-           (s1 : estate) (vm2 : vmap) (vres vres': seq value),
+           (s1 : estate) (vm0 vm2 : vmap) (vres vres': seq value),
       get_fundef (p_funcs P) fn = Some f ->
       mapM2 ErrType truncate_val f.(f_tyin) vargs' = ok vargs ->
-      write_vars (f_params f) vargs {| emem := m1; evm := vmap0 |} = ok s1 ->
+      init_globals (p_globs P) = ok vm0 -> 
+      write_vars (f_params f) vargs {| emem := m1; evm := vm0 |} = ok s1 ->
       sem s1 (f_body f) {| emem := m2; evm := vm2 |} ->
       Pc s1 (f_body f) {| emem := m2; evm := vm2 |} ->
       mapM (fun x : var_i => get_var vm2 x) (f_res f) = ok vres ->
@@ -578,8 +593,8 @@ Section SEM_IND.
   with sem_call_Ind (m : mem) (f13 : funname) (l : seq value) (m0 : mem)
          (l0 : seq value) (s : sem_call m f13 l m0 l0) {struct s} : Pfun m f13 l m0 l0 :=
     match s with
-    | @EcallRun m1 m2 fn f vargs vargs' s1 vm2 vres vres' Hget Hca Hw Hsem Hvres Hcr =>
-       @Hproc m1 m2 fn f vargs vargs' s1 vm2 vres vres' Hget Hca Hw Hsem (sem_Ind Hsem) Hvres Hcr
+    | @EcallRun m1 m2 fn f vargs vargs' s1 vm0 vm2 vres vres' Hget Hca Hi Hw Hsem Hvres Hcr =>
+       @Hproc m1 m2 fn f vargs vargs' s1 vm0 vm2 vres vres' Hget Hca Hi Hw Hsem (sem_Ind Hsem) Hvres Hcr
     end.
 
 End SEM_IND.
@@ -768,9 +783,9 @@ move => w [] // s v /= hle; apply: rbindP => w' /truncate_wordP [hle'] -> [<-].
 by rewrite -(cmp_le_antisym hle hle') zero_extend_u.
 Qed.
 
-Lemma is_wconstP gd s sz e w:
+Lemma is_wconstP s sz e w:
   is_wconst sz e = Some w →
-  sem_pexpr gd s e >>= to_word sz = ok w.
+  sem_pexpr s e >>= to_word sz = ok w.
 Proof.
   case: e => // - [] // sz' e /=; case: ifP => // hle /oseq.obindI [z] [h] [<-].
   have := is_constP e; rewrite h => {h} /is_reflect_some_inv -> {e}.
@@ -906,7 +921,7 @@ Lemma vrvP_var (x:var_i) v s1 s2 :
   s1.(evm) = s2.(evm) [\ Sv.add x Sv.empty].
 Proof.
   rewrite /write_var;t_xrbindP => vm.
-  by apply: set_varP => [t | _] => ? <- <- z Hz; rewrite Fv.setP_neq //;apply /eqP; SvD.fsetdec.
+  apply: set_varP => [hm t | hm _] => ? <- <- z Hz; rewrite Fv.setP_neq //;apply /eqP; SvD.fsetdec.
 Qed.
 
 Lemma write_noneP s s' ty v:
@@ -919,8 +934,8 @@ Proof.
   by case:ifPn => // /eqP ? [->];split => //;right.
 Qed.
 
-Lemma vrvP gd (x:lval) v s1 s2 :
-  write_lval gd x v s1 = ok s2 ->
+Lemma vrvP (x:lval) v s1 s2 :
+  write_lval x v s1 = ok s2 ->
   s1.(evm) = s2.(evm) [\ vrv x].
 Proof.
   case x => /= [ _ ty | ? /vrvP_var| sz y e| sz y e] //.
@@ -929,12 +944,12 @@ Proof.
   apply: on_arr_varP => n t; case: y => -[] ty yn yi /subtypeEl [n' /= [-> hle]] hget.
   apply: rbindP => we;apply: rbindP => ve He Hve.
   apply: rbindP => v0 Hv0;apply rbindP => t' Ht'.
-  rewrite /set_var /= => -[<-].
+  rewrite /set_var /=; t_xrbindP => ? _ _ <- <- /=.
   move=> z Hz; rewrite Fv.setP_neq //;apply /eqP;SvD.fsetdec.
 Qed.
 
-Lemma vrvsP gd xs vs s1 s2 :
-  write_lvals gd s1 xs vs = ok s2 ->
+Lemma vrvsP xs vs s1 s2 :
+  write_lvals s1 xs vs = ok s2 ->
   s1.(evm) = s2.(evm) [\ vrvs xs].
 Proof.
   elim: xs vs s1 s2 => [|x xs Hrec] [|v vs] s1 s2 //=.
@@ -959,7 +974,7 @@ Proof.
   + move=> s1 s2 x tag ty e v v' ? hty Hw z.
     by rewrite write_i_assgn;apply (vrvP Hw).
   + move=> s1 s2 t o xs es; rewrite /sem_sopn.
-    case: (Let _ := sem_pexprs _ _ _ in _) => //= vs Hw z.
+    case: (Let _ := sem_pexprs _ _ in _) => //= vs Hw z.
     by rewrite write_i_opn;apply (vrvsP Hw).
   + by move=> s1 s2 e c1 c2 _ _ Hrec z;rewrite write_i_if => Hnin;apply Hrec;SvD.fsetdec.
   + by move=> s1 s2 e c1 c2 _ _ Hrec z;rewrite write_i_if => Hnin;apply Hrec;SvD.fsetdec.
@@ -986,18 +1001,18 @@ Lemma write_iP P i s1 s2 :
    sem_i P s1 i s2 -> s1.(evm) = s2.(evm) [\ write_i i].
 Proof. by move=> /EmkI -/(_ 1%positive) /write_IP. Qed.
 
-Lemma disjoint_eq_on gd s r s1 s2 v:
+Lemma disjoint_eq_on s r s1 s2 v:
   disjoint s (vrv r) ->
-  write_lval gd r v s1 = ok s2 ->
+  write_lval r v s1 = ok s2 ->
   s1.(evm) =[s] s2.(evm).
 Proof.
   move=> Hd /vrvP H z Hnin;apply H.
   move:Hd;rewrite /disjoint /is_true Sv.is_empty_spec;SvD.fsetdec.
 Qed.
 
-Lemma disjoint_eq_ons gd s r s1 s2 v:
+Lemma disjoint_eq_ons s r s1 s2 v:
   disjoint s (vrvs r) ->
-  write_lvals gd s1 r v = ok s2 ->
+  write_lvals s1 r v = ok s2 ->
   s1.(evm) =[s] s2.(evm).
 Proof.
   move=> Hd /vrvsP H z Hnin;apply H.
@@ -1015,15 +1030,15 @@ Proof.
 Qed.
 
 Section READ_E_ES_EQ_ON.
-  Context (gd: glob_decls) (m: mem) (vm vm': vmap).
+  Context (m: mem) (vm vm': vmap).
 
   Let P e : Prop :=
     ∀ s : Sv.t, vm =[read_e_rec s e]  vm' →
-    sem_pexpr gd {| emem := m; evm := vm |} e = sem_pexpr gd {| emem := m; evm := vm' |} e.
+    sem_pexpr {| emem := m; evm := vm |} e = sem_pexpr {| emem := m; evm := vm' |} e.
 
   Let Q es : Prop :=
     ∀ s, vm =[read_es_rec s es] vm' →
-         sem_pexprs gd (Estate m vm) es = sem_pexprs gd (Estate m vm') es.
+         sem_pexprs (Estate m vm) es = sem_pexprs (Estate m vm') es.
 
   Lemma read_e_es_eq_on : (∀ e, P e) * (∀ es, Q es).
   Proof.
@@ -1032,7 +1047,7 @@ Section READ_E_ES_EQ_ON.
       have Heq' : vm =[read_e_rec s e] vm'.
       + apply: (eq_onI _ Heq); rewrite /= read_esE; SvD.fsetdec.
       move: rec => /(_ _ Heq') ->.
-      case: (sem_pexpr _ _ e) => //= v.
+      case: (sem_pexpr _ e) => //= v.
       by move: ih => /(_ _ Heq) ->.
     - by move=> x s /get_var_eq_on -> //; SvD.fsetdec.
     - move=> sz x e He s Heq; rewrite (He _ Heq) => {He}.
@@ -1043,7 +1058,7 @@ Section READ_E_ES_EQ_ON.
     - by move=> op e He s /He ->.
     - move => op e1 He1 e2 He2 s Heq; rewrite (He1 _ Heq) (He2 s) //.
       by move=> z Hin; apply Heq; rewrite read_eE; SvD.fsetdec.
-    - by move => op es Hes s heq; rewrite -!/(sem_pexprs gd {| emem := m |}) (Hes _ heq).
+    - by move => op es Hes s heq; rewrite -!/(sem_pexprs {| emem := m |}) (Hes _ heq).
     move=> t e He e1 He1 e2 He2 s Heq; rewrite (He _ Heq) (He1 s) ? (He2 s) //.
     + move=> z Hin;apply Heq;rewrite !read_eE.
       by move: Hin;rewrite read_eE;SvD.fsetdec.
@@ -1053,11 +1068,11 @@ Section READ_E_ES_EQ_ON.
 
 End READ_E_ES_EQ_ON.
 
-Definition read_e_eq_on gd s vm' vm m e :=
-  (read_e_es_eq_on gd m vm vm').1 e s.
+Definition read_e_eq_on s vm' vm m e :=
+  (read_e_es_eq_on m vm vm').1 e s.
 
-Definition read_es_eq_on gd es s m vm vm' :=
-  (read_e_es_eq_on gd m vm vm').2 es s.
+Definition read_es_eq_on es s m vm vm' :=
+  (read_e_es_eq_on m vm vm').2 es s.
 
 Lemma set_var_eq_on s x v vm1 vm2 vm1':
   set_var vm1 x v = ok vm2 ->
@@ -1066,8 +1081,9 @@ Lemma set_var_eq_on s x v vm1 vm2 vm1':
      vm2 =[Sv.union (Sv.add x Sv.empty) s]  vm2' /\
      set_var vm1' x v = ok vm2'.
 Proof.
-  (apply: set_varP;rewrite /set_var) => [t | ->] -> <- hvm /=.
-  + exists (vm1'.[x <- ok t])%vmap;split => // z hin.
+  (apply: set_varP;rewrite /set_var) => [hmut t | hmut ->] -> <- hvm /=.
+  + exists (vm1'.[x <- ok(Local, t)])%vmap.
+split => // z hin.
     case: (x =P z) => [<- | /eqP Hxz];first by rewrite !Fv.setP_eq.
     by rewrite !Fv.setP_neq ?hvm //;move/eqP:Hxz; SvD.fsetdec.
   exists (vm1'.[x <- pundef_addr (vtype x)])%vmap;split => // z Hin.

@@ -28,7 +28,7 @@ Require Import oseq.
 Require Export ZArith Setoid Morphisms.
 From mathcomp Require Import all_ssreflect all_algebra.
 From CoqWord Require Import ssrZ.
-Require Export strings word utils type var global sem_type x86_decl x86_instr_decl.
+Require Export strings word utils type var sem_type x86_decl x86_instr_decl.
 Require Import xseq.
 Import Utf8 ZArith.
 
@@ -342,7 +342,6 @@ Inductive pexpr : Type :=
 | Pbool  :> bool -> pexpr
 | Parr_init : positive → pexpr
 | Pvar   :> var_i -> pexpr
-| Pglobal :> global -> pexpr
 | Pget   : wsize -> var_i -> pexpr -> pexpr
 | Pload  : wsize -> var_i -> pexpr -> pexpr
 | Papp1  : sop1 -> pexpr -> pexpr
@@ -384,7 +383,6 @@ Section PEXPR_RECT.
     (Hbool: ∀ b, P (Pbool b))
     (Harr_init: ∀ n, P (Parr_init n))
     (Hvar: ∀ x, P (Pvar x))
-    (Hglobal: ∀ g, P (Pglobal g))
     (Hget: ∀ sz x e, P e → P (Pget sz x e))
     (Hload: ∀ sz x e, P e → P (Pload sz x e))
     (Happ1: ∀ op e, P e → P (Papp1 op e))
@@ -405,7 +403,6 @@ Section PEXPR_RECT.
     | Pbool b => Hbool b
     | Parr_init n => Harr_init n
     | Pvar x => Hvar x
-    | Pglobal g => Hglobal g
     | Pget sz x e => Hget sz x (pexpr_rect e)
     | Pload sz x e => Hload sz x (pexpr_rect e)
     | Papp1 op e => Happ1 op (pexpr_rect e)
@@ -441,7 +438,6 @@ Fixpoint eqb (e1 e2:pexpr) : bool :=
   | Pbool  b1   , Pbool  b2    => b1 == b2
   | Parr_init n1, Parr_init n2 => n1 == n2
   | Pvar   x1   , Pvar   x2    => (x1 == x2)
-  | Pglobal g1, Pglobal g2 => g1 == g2
   | Pget sz1 x1 e1, Pget sz2 x2 e2 => (sz1 == sz2) && (x1 == x2) && eqb e1 e2
   | Pload sz1 x1 e1, Pload sz2 x2 e2 => (sz1 == sz2) && (x1 == x2) && eqb e1 e2
   | Papp1 o1 e1 , Papp1  o2 e2 => (o1 == o2) && eqb e1 e2
@@ -466,9 +462,9 @@ Fixpoint eqb (e1 e2:pexpr) : bool :=
 
   Lemma eq_axiom : Equality.axiom eqb.
   Proof.
-    elim => [n1|b1| n1 |x1|g1|w1 x1 e1 He1|w1 x1 e1 He1
+    elim => [n1|b1| n1 |x1|w1 x1 e1 He1|w1 x1 e1 He1
             |o1 e1 He1|o1 e11 e12 He11 He12 | o1 es1 Hes1 | st1 t1 e11 e12 Ht1 He11 He12]
-            [n2|b2| n2 |x2|g2|w2 x2 e2|w2 x2 e2|o2 e2|o2 e21 e22 | o2 es2 |st2 t2 e21 e22] /=;
+            [n2|b2| n2 |x2| w2 x2 e2|w2 x2 e2|o2 e2|o2 e21 e22 | o2 es2 |st2 t2 e21 e22] /=;
         try by constructor.
     + apply (@equivP (n1 = n2));first by apply: eqP.
       by split => [->|[]->].
@@ -477,8 +473,6 @@ Fixpoint eqb (e1 e2:pexpr) : bool :=
     + apply (@equivP (n1 = n2));first by apply eqP.
       by split => [->|[]->].
     + apply (@equivP (x1 = x2));first by apply: eqP.
-      by split => [->|[]->].
-    + apply (@equivP (g1 = g2));first by apply: eqP.
       by split => [->|[]->].
     + apply (@equivP (((w1 == w2) && (x1 == x2)) /\ eqb e1 e2));first by apply andP.
       split => [ [] /andP [] /eqP -> /eqP -> /He1 -> | [] -> -> <-] //.
@@ -520,7 +514,6 @@ Section PEXPR_IND.
     (Hbool: ∀ b, P (Pbool b))
     (Harr_init: ∀ n, P (Parr_init n))
     (Hvar: ∀ x, P (Pvar x))
-    (Hglobal: ∀ g, P (Pglobal g))
     (Hget: ∀ sz x e, P e → P (Pget sz x e))
     (Hload: ∀ sz x e, P e → P (Pload sz x e))
     (Happ1: ∀ op e, P e → P (Papp1 op e))
@@ -547,7 +540,6 @@ Section PEXPR_IND.
     | Pbool b => Hbool b
     | Parr_init n => Harr_init n
     | Pvar x => Hvar x
-    | Pglobal g => Hglobal g
     | Pget sz x e => Hget sz x (pexpr_ind e)
     | Pload sz x e => Hload sz x (pexpr_ind e)
     | Papp1 op e => Happ1 op (pexpr_ind e)
@@ -572,7 +564,6 @@ Section PEXPRS_IND.
     pexprs_bool: ∀ b, P (Pbool b);
     pexprs_arr_init: ∀ n, P (Parr_init n);
     pexprs_var: ∀ x, P (Pvar x);
-    pexprs_global: ∀ g, P (Pglobal g);
     pexprs_get: ∀ sz x e, P e → P (Pget sz x e);
     pexprs_load: ∀ sz x e, P e → P (Pload sz x e);
     pexprs_app1: ∀ op e, P e → P (Papp1 op e);
@@ -595,7 +586,6 @@ Section PEXPRS_IND.
     | Pbool b => pexprs_bool h b
     | Parr_init n => pexprs_arr_init h n
     | Pvar x => pexprs_var h x
-    | Pglobal g => pexprs_global h g
     | Pget sz x e => pexprs_get h sz x (pexpr_mut_ind e)
     | Pload sz x e => pexprs_load h sz x (pexpr_mut_ind e)
     | Papp1 op e => pexprs_app1 h op (pexpr_mut_ind e)
@@ -763,6 +753,17 @@ Definition signature_of_fundef (fd: fundef) : function_signature :=
 
 Definition fun_decl := (funname * fundef)%type.
 Notation fun_decls  := (seq fun_decl).
+
+Variant glob_data := 
+  | Gword : forall (ws:wsize), word ws -> glob_data
+(*  | Garr  : forall (p:positive), WArray.array p -> glob_data*).
+
+Record glob_decl := mkGlob {
+  g_var : var;
+  g_val : glob_data;
+}.
+
+Notation glob_decls  := (seq glob_decl).
 
 Record prog := {
   p_globs : glob_decls;
@@ -1096,7 +1097,6 @@ Fixpoint read_e_rec (s:Sv.t) (e:pexpr) : Sv.t :=
   | Pbool  _
   | Parr_init _    => s
   | Pvar   x       => Sv.add x s
-  | Pglobal _      => s
   | Pget _ x e     => read_e_rec (Sv.add x s) e
   | Pload _ x e    => read_e_rec (Sv.add x s) e
   | Papp1  _ e     => read_e_rec s e
@@ -1329,7 +1329,6 @@ Fixpoint eq_expr e e' :=
   | Pbool  b      , Pbool  b'         => b == b'
   | Parr_init n   , Parr_init n'      => n == n'
   | Pvar   x      , Pvar   x'         => v_var x == v_var x'
-  | Pglobal g, Pglobal g' => g == g'
   | Pget w x e    , Pget w' x' e'      => (w == w') && (v_var x == v_var x') && eq_expr e e'
   | Pload w x e, Pload w' x' e' => (w == w') && (v_var x == v_var x') && eq_expr e e'
   | Papp1  o e    , Papp1  o' e'      => (o == o') && eq_expr e e'
@@ -1374,10 +1373,6 @@ Proof. by move/eqP. Qed.
 
 Lemma eq_expr_var x1 x2 :
   eq_expr (Pvar x1) (Pvar x2) -> x1 = x2 :> var.
-Proof. by move/eqP. Qed.
-
-Lemma eq_expr_global g1 g2 :
-  eq_expr (Pglobal g1) (Pglobal g2) -> g1 = g2.
 Proof. by move/eqP. Qed.
 
 Lemma eq_expr_load w1 w2 v1 v2 e1 e2 :
