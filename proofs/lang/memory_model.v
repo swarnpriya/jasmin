@@ -312,21 +312,26 @@ Class alignment : Type :=
     ; is_align_no_overflow ptr sz : is_align ptr sz → no_overflow ptr (wsize_size sz)
     }.
 
-Class memory (mem: Type) : Type :=
-  Memory {
+Class raw_memory (mem: Type) : Type :=
+  RawMemory {
       read_mem  : mem -> pointer -> forall (s:wsize), exec (word s)
     ; write_mem : mem -> pointer -> forall (s:wsize), word s -> exec mem
     ; valid_pointer : mem -> pointer -> wsize -> bool
+    }.
+
+Arguments read_mem : simpl never.
+Arguments write_mem {_ _} _ _ _ _ : simpl never.
+Arguments valid_pointer : simpl never.
+
+Class memory (mem: Type) : Type :=
+  Memory {
+      as_raw_memory :> raw_memory mem
     ; stack_root : mem -> pointer
     ; frames : mem -> seq (pointer * Z)
     ; alloc_stack : mem -> Z -> exec mem
     ; free_stack : mem -> Z -> mem
     ; init : seq (pointer * Z) → pointer → exec mem
     }.
-
-Arguments read_mem : simpl never.
-Arguments write_mem {_ _} _ _ _ _ : simpl never.
-Arguments valid_pointer : simpl never.
 
 Definition top_stack {mem: Type} {M: memory mem} (m: mem) : pointer :=
   (head (stack_root m, 0) (frames m)).1.
@@ -369,6 +374,48 @@ Arguments alloc_stack_spec {_ _ _} _ _ _.
 Arguments stack_stable {_ _} _ _.
 Arguments free_stack_spec {_ _} _ _ _.
 
+Section RawMemoryT.
+  Context (A: alignment) (mem: Type) (CM: coreMem mem pointer) (RM: raw_memory mem).
+
+  Class raw_memory_spec :=
+    RawMemorySpec {
+        addP p k : add p k = (p + wrepr Uptr k)%R
+      ; readV m p s : reflect (exists v, read_mem m p s = ok v) (valid_pointer m p s)
+      ; writeV m p s v : reflect (exists m', write_mem m p s v = ok m') (valid_pointer m p s)
+      ; read_mem_error m p s e : read_mem m p s = Error e -> e = ErrAddrInvalid
+      ; readP m p s : read_mem m p s = CoreMem.read m p s
+      ; writeP m p s v : write_mem m p s v = CoreMem.write m p v
+      ; write_read8 m m' p ws v k :
+          write_mem m p ws v = ok m' →
+          read_mem m' k U8 =
+          let i := wunsigned k - wunsigned p in
+          if (0 <=? i) && (i <? wsize_size ws) then ok (LE.wread8 v i)
+          else read_mem m k U8
+      ; writeP_eq m m' p s v :
+          write_mem m p s v = ok m' →
+          read_mem m' p s = ok v
+      ; writeP_neq m m' p s v p' s' :
+          write_mem m p s v = ok m' →
+          disjoint_range p s p' s' →
+          read_mem m' p' s' = read_mem m p' s'
+      ; write_valid m m' p s v p' s' :
+          write_mem m p s v = ok m' →
+          valid_pointer m' p' s' = valid_pointer m p' s'
+      ; valid_align m p s : valid_pointer m p s → is_align p s
+      ; is_align_valid_pointer m p ws :
+          is_align p ws →
+          (∀ k, 0 <= k < wsize_size ws → valid_pointer m (p + wrepr U64 k) U8) →
+          valid_pointer m p ws
+      ; read_write_any_mem m1 m1' pr szr pw szw vw m2 m2' :
+          valid_pointer m1 pr szr →
+          read_mem m1 pr szr = read_mem m1' pr szr →
+          write_mem m1 pw szw vw = ok m2 →
+          write_mem m1' pw szw vw = ok m2' →
+          read_mem m2 pr szr = read_mem m2' pr szr
+      }.
+
+End RawMemoryT.
+
 Module Type MemoryT.
 
 Declare Instance A : alignment.
@@ -377,54 +424,7 @@ Parameter mem : Type.
 
 Declare Instance CM : coreMem mem pointer.
 Declare Instance M : memory mem.
-
-Parameter addP : forall p k, add p k = (p + wrepr U64 k)%R.
-
-Parameter readV : forall m p s,
-  reflect (exists v, read_mem m p s = ok v) (valid_pointer m p s).
-
-Parameter writeV : forall m p s v,
-  reflect (exists m', write_mem m p s v = ok m') (valid_pointer m p s).
-
-Parameter read_mem_error : forall m p s e, read_mem m p s = Error e -> e = ErrAddrInvalid.
-
-Parameter readP : forall m p s, read_mem m p s = CoreMem.read m p s.
-Parameter writeP : forall m p s (v:word s), write_mem m p s v = CoreMem.write m p v.
-
-Parameter write_read8 : forall m m' p ws (v: word ws) k,
-  write_mem m p ws v = ok m' ->
-  read_mem m' k U8 =
-    let i := wunsigned k - wunsigned p in
-    if (0 <=? i) && (i <? wsize_size ws) then ok (LE.wread8 v i)
-    else read_mem m k U8.
-
-Parameter writeP_eq : forall m m' p s (v :word s),
-  write_mem m p s v = ok m' ->
-  read_mem m' p s = ok v.
-
-Parameter writeP_neq : forall m m' p s (v :word s) p' s',
-  write_mem m p s v = ok m' ->
-  disjoint_range p s p' s' ->
-  read_mem m' p' s' = read_mem m p' s'.
-
-Parameter write_valid : forall m m' p s (v :word s) p' s',
-  write_mem m p s v = ok m' ->
-  valid_pointer m' p' s' = valid_pointer m p' s'.
-
-Parameter valid_align : forall m p s, valid_pointer m p s -> is_align p s.
-
-Parameter is_align_valid_pointer : forall m p ws,
-   is_align p ws ->
-   (forall k, 0 <= k < wsize_size ws -> valid_pointer m (p + wrepr U64 k) U8) ->
-   valid_pointer m p ws.
-
-Parameter read_write_any_mem :
-  forall m1 m1' pr szr pw szw vw m2 m2',
-    valid_pointer m1 pr szr ->
-    read_mem m1 pr szr = read_mem m1' pr szr ->
-    write_mem m1 pw szw vw = ok m2 ->
-    write_mem m1' pw szw vw = ok m2' ->
-    read_mem m2 pr szr = read_mem m2' pr szr.
+Declare Instance RM : raw_memory_spec A CM as_raw_memory.
 
 (* -------------------------------------------------------------------- *)
 Parameter alloc_stackP : forall m m' sz,

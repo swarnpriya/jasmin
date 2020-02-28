@@ -60,17 +60,17 @@ Lemma read_mem_valid_pointer m ptr sz w :
   read_mem m ptr sz = ok w ->
   valid_pointer m ptr sz.
 Proof.
-  by move => hr; apply /Memory.readV;exists w.
+  by move => hr; apply /readV; exists w.
 Qed.
 
 Lemma write_mem_valid_pointer m ptr sz w m' :
   write_mem m ptr sz w = ok m' ->
   valid_pointer m ptr sz.
 Proof.
-  move => hw; apply /Memory.writeV; exists m'; exact hw.
+  move => hw; apply /writeV; exists m'; exact hw.
 Qed.
 
 Lemma write_mem_can_read m ptr sz w m' :
   write_mem m ptr sz w = ok m' ->
   exists w', read_mem m ptr sz = ok w'.
-Proof. by move => /write_mem_valid_pointer /Memory.readV. Qed.
+Proof. by move => /write_mem_valid_pointer /readV. Qed.
