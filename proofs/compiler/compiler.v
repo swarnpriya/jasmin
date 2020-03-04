@@ -82,7 +82,8 @@ Record compiler_params := {
   inline_var   : var -> bool;
   is_var_in_memory : var_i → bool;
   reg_alloc_fd : funname -> fundef -> fundef;
-  stk_alloc_fd : fun_decl -> Z * Ident.ident * list (var * Z) * (list var * stack_alloc.saved_stack);
+  stk_pointer_name : Ident.ident;
+  stk_alloc_fd : fun_decl -> Z * list (var * Z) * (list var * stack_alloc.saved_stack);
   print_prog   : compiler_step -> prog -> prog;
   print_linear : lprog -> lprog;
   warning      : instr_info -> warning_msg -> instr_info;
@@ -155,7 +156,7 @@ Definition compile_prog (entries : seq funname) (p:prog) :=
     let pd := cparams.(print_prog) DeadCode_RegAllocation pd in
 
     (* stack_allocation                    *)
-    Let ps := stack_alloc.alloc_prog cparams.(stk_alloc_fd) pd in
+    Let ps := stack_alloc.alloc_prog cparams.(stk_pointer_name) cparams.(stk_alloc_fd) pd in
     (* linearisation                     *)
     Let pl := linear_prog ps in
     let pl := cparams.(print_linear) pl in

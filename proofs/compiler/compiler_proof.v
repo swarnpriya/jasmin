@@ -147,7 +147,7 @@ Proof.
   apply: rbindP => pstk Hpstk.
   apply: rbindP=> pl Hpl [] <- <-. rewrite !print_linearP.
   move=> Hin Hcall Halloc.
-  have Haok : alloc_ok pstk fn mem.
+  have Haok : alloc_ok pstk.(sp_funcs) fn mem.
   + rewrite /alloc_ok=> fd Hfd.
     move: (get_map_cfprog Hpl Hfd)=> [f' [Hf'1 Hf'2]].
     apply: rbindP Hf'1=> [fn' Hfn'] [] Hf'.

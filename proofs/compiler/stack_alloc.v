@@ -67,7 +67,6 @@ Canonical  saved_stack_eqType      := Eval hnf in EqType saved_stack saved_stack
 Record sfundef := MkSFun {
   sf_iinfo  : instr_info;
   sf_stk_sz : Z;
-  sf_stk_id : Ident.ident;
   sf_tyin   : seq stype;
   sf_params : seq var_i;
   sf_body   : cmd;
@@ -78,24 +77,27 @@ Record sfundef := MkSFun {
 
 Definition sfundef_beq fd1 fd2 :=
   match fd1, fd2 with
-  | MkSFun ii1 sz1 id1 ti1 p1 c1 to1 r1 e1, MkSFun ii2 sz2 id2 ti2 p2 c2 to2 r2 e2=>
-    (ii1 == ii2) && (sz1 == sz2) && (id1 == id2) &&
+  | MkSFun ii1 sz1 ti1 p1 c1 to1 r1 e1, MkSFun ii2 sz2 ti2 p2 c2 to2 r2 e2=>
+    (ii1 == ii2) && (sz1 == sz2) &&
     (ti1 == ti2) && (p1 == p2) && (c1 == c2) && (to1 == to2) && (r1 == r2) && (e1 == e2)
   end.
 
 Lemma sfundef_eq_axiom : Equality.axiom sfundef_beq.
 Proof.
-  move=> [i1 s1 id1 ti1 p1 c1 to1 r1 e1] [i2 s2 id2 ti2 p2 c2 to2 r2 e2] /=.
-  apply (@equivP ((i1 == i2) && (s1 == s2) && (id1 == id2) && (ti1 == ti2) && (p1 == p2) && (c1 == c2) && (to1 == to2) && (r1 == r2) && (e1 == e2)));first by apply idP.
-  by split=> [ /andP[] /andP[] /andP[] /andP[] /andP[] /andP[] /andP[] /andP[] | [] ] /eqP -> /eqP->/eqP->/eqP->/eqP->/eqP->/eqP->/eqP->/eqP->.
+  move=> [i1 s1 ti1 p1 c1 to1 r1 e1] [i2 s2 ti2 p2 c2 to2 r2 e2] /=.
+  apply (@equivP ((i1 == i2) && (s1 == s2) && (ti1 == ti2) && (p1 == p2) && (c1 == c2) && (to1 == to2) && (r1 == r2) && (e1 == e2)));first by apply idP.
+  by split=> [ /andP[] /andP[] /andP[] /andP[] /andP[] /andP[] /andP[] | [] ] /eqP -> /eqP->/eqP->/eqP->/eqP->/eqP->/eqP->/eqP->.
 Qed.
 
 Definition sfundef_eqMixin   := Equality.Mixin sfundef_eq_axiom.
 Canonical  sfundef_eqType      := Eval hnf in EqType sfundef sfundef_eqMixin.
 
-Definition sprog := seq (funname * sfundef).
+Record sprog := {
+  sp_funcs: seq (funname * sfundef);
+  sp_stk_id: Ident.ident
+}.
 
-Definition map := (Mvar.t Z * Ident.ident)%type.
+Definition map := Mvar.t Z.
 
 Definition size_of (t:stype) :=
   match t with
@@ -111,7 +113,7 @@ Definition aligned_for (ty: stype) (ofs: Z) : bool :=
   | sbool | sint => false
   end.
 
-Definition init_map (sz:Z) (nstk:Ident.ident) (l:list (var * Z)):=
+Definition init_map (sz:Z) (l:list (var * Z)) : cexec map :=
   let add (vp:var*Z) (mp:Mvar.t Z * Z) :=
       let '(v, p) := vp in
     if (mp.2 <=? p)%Z then
@@ -122,22 +124,26 @@ Definition init_map (sz:Z) (nstk:Ident.ident) (l:list (var * Z)):=
     else cerror (Cerr_stk_alloc "not aligned")
     else cerror (Cerr_stk_alloc "overlap") in
   Let mp := foldM add (Mvar.empty Z, 0%Z) l in
-  if (mp.2 <=? sz)%Z then cok (mp.1, nstk)
+  if (mp.2 <=? sz)%Z then cok mp.1
   else cerror (Cerr_stk_alloc "stack size").
 
 Definition is_in_stk (m:map) (x:var) :=
-  match Mvar.get m.1 x with
+  match Mvar.get m x with
   | Some _ => true
   | None   => false
   end.
 
-Definition vstk (m:map) :=  {|vtype := sword Uptr; vname := m.2|}.
+Section NSTK.
 
-Definition is_vstk (m:map) (x:var) :=
-  x == (vstk m).
+Context (nstk: Ident.ident).
+
+Definition vstk := {| vtype := sword Uptr; vname := nstk |}.
+
+Definition is_vstk (x:var) :=
+  x == vstk.
 
 Definition check_var m (x:var_i) :=
-  ~~ is_in_stk m x && ~~is_vstk m x.
+  ~~ is_in_stk m x && ~~is_vstk x.
 
 Definition cast_w ws := Papp1 (Oword_of_int ws).
 
@@ -179,29 +185,29 @@ Fixpoint alloc_e (m:map) (e: pexpr) :=
   match e with
   | Pconst _ | Pbool _ | Parr_init _ | Pglobal _ => ok e
   | Pvar   x =>
-    match Mvar.get m.1 x with
+    match Mvar.get m x with
     | Some ofs =>
       if is_word_type (vtype x) is Some ws then
         let ofs := cast_const ofs in
-        let stk := {| v_var := vstk m; v_info := x.(v_info) |} in
+        let stk := {| v_var := vstk; v_info := x.(v_info) |} in
         ok (Pload ws stk ofs)
       else not_a_word_v
     | None     =>
-      if is_vstk m x then stk_not_fresh
+      if is_vstk x then stk_not_fresh
       else ok e
     end
   | Pget ws x e1 =>
     Let e1 := alloc_e m e1 in
-    match Mvar.get m.1 x with
+    match Mvar.get m x with
     | Some ofs =>
       if is_align (wrepr _ ofs) ws then
-        let stk := {| v_var := vstk m; v_info := x.(v_info) |} in
+        let stk := {| v_var := vstk; v_info := x.(v_info) |} in
         let ofs := mk_ofs ws e1 ofs in
         ok (Pload ws stk ofs)
       else not_aligned
 
     | None =>
-      if is_vstk m x then stk_not_fresh
+      if is_vstk x then stk_not_fresh
       else ok (Pget ws x e1)
     end
 
@@ -236,17 +242,17 @@ Definition alloc_lval (m:map) (r:lval) ty :=
   | Lnone _ _ => ok r
 
   | Lvar x =>
-    match Mvar.get m.1 x with
+    match Mvar.get m x with
     | Some ofs =>
       if is_word_type (vtype x) is Some ws then
         if ty == sword ws then
           let ofs := cast_const ofs in
-          let stk := {| v_var := vstk m; v_info := x.(v_info) |} in
+          let stk := {| v_var := vstk; v_info := x.(v_info) |} in
           ok (Lmem ws stk ofs)
         else cerror (Cerr_stk_alloc "invalid type for Lvar")
       else not_a_word_v
     | None     =>
-      if is_vstk m x then stk_not_fresh
+      if is_vstk x then stk_not_fresh
       else ok r
     end
 
@@ -258,16 +264,16 @@ Definition alloc_lval (m:map) (r:lval) ty :=
 
   | Laset ws x e1 =>
     Let e1 := alloc_e m e1 in
-    match Mvar.get m.1 x with
+    match Mvar.get m x with
     | Some ofs =>
       if is_align (wrepr _ ofs) ws then
-        let stk := {| v_var := vstk m; v_info := x.(v_info) |} in
+        let stk := {| v_var := vstk; v_info := x.(v_info) |} in
         let ofs := mk_ofs ws e1 ofs in
         ok (Lmem ws stk ofs)
       else not_aligned
 
     | None =>
-      if is_vstk m x then stk_not_fresh
+      if is_vstk x then stk_not_fresh
       else ok (Laset ws x e1)
     end
 
@@ -314,18 +320,17 @@ Definition add_err_fun (A : Type) (f : funname) (r : cexec A) :=
   end.
 
 Definition alloc_fd (stk_alloc_fd :
-   fun_decl -> Z * Ident.ident * list (var * Z) * (list var * saved_stack))
+   fun_decl -> Z * list (var * Z) * (list var * saved_stack))
     (f: fun_decl) :=
   let info := stk_alloc_fd f in
   let (fn, fd) := f in
   Let sfd :=
-    let: (((size, stkid), l), saved):= info in
-    Let m := add_err_fun fn (init_map size stkid l) in
+    let: ((size, l), saved):= info in
+    Let m := add_err_fun fn (init_map size l) in
     Let body := add_finfo fn fn (mapM (alloc_i m) fd.(f_body)) in
     if all (check_var m) fd.(f_params) && all (check_var m) fd.(f_res) then
       ok {| sf_iinfo  := fd.(f_iinfo);
             sf_stk_sz := size;
-            sf_stk_id := stkid;
             sf_tyin   := fd.(f_tyin);
             sf_params := fd.(f_params);
             sf_body   := body;
@@ -336,8 +341,11 @@ Definition alloc_fd (stk_alloc_fd :
     else add_err_fun fn invalid_var in
   ok (fn, sfd).
 
-Definition alloc_prog stk_alloc_fd P :=
-  mapM (alloc_fd stk_alloc_fd) P.(p_funcs).
+Definition alloc_prog_aux stk_alloc_fd f :=
+  mapM (alloc_fd stk_alloc_fd) f.
 
+End NSTK.
 
-
+Definition alloc_prog nstk stk_alloc_fd P : cfexec sprog :=
+  Let funcs := alloc_prog_aux nstk stk_alloc_fd P.(p_funcs) in
+  ok {| sp_funcs := funcs ; sp_stk_id := nstk |}.
