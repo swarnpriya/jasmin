@@ -124,7 +124,7 @@ Lemma compile_progP entries (p: prog) (gd:glob_decls) (lp: lprog) mem fn va mem'
   compile_prog cparams entries p = cfok (gd, lp) ->
   fn \in entries ->
   sem.sem_call p mem fn va mem' vr ->
-  (forall f, get_fundef lp fn = Some f ->
+  (forall f, get_fundef lp.(lp_funcs) fn = Some f ->
      exists p, alloc_stack mem (lfd_stk_size f) = ok p) ->
   ∃ mem2' vr',
     List.Forall2 value_uincl vr vr' ∧
@@ -149,6 +149,7 @@ Proof.
   move=> Hin Hcall Halloc.
   have Haok : alloc_ok pstk.(sp_funcs) fn mem.
   + rewrite /alloc_ok=> fd Hfd.
+    move: Hpl; apply: rbindP => lfuncs Hpl [] ?; subst pl.
     move: (get_map_cfprog Hpl Hfd)=> [f' [Hf'1 Hf'2]].
     apply: rbindP Hf'1=> [fn' Hfn'] [] Hf'.
     have := Halloc _ Hf'2.
@@ -197,6 +198,7 @@ apply: rbindP=> -[gd1 lp] hlp; t_xrbindP => /= _ /assertP /allP ok_sig ? hxp ?? 
 have hlsem := compile_progP hlp hfn hsem.
 case: hlsem.
 - move => fd hfd.
+  move: hxp; rewrite /assemble_prog; case: x86_variables.reg_of_string => // sp hxp.
   have [xfd [hxfd]] := get_map_cfprog hxp hfd.
   by move => /hsafe; rewrite (assemble_fd_stk_size hxfd).
 move/ok_sig: hfn.

@@ -127,10 +127,10 @@ End LSEM.
 
 Variant lsem_fd gd m1 fn va' m2 vr' : Prop :=
 | LSem_fd : forall m1' fd va vm2 m2' s1 s2 vr,
-    get_fundef P fn = Some fd ->
+    get_fundef P.(lp_funcs) fn = Some fd ->
     alloc_stack m1 fd.(lfd_stk_size) = ok m1' ->
     let c := fd.(lfd_body) in
-    write_var  (S.vstk fd.(lfd_nstk)) (Vword (top_stack m1')) (Estate m1' vmap0) = ok s1 ->
+    write_var  (S.vstk P.(lp_stk_id)) (Vword (top_stack m1')) (Estate m1' vmap0) = ok s1 ->
     mapM2 ErrType truncate_val fd.(lfd_tyin) va' = ok va ->
     write_vars fd.(lfd_arg) va s1 = ok s2 ->
     lsem gd (of_estate s2 c 0)
