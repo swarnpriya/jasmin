@@ -63,7 +63,7 @@ let pp_instr tbl fmt i =
   | Lgoto lbl -> F.fprintf fmt "Goto %a" pp_label lbl
   | Lcond (e, lbl) -> F.fprintf fmt "If %a goto %a" (pp_expr tbl) e pp_label lbl
 
-let pp_stackframe fmt (_id, sz) =
+let pp_stackframe fmt sz =
   F.fprintf fmt "stack: %a"
     B.pp_print (Conv.bi_of_z sz)
 
@@ -73,10 +73,10 @@ let pp_lfun tbl fmt (fn, fd) =
     name.P.fn_name
     (Pr.pp_list ",@ " (pp_var_i tbl)) fd.lfd_arg
     (Pr.pp_list ",@ " pp_stype) fd.lfd_tyout
-    pp_stackframe (fd.lfd_nstk, fd.lfd_stk_size)
+    pp_stackframe fd.lfd_stk_size
     (Pr.pp_list ";@ " (pp_instr tbl)) fd.lfd_body
     (Pr.pp_list ",@ " (pp_var_i tbl)) fd.lfd_res
 
-let pp_prog tbl fmt lp =
+let pp_prog tbl fmt { lp_funcs } =
   F.fprintf fmt "@[<v>%a@]"
-    (Pr.pp_list "@ @ " (pp_lfun tbl)) (List.rev lp)
+    (Pr.pp_list "@ @ " (pp_lfun tbl)) (List.rev lp_funcs)

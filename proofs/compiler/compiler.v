@@ -166,7 +166,7 @@ Definition compile_prog (entries : seq funname) (p:prog) :=
   else cferror Ferr_lowering.
 
 Definition check_signature (p: prog) (lp: lprog) (fn: funname) : bool :=
-  if get_fundef lp fn is Some fd' then
+  if get_fundef lp.(lp_funcs) fn is Some fd' then
     if get_fundef (p_funcs p) fn is Some fd then
       signature_of_fundef fd == signature_of_lfundef fd'
     else true
