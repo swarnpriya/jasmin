@@ -73,13 +73,20 @@ Definition check_sopn_arg ii max_imm (loargs : seq asm_arg) (x : pexpr) (adt : a
     end
   end.
 
+(** Writing to the stack pointer is not allowed in user code. *)
+Definition check_not_RSP_implicit (i: implicite_arg) : bool :=
+  if i is IAreg RSP then false else true.
+
+Definition check_not_RSP_arg (a: asm_arg) : bool :=
+  if a is Reg RSP then false else true.
+
 Definition check_sopn_dest ii max_imm (loargs : seq asm_arg) (x : pexpr) (adt : arg_desc * stype) :=
   match adt.1 with
-  | ADImplicit i => eq_expr x (Pvar (VarI (var_of_implicit i) xH))
+  | ADImplicit i => check_not_RSP_implicit i && eq_expr x (Pvar (VarI (var_of_implicit i) xH))
   | ADExplicit n o =>
     match onth loargs n with
     | Some a =>
-      if arg_of_pexpr ii adt.2 max_imm x is Ok a' then (a == a') && check_oreg o a
+      if arg_of_pexpr ii adt.2 max_imm x is Ok a' then (a == a') && check_oreg o a && check_not_RSP_arg a
       else false
     | None => false
     end
@@ -146,6 +153,7 @@ Definition assemble_x86_opn ii op (outx : lvals) (inx : pexprs) :=
   match is_lea with
   | Some (sz, x, lea) =>
     Let r := reg_of_var ii x.(v_var) in
+    Let _ := assert (r != RSP) (ii, Cerr_assembler (AsmErr_string "lea: write to stack pointer")) in
     Let base := reg_of_ovar ii lea.(lea_base) in
     Let offset := reg_of_ovar ii lea.(lea_offset) in
     Let scale := scale_of_z' ii lea.(lea_scale) in
@@ -424,8 +432,8 @@ Proof.
     + by rewrite Fv.setP_eq; case: vt => // b [<-].
     rewrite Fv.setP_neq; last by apply /eqP => h; apply hne; apply var_of_flag_inj.
     by apply h4.
-  + case: lv1 => //=; last by move=> ???? [<-].
-    move=> x hw [<-] /eqP hx /=.
+  + case: lv1 => //=; last by move => ??? _ [<-]; rewrite /= andbF.
+    move=> x hw [<-] /andP[] not_rsp /eqP hx /=.
     move: hw; rewrite /write_var hx /= /set_var /=.
     t_xrbindP => vm; rewrite /on_vu. 
     case heq : to_pword => [v | e]; last by case e.
@@ -450,7 +458,7 @@ Proof.
     move=> f v'; rewrite /get_var /on_vu /=.
     by rewrite Fv.setP_neq //; apply h4.
   case heq1: onth => [a | //].
-  case heq2: arg_of_pexpr => [ a' | //] hty hw he1 /andP[] /eqP ? hc; subst a'.
+  case heq2: arg_of_pexpr => [ a' | //] hty hw he1 /andP[] /andP[] /eqP ? hc not_rsp; subst a'.
   rewrite /mem_write_val /= /mem_write_ty.
   case: lv1 hw he1 heq2=> //=.
   + move=> [x xii] /= hw [<-]; rewrite /arg_of_pexpr.
@@ -591,8 +599,8 @@ Lemma assemble_x86_opnP ii gd op lvs args op' asm_args s m m' :
 Proof.
   rewrite /assemble_x86_opn.
   t_xrbindP => hsem lea /is_leaP.
-  case: lea => [ [[sz x] lea] [e [??? hlea]]| hspe]. 
-  + subst op lvs args; t_xrbindP => rx /reg_of_var_register_of_var -/var_of_register_of_var hrx rb hrb ro hro sc /xscale_ok hsc <- <- hlo.
+  case: lea => [ [[sz x] lea] [e [??? hlea]]| hspe].
+  + subst op lvs args; t_xrbindP => rx /reg_of_var_register_of_var -/var_of_register_of_var hrx _ /assertP /eqP not_rsp rb hrb ro hro sc /xscale_ok hsc <- <- hlo.
     move: hsem; rewrite /eval_op /sem_sopn /exec_sopn /=.
     t_xrbindP => vs ? v he <- va.
     t_xrbindP => w hw; rewrite /sopn_sem /= /x86_LEA.
@@ -699,8 +707,8 @@ Proof.
     have [v' /= [-> /= ->] /=]:= check_sopn_arg_sem_eval hlo hca1 hva htwa.
     move: hcd; rewrite /check_sopn_dests /= /check_sopn_dest /= => /andP -[].
     case: xmm_register_of_var => /=.
-    + by move=> ? /andP[] /eqP ?;subst a0.
-    case heq: reg_of_var => [r | ] //= /andP [] /eqP ? _ _; subst a0.
+    + by move=> ? /andP[] /andP[] /eqP ?;subst a0.
+    case heq: reg_of_var => [r | ] //= /andP [] /andP[] /eqP ? _ not_rsp _; subst a0.
     rewrite /mem_write_vals /=.
     eexists; split; first reflexivity.
     case: hlo => h1 h2 h3 h4.
