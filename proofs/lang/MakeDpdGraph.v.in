@@ -23,55 +23,8 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ----------------------------------------------------------------------- *)
 
-Require compiler_proof.
-Require Ssem_props.
+Require compiler_proof extraction.
 From dpdgraph Require dpdgraph.
 
 Print FileDependGraph
 
-allocation
-array_expansion
-asmgen
-compiler
-compiler_proof
-compiler_util
-constant_prop
-constant_prop_proof
-dead_calls
-dead_calls_proof
-dead_code
-dead_code_proof
-inline
-inline_proof
-linear
-linear_proof
-linear_sem
-lowering
-lowering_proof
-stack_alloc
-stack_alloc_proof
-stack_sem
-unrolling
-unrolling_proof
-x86_gen
-x86_instr
-x86_sem
-x86_variables
-x86_variables_proofs
-array
-expr
-gen_map
-low_memory
-psem
-psem_of_sem_proof
-sem
-strings
-type
-utils
-var
-word
-
-Ssem
-Ssem_props
-(*equiv_sem*)
-.
