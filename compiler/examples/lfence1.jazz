@@ -81,6 +81,7 @@ export fn foo3(reg u64 sp, reg u64 pub) -> reg u64 {
 // This is an encoding of V1 attack:
 //   it is accepted but notice that the program is not speculatively safe
 
+/*
 export fn foo4(reg u64 sp, reg u64 i) -> reg u64 {
   stack u64 s;
   reg u64 w, y, i1, i2;
@@ -98,10 +99,24 @@ export fn foo4(reg u64 sp, reg u64 i) -> reg u64 {
   }
   return y;
 }
+*/
 
   
 // Add this as an example to show that correct compilers do not obviously preserve speculative safety:  If we mask program foo4, a compiler may break speculative safety by removing the masking. 
 
 
-
+// This example do not need LFENCE if p1 and p2 and public
+// this is really cool
+export fn foo4(reg u64 p1, reg u64 p2) -> reg u64 {
+  stack u64 sp1, sp2;
+  reg u64 w;
+  // spill p1 on the stack 
+  sp1 = p1;  // this write a public value
+  sp2 = p2; 
+  // ....
+  p2 = sp2;
+  w = [p2];  // here we access from a data that come from memory 
+  w += sp1;
+  return w;
+}
  
