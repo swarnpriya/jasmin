@@ -279,10 +279,6 @@ let main () =
       let v = Conv.vari_of_cvari tbl cv |> L.unloc in
       v.v_kind = Stack in
 
-    let pp_cprog fmt cp =
-      let p = Conv.prog_of_cprog tbl cp in
-      Printer.pp_prog ~debug:true fmt p in
-
     let pp_linear fmt lp =
       PrintLinear.pp_prog tbl fmt lp in
 
@@ -322,6 +318,16 @@ let main () =
         else x in
       Conv.string0_of_string x in
 
+    let pp_cprog s cp =
+      if s = Compiler.LowerInstruction then
+        let p = Conv.prog_of_cprog tbl cp in
+        eprint_msg s (Printer.pp_prog ~debug:true) p;
+        List.iter (Sct_checker.check_fun) (List.rev (snd p))
+    else
+      eprint s (fun fmt cp ->
+          let p = Conv.prog_of_cprog tbl cp in
+          Printer.pp_prog ~debug:true fmt p) cp in
+           
     let cparams = {
       Compiler.rename_fd    = rename_fd;
       Compiler.expand_fd    = apply "arr exp" Array_expand.arrexp_func;
@@ -331,7 +337,7 @@ let main () =
       Compiler.stk_alloc_fd = stk_alloc_fd;
       Compiler.lowering_vars = lowering_vars;
       Compiler.is_var_in_memory = is_var_in_memory;
-      Compiler.print_prog   = (fun s p -> eprint s pp_cprog p; p);
+      Compiler.print_prog   = (fun s p -> pp_cprog s p; p);
       Compiler.print_linear = (fun p -> eprint Compiler.Linearisation pp_linear p; p);
       Compiler.warning      = warning;
       Compiler.inline_var   = inline_var;

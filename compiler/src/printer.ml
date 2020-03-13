@@ -174,7 +174,10 @@ let rec pp_gi pp_info pp_ty pp_var fmt i =
       pp_ty ty
       (pp_ge pp_var) e
 
-  | Copn(x, t, o, e) -> (* FIXME *)
+  | Copn([], _, o, []) ->
+    F.fprintf fmt "%s;" (pp_opn o)
+
+  | Copn(x, t, o, e) -> 
     F.fprintf fmt "@[<hov 2>%a %s=@ %s(%a);@]"
        (pp_glvs pp_var) x (pp_tag t) (pp_opn o)
        (pp_ges pp_var) e
@@ -318,6 +321,10 @@ let pp_ty fmt = pp_gtype (fun fmt -> F.fprintf fmt "%i") fmt
 let pp_instr ~debug fmt i =
   let pp_var = pp_var ~debug in
   pp_gi pp_noinfo pp_ty pp_var fmt i
+
+let pp_istmt ~debug pp_info fmt i =
+  let pp_var = pp_var ~debug in
+  pp_gc pp_info pp_ty pp_var fmt i
 
 let pp_stmt ~debug fmt i =
   let pp_var = pp_var ~debug in

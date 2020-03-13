@@ -24,6 +24,7 @@ src/Subst
 src/Syntax
 src/ToEC
 src/Safety
+src/Sct_checker
 src/Typing
 src/Utils
 src/Varalloc

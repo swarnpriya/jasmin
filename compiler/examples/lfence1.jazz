@@ -1,0 +1,107 @@
+/*
+export fn foo0(reg u64 inp, reg u64 outp, reg u64 len) -> reg u64 {
+  inline int i;
+  reg u64 w;
+  w = [inp + 8 * 0];
+  return w;
+}   
+*/
+
+/*
+export fn foo01(reg u64 inp, reg u64 outp, reg u64 len) {
+  inline int i;
+  reg u64 w;
+  w = 0;
+  [outp + 8 * 0] = w;
+  #LFENCE;
+  return;
+}   
+*/
+
+
+/*
+export fn foo1(reg u64 inp, reg u64 outp, reg u64 len) {
+  inline int i;
+  reg u64 w;
+  w = [inp + 8 * 0];
+  [outp + 8 * 0] = w;
+  #LFENCE;
+  return;
+}   
+*/
+
+/*
+export fn foo2(reg u64 inp, reg u64 outp, reg u64 len) {
+  inline int i;
+  reg u64 w;
+  for i = 0 to 3 {
+    w = [inp + 8 * i];
+    [outp + 8 * i] = w;
+  }
+  #LFENCE;
+
+  return;
+}   
+*/
+
+/*
+export fn foo2(reg u64 inp, reg u64 outp, reg u64 len) {
+  reg u64 i;
+  reg u64 w;
+  i = 0;
+  while (i < len) {
+    w = [inp + 8 * i];
+    [outp + 8 * i] = w;
+    i += 1;
+  }
+  #LFENCE;
+
+  return;
+}
+*/
+
+/*
+export fn foo3(reg u64 sp, reg u64 pub) -> reg u64 {
+   reg u64 w, y, z;
+   stack u64 spub, s;
+   w = [sp];
+   s = w;
+   spub = pub;
+   // ....
+   #LFENCE;
+   pub = spub;
+   y = [pub];
+   w = s;
+   y += w;
+   #LFENCE;
+   return y;
+}
+*/
+
+// This is an encoding of V1 attack:
+//   it is accepted but notice that the program is not speculatively safe
+
+export fn foo4(reg u64 sp, reg u64 i) -> reg u64 {
+  stack u64 s;
+  reg u64 w, y, i1, i2;
+  stack u64[1] a;
+  
+  w = [sp];
+  s = w;
+  a[0] = 0;
+  #LFENCE;
+  y = 0;
+  i = -i if i < 0;
+  if (i < 1) {
+    w = a[(int)i];  // WARNING: we need a notion of Speculative Safety
+    y = [sp + w];
+  }
+  return y;
+}
+
+  
+// Add this as an example to show that correct compilers do not obviously preserve speculative safety:  If we mask program foo4, a compiler may break speculative safety by removing the masking. 
+
+
+
+ 

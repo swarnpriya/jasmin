@@ -135,6 +135,8 @@ Variant asm_op : Type :=
 | VINSERTI128
 | VPERM2I128
 | VPERMQ
+
+| LFENCE
 .
 
 (* ----------------------------------------------------------------------------- *)
@@ -666,6 +668,9 @@ Definition x86_VPERM2I128 (v1 v2: u256) (m: u8) : ex_tpl (w_ty U256) :=
 Definition x86_VPERMQ (v: u256) (m: u8) : ex_tpl (w_ty U256) :=
   ok (wpermq v m).
 
+(* ---------------------------------------------------------------- *)
+Definition x86_LFENCE : exec (sem_tuple [::]) := ok tt.
+
 (* ----------------------------------------------------------------------------- *)
 Coercion F f := ADImplicit (IArflag f).
 Coercion R r := ADImplicit (IAreg r).
@@ -736,7 +741,7 @@ Notation mk_instr str_jas tin tout ain aout msb semi check nargs wsizei max_imm 
   id_pp_asm   := pp_asm; 
 |}.
 
-Notation mk_instr_pp  name tin tout ain aout msb semi check nargs wsizei max_imm prc pp_asm :=
+Notation mk_instr_pp name tin tout ain aout msb semi check nargs wsizei max_imm prc pp_asm :=
   (mk_instr (pp_s name%string) tin tout ain aout msb semi check nargs wsizei max_imm [::] pp_asm,
    (name%string, prc)) (only parsing).
  
@@ -1214,6 +1219,10 @@ Definition Ox86_VPERMQ_instr :=
   mk_instr_pp "VPERMQ" w256w8_ty w256_ty [:: E 1; E 2] [:: E 0] MSB_CLEAR x86_VPERMQ  
               (check_xmm_xmmm_imm8 U256) 3 U256 (imm8 U256) (PrimM VPERMQ) (pp_name_ty "vpermq" [::U256;U256;U8]).
 
+Definition Ox86_LFENCE_instr := 
+  mk_instr_pp "LFENCE" [::] [::] [::] [::] MSB_CLEAR x86_LFENCE 
+          [:: [::]] 0 U8 None (PrimM LFENCE) (pp_name "lfence" U8).
+  
 Definition instr_desc o : instr_desc_t :=
   match o with
   | MOV sz             => Ox86_MOV_instr.1 sz
@@ -1290,6 +1299,7 @@ Definition instr_desc o : instr_desc_t :=
   | VPERMQ             => Ox86_VPERMQ_instr.1
   | VINSERTI128        => Ox86_VINSERTI128_instr.1
   | VPEXTR ve          => Ox86_VPEXTR_instr.1 ve
+  | LFENCE             => Ox86_LFENCE_instr.1 
   end.
 
 (* -------------------------------------------------------------------- *)
@@ -1369,5 +1379,7 @@ Definition prim_string :=
    Ox86_VPERM2I128_instr.2;
    Ox86_VPERMQ_instr.2;
    Ox86_VINSERTI128_instr.2;
-   Ox86_VPEXTR_instr.2 ].
+   Ox86_VPEXTR_instr.2;
+   Ox86_LFENCE_instr.2
+ ].
 

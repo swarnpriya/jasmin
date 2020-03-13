@@ -113,10 +113,15 @@ let usage_msg = "Usage : jasminc [option] filename"
 
 
 (* -------------------------------------------------------------------- *)
-let eprint step pp_prog p =
-  if List.mem step !print_list then
+
+let eprint_msg step pp_prog p = 
     let (_, msg) = print_strings step in
     Format.eprintf
 "(* -------------------------------------------------------------------- *)@.";
     Format.eprintf "(* After %s *)@.@." msg;
     Format.eprintf "%a@.@.@." pp_prog p
+
+let eprint step pp_prog p =
+  if List.mem step !print_list then
+    eprint_msg step pp_prog p
+

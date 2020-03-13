@@ -99,7 +99,7 @@ Fixpoint dead_code_i (i:instr) (s:Sv.t) {struct i} : ciexec (Sv.t * cmd) :=
 
   | Copn xs tag o es =>
     let w := vrvs xs in
-    if tag != AT_keep then
+    if (tag != AT_keep) && (o != Ox86 LFENCE) then
       if disjoint s w && negb (has write_mem xs) then ciok (s, [::])
       else if check_nop_opn xs o es then ciok (s, [::])
       else ciok (read_es_rec (read_rvs_rec (Sv.diff s (vrvs xs)) xs) es, [:: i])

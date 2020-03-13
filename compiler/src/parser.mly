@@ -266,6 +266,13 @@ pinstr_r:
 | x=tuple1(plvalue) o=peqop e=pexpr c=prefix(IF, pexpr)? SEMICOLON
     { PIAssign (x, o, e, c) }
 
+| f=loc(prim) SEMICOLON;
+  { 
+    let l = L.loc f in
+    
+    PIAssign([], `Raw,  L.mk_loc l (PEPrim (L.unloc f, [])), None) }
+  
+  
 | fc=loc(f=var args=parens_tuple(pexpr) { (f, args) })
     c=prefix(IF, pexpr)? SEMICOLON
     { let { L.pl_loc = loc; L.pl_desc = (f, args) } = fc in
@@ -285,6 +292,7 @@ pinstr_r:
 
 | a=align WHILE is1=pblock? LPAREN b=pexpr RPAREN is2=pblock?
     { PIWhile (a,is1, b, is2) }
+
 
 %inline align:
 | a=ALIGN? { if a = None then `NoAlign else `Align }
