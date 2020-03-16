@@ -60,6 +60,21 @@ by move => sz; apply/eqP; rewrite (onth_sizeP x0).
 Qed.
 
 (* -------------------------------------------------------------------- *)
+Lemma onth_cat {T: Type} (s t: seq T) n :
+  onth (s ++ t) (size s + n) = onth t n.
+Proof.
+  by rewrite onth_nth map_cat nth_cat size_map -{2 5}(addn0 (size s)) ltn_add2l /= subnDl subn0 -onth_nth.
+Qed.
+
+Lemma onth_extend {T: Type} (s t: seq T) n v :
+  onth s n = Some v ->
+  onth (s ++ t) n = Some v.
+Proof.
+  rewrite !onth_nth map_cat nth_cat.
+  by case: ltnP => // ?; rewrite nth_default.
+Qed.
+
+(* -------------------------------------------------------------------- *)
 Section OSeq.
 Context {T : Type}.
 
