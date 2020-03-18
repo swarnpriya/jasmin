@@ -37,7 +37,6 @@ Set   Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-
 Variant asm : Type :=
 | ALIGN
 | LABEL of label
@@ -48,7 +47,7 @@ Variant asm : Type :=
 
 (* -------------------------------------------------------------------- *)
 Record x86_mem : Type := X86Mem {
-  xmem : mem;
+  xmem : low_mem;
   xreg : regmap;
   xxreg: xregmap;
   xrf  : rflagmap;
@@ -157,6 +156,8 @@ Definition decode_addr (s : x86_mem) (a : address) : pointer := nosimpl (
 Section GLOB_DEFS.
 
 Context (gd: glob_decls).
+
+Existing Instance LM.
 
 Definition check_oreg or ai :=
   match or, ai with
@@ -376,18 +377,11 @@ Definition x86sem : relation x86_state := clos_refl_trans x86_state x86sem1.
 End GLOB_DEFS.
 
 (* -------------------------------------------------------------------- *)
-Variant saved_stack :=
-| SavedStackNone
-| SavedStackReg of register
-| SavedStackStk of Z.
-
 Record xfundef := XFundef {
- xfd_stk_size : Z;
- xfd_nstk : register;
  xfd_arg  : seq register;
  xfd_body : seq asm;
  xfd_res  : seq register;
- xfd_extra : list register * saved_stack;
+ xfd_extra : seq register;
 }.
 
 Definition xprog : Type :=
@@ -396,13 +390,12 @@ Definition xprog : Type :=
 (* TODO: flags may be preserved *)
 (* TODO: restore stack pointer of caller? *)
 Variant x86sem_fd (P: xprog) (gd: glob_decls) fn st st' : Prop :=
-| X86Sem_fd fd mp st2
+| X86Sem_fd fd st2
    `(get_fundef P fn = Some fd)
-   `(alloc_stack st.(xmem) fd.(xfd_stk_size) = ok mp)
-    (st1 := mem_write_reg fd.(xfd_nstk) (top_stack mp) {| xmem := mp ; xreg := st.(xreg) ; xxreg := st.(xxreg) ; xrf := rflagmap0 |})
+    (st1 := {| xmem := st.(xmem) ; xreg := st.(xreg) ; xxreg := st.(xxreg) ; xrf := rflagmap0 |})
     (c := fd.(xfd_body))
     `(x86sem gd {| xm := st1 ; xc := c ; xip := 0 |} {| xm := st2; xc := c; xip := size c |})
-    `(st' = {| xmem := free_stack st2.(xmem) fd.(xfd_stk_size) ; xreg := st2.(xreg) ; xxreg := st2.(xxreg) ; xrf := rflagmap0 |})
+    `(st' = {| xmem := st2.(xmem) ; xreg := st2.(xreg) ; xxreg := st2.(xxreg) ; xrf := rflagmap0 |})
     .
 
 Definition x86sem_trans gd s2 s1 s3 :

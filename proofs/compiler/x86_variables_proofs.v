@@ -29,7 +29,7 @@ Definition eqflags (m: estate) (rf: rflagmap) : Prop :=
 
 Variant lom_eqv (m : estate) (lom : x86_mem) :=
   | MEqv of
-         emem m = xmem lom
+         Memory.eqmem (emem m) (xreg lom RSP) (xmem lom)
     & (∀ r v, get_var (evm m) (var_of_register r) = ok v → value_uincl v (Vword (xreg lom r)))
     & (∀ r v, get_var (evm m) (var_of_xmm_register r) = ok v → value_uincl v (Vword (xxreg lom r)))
     & eqflags m (xrf lom).

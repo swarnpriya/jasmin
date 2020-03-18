@@ -1015,4 +1015,106 @@ Module MemoryI : MemoryT.
     by case: (stack_blocks_rec _ _).
   Qed.
 
+  (** Refinement to a low memory. *)
+
+  Definition low_mem := (Mz.t unit * raw_mem)%type.
+
+  Instance LM : raw_memory low_mem :=
+    {| memory_model.read_mem am := raw_read_mem am.1 am.2
+     ; memory_model.write_mem am p s v := Let m' := raw_write_mem am.1 am.2 p v in ok (am.1, m')
+     ; memory_model.valid_pointer am := raw_valid_pointer am.1 am.2
+    |}.
+
+  Instance LCM : coreMem Pointer low_mem.
+  Proof.
+    refine
+      {| memory_model.uget m := uget m.2
+       ; memory_model.uset m p v := (m.1, raw_uset m.2 p v)
+       ; memory_model.validr m := raw_valid m.1 m.2
+       ; memory_model.validw m := raw_valid m.1 m.2
+      |}.
+   - move => m; exact: raw_sub_add.
+   - move => m; exact: raw_validw_uset.
+   - move => m; exact: raw_validrP.
+   - move => m; exact: raw_validw_validr.
+   - move => m; exact: raw_setP.
+  Defined.
+
+  Instance LMS : raw_memory_spec A LCM LM.
+  Proof.
+    constructor.
+    - move => m; exact: readV.
+    - move => m p s v; rewrite /memory_model.write_mem /memory_model.valid_pointer /=.
+      case: (raw_writeV m.1 m.2 p v) => h; constructor.
+      + by case: h => m' ->; eexists.
+      by case; t_xrbindP => ????; subst; apply: h; eexists; eassumption.
+    - move => m; exact: raw_read_mem_error.
+    - done.
+    - move => m p s v; rewrite /memory_model.write_mem /= /raw_write_mem /CoreMem.write /=.
+      case: raw_valid => //= _.
+      congr ok; case: m => /= al.
+      rewrite /CoreMem.uwrite /=.
+      elim: (ziota _ _) => //=.
+    - rewrite /memory_model.write_mem /=; t_xrbindP => ??????? /raw_write_read8 h ?; subst; exact: h.
+    - by rewrite /memory_model.write_mem /memory_model.read_mem /=; t_xrbindP => ?????? /raw_writeP_eq <- <-.
+    - rewrite /memory_model.write_mem /memory_model.read_mem /=; t_xrbindP => ???????? /raw_writeP_neq h <-; exact: h.
+    - rewrite /memory_model.write_mem /=; t_xrbindP => ???????? /raw_write_valid h <-; exact: h.
+    - move => m; exact: valid_align.
+    - move => m; exact: is_align_valid_pointer.
+    - rewrite /memory_model.write_mem /memory_model.read_mem /=; t_xrbindP => ?????????  /raw_read_write_any_mem h /h {h} h ? /h {h} h <- ?? <-; exact: h.
+  Defined.
+
+  Definition eqalloc (a b: Mz.t unit) : Prop :=
+    is_zalloc a =1 is_zalloc b.
+
+  Remark eqalloc_trans y x z : eqalloc x y → eqalloc y z → eqalloc x z.
+  Proof. by move => a ? ?; rewrite a. Qed.
+
+  Lemma is_alloc_m a b {m p ws} : eqalloc a b → is_alloc a m p ws = is_alloc b m p ws.
+  Proof. by move => eq_a_b; apply/eq_all. Qed.
+
+  Definition eqmem (a: mem) (stack: pointer) (b: low_mem) : Prop :=
+    [/\ stack = add (stk_root a) (- frames_size (frames a)), eqalloc b.1 (set_alloc true (alloc a) 0 (wunsigned stack)) & b.2 = as_raw_mem a ].
+
+  Lemma is_alloc_set_alloc al m p s ptr sz :
+    is_alloc al m p s →
+    is_alloc (set_alloc true al ptr sz) m p s.
+  Proof.
+    move/is_allocP => h; apply/is_allocP => i i_range; rewrite set_allocP.
+    case: ifP => // _; exact: h.
+  Qed.
+
+  Instance L : refinement M LM eqmem.
+  Proof.
+    split.
+    - rewrite /memory_model.read_mem /= /read_mem => a stack [] al _ [/= -> ok_al ->] p s v.
+      rewrite /raw_read_mem /CoreMem.read /= /raw_valid /raw_valid_pointer; t_xrbindP => /= _ /assertP /andP[] -> ok_p -> /=.
+      by rewrite (is_alloc_m ok_al) (is_alloc_set_alloc _ _ ok_p).
+    - rewrite /memory_model.write_mem /= /write_mem => a stack [] al _ [/= -> ok_al ->] p s v ?; t_xrbindP => a' ok_a' <-.
+      move: ok_a'.
+      rewrite /raw_write_mem /CoreMem.write /= /raw_valid /raw_valid_pointer; t_xrbindP => /= _ /assertP /andP[] -> ok_p <-.
+      rewrite (is_alloc_m ok_al) (is_alloc_set_alloc _ _ ok_p).
+      by eexists; first reflexivity.
+    rewrite /eqmem /= /alloc_stack => a stack [] al _ [/= -> ok_al ->] sz a'; rewrite addC.
+    case: Sumbool.sumbool_of_bool => // ok_check /(@ok_inj _ _ _ _) <- {a'} /=.
+    split; last reflexivity.
+    - congr (add a.(stk_root)); Psatz.lia.
+    case/andP: ok_check => /andP[] /lezP sz_pos sz_align /lezP no_overflow.
+    apply: (eqalloc_trans ok_al) => p; rewrite !set_allocP.
+    have rt_range := wunsigned_range a.(stk_root).
+    have fr_pos := frames_size_pos a.
+    do 2 (rewrite wunsigned_add; last by Psatz.lia).
+    move: (wunsigned a.(stk_root)) no_overflow rt_range => r no_overflow r_range /=.
+    case: andP.
+    - case => /dup[] /lezP p_pos -> /= /ltzP p_bounded.
+      case: ifPn => // /ltzP ?.
+      case: ifPn => //. rewrite negb_and => /orP [].
+      + move => /lezP; Psatz.lia.
+      move => /ltzP; Psatz.lia.
+    rewrite -(rwP lezP) -(rwP ltzP) => ?.
+    case: andP; rewrite -(rwP lezP) -(rwP ltzP); first Psatz.lia.
+    case: andP => //; rewrite -(rwP lezP) -(rwP ltzP).
+    Psatz.lia.
+  Qed.
+
 End MemoryI.

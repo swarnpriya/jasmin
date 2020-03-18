@@ -330,7 +330,7 @@ Proof.
     t_xrbindP => r hr addr haddr h; move: h hcomp => <-.
     rewrite /compat_imm orbF => /eqP <- w1 wp vp hget htop wp' vp' hp hp' wr hwr <- /= htr.
     have <- := addr_of_pexprP eqm hr hget htop hp hp' haddr.
-    by case: eqm => <- ???; rewrite hwr /=; eauto.
+    by case: eqm => /(eqmem_read Memory.L) /(_ _ _ _ hwr) -> _ _ _ /=; eauto.
   case => //= w' [] //= z; case: max_imm => //= w1.
   t_xrbindP => ? /assertP /eqP heq h.
   case: h hcomp => <-; rewrite /compat_imm => /orP [/eqP <- | ].
@@ -441,7 +441,8 @@ Proof.
     case: ty vt heq => //=; first by case.
     move=> sz w [<-]; rewrite truncate_word_u /=.
     eexists; split; first reflexivity.
-    constructor => //=.
+    split => //=.
+    by rewrite /RegMap.set ffunE; case: eqP => // ?; subst r.
     + move=> r' v'; rewrite /get_var /on_vu /= /RegMap.set ffunE.
       case: eqP => [-> | hne].
       + rewrite Fv.setP_eq  /word_extend_reg=> -[<-] /= .
@@ -486,10 +487,11 @@ Proof.
         by apply h3.
       move=> f v'; rewrite /get_var /on_vu /=. 
       by rewrite Fv.setP_neq //; apply h4.
-    t_xrbindP => r hr <-; eexists;split;first reflexivity.
+    t_xrbindP => r hr ?; subst a; eexists; split; first reflexivity.
     have /= ? := var_of_reg_of_var hr; subst x.
     move: t ht => /= t [] ?;subst t.
     constructor => //=.
+    + by rewrite /RegMap.set ffunE; case: eqP => // ?; subst r.
     + move=> r' v'; rewrite /get_var /on_vu /= /RegMap.set ffunE.
       case: eqP => [-> | hne].
       + rewrite Fv.setP_eq /word_extend_reg=> -[<-] /= .
@@ -511,9 +513,10 @@ Proof.
   case: eqP => // ?; subst sz'.
   move: hw; rewrite truncate_word_u => -[?]; subst vt.
   t_xrbindP => r hr adr hadr ?; subst a.
-  rewrite /= heq1 hc /= /mem_write_mem -h1.
+  rewrite /= heq1 hc /= /mem_write_mem.
   have <-:= addr_of_pexprP hlom hr hget hp he hofs hadr.
-  rewrite hm1 /=; eexists; split; first by reflexivity.
+  have [m' -> eqm] := eqmem_write Memory.L h1 hm1.
+  eexists; split; first by reflexivity.
   by constructor.
 Qed.
 
@@ -611,6 +614,7 @@ Proof.
     eexists; split; first reflexivity.
     case: hlo => h1 h2 h3 h4.
     constructor => //=.
+    + by rewrite /RegMap.set ffunE; case: eqP => // ?; subst rx.
     + move=> r' v'; rewrite /get_var /on_vu /= /RegMap.set ffunE.
       have [sz' [w' [hsz' ??]]]:= to_wordI hw; subst v w.
       have hlea' := mk_leaP (p := {| p_globs := gd; p_funcs := [::] |}) hsz2 hsz' hlea he.
@@ -716,6 +720,7 @@ Proof.
     have /= <- /= := var_of_reg_of_var heq.
     move=> [<-].
     constructor => //=.
+    + by rewrite /RegMap.set ffunE; case: eqP => // ?; subst r.
     + move=> r' v''; rewrite /get_var /on_vu /= /RegMap.set ffunE.
       case: eqP => [-> | hne].
       + by rewrite Fv.setP_eq word_extend_reg_id // zero_extend_u => -[<-].

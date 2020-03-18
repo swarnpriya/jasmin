@@ -176,6 +176,7 @@ Proof.
   exact: (List_Forall2_refl _ value_uincl_refl).
 Qed.
 
+(*
 Lemma compile_prog_to_x86P entries (p: prog) (gd: glob_decls) (xp: xprog) m1 fn va m2 vr :
   compile_prog_to_x86 cparams entries p = cfok (gd,xp) →
   fn \in entries →
@@ -219,5 +220,6 @@ split; first exact: hxsem.
 split; last by rewrite hm2.
 exact: (Forall2_trans value_uincl_trans ok_vr' hvr').
 Qed.
+*)
 
 End PROOF.

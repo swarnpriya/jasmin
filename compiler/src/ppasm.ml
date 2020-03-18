@@ -353,14 +353,10 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
      `Instr (".globl", [string_of_funname tbl n])])
     asm;
 
-  let open X86_decl in
-  let open X86_instr_decl in
   let open X86_sem in
-  let open Prog in
   List.iter (fun (n, d) ->
       let name = string_of_funname tbl n in
-      let stsz  = Conv.bi_of_z d.xfd_stk_size in
-      let tosave, saved_stack = d.xfd_extra in
+      let tosave = d.xfd_extra in
       pp_gens fmt [
         `Label (mangle (string_of_funname tbl n));
         `Label name
@@ -369,38 +365,7 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
         pp_gens fmt [`Instr ("pushq", [pp_register `U64 r])])
         tosave;
 
-      let prologue, epilogue =
-        match saved_stack with
-        | SavedStackNone  ->
-          assert (Bigint.equal stsz Bigint.zero);
-          [], []
-
-        | SavedStackReg r ->
-          [ AsmOp(MOV uptr, [Reg r; Reg RSP]);
-            AsmOp(SUB uptr, [Reg RSP; Imm(U32, Conv.int32_of_bi stsz)]);
-            AsmOp(AND uptr, [Reg RSP; Imm(U32,
-                                          Conv.int32_of_bi (B.of_int (-32)))]);
-          ],
-          [ AsmOp(MOV uptr, [Reg RSP; Reg r]) ]
-
-        | SavedStackStk p ->
-          let adr =
-            Adr { ad_disp  = Conv.int64_of_bi (Conv.bi_of_z p);
-                ad_base   = Some RSP;
-                ad_scale  = Scale1;
-                ad_offset = None } in
-          [ AsmOp(MOV uptr, [Reg RBP; Reg RSP]);
-            AsmOp(SUB uptr, [Reg RSP; Imm(U32, Conv.int32_of_bi stsz)]);
-            AsmOp(AND uptr, [Reg RSP; Imm(U32,
-                                          Conv.int32_of_bi (B.of_int (-32)))]);
-            AsmOp(MOV uptr, [adr; Reg RBP])
-          ],
-          [ AsmOp(MOV uptr, [Reg RSP; adr]) ]
-      in
-
-      pp_instrs name fmt prologue;
       pp_instrs name fmt d.X86_sem.xfd_body;
-      pp_instrs name fmt epilogue;
 
       List.iter (fun r ->
           pp_gens fmt [`Instr ("popq", [pp_register `U64 r])])

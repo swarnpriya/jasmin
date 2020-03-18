@@ -447,6 +447,39 @@ Section RawMemoryT.
 
 End RawMemoryT.
 
+(** A memory refinement relates a high-level memory with stack frames to a low-level memory with a single stack region.
+  The “stack” pointer splits this region into an allocated part and a free part.
+*)
+Section REFINEMENT.
+  Context
+    (A: alignment)
+    (high low: Type)
+    (H: memory high)
+    (L: raw_memory low)
+    (eqmem : high → pointer → low → Prop)
+  .
+
+  Class refinement : Prop :=
+    { eqmem_read :
+        ∀ a stack b,
+          eqmem a stack b →
+          ∀ p s v, read_mem a p s = ok v → read_mem b p s = ok v
+    ; eqmem_write :
+        ∀ a stack b,
+          eqmem a stack b →
+          ∀ p s v a', write_mem a p s v = ok a' → exists2 b', write_mem b p s v = ok b' & eqmem a' stack b'
+      ; eqmem_alloc :
+        ∀ a stack b,
+          eqmem a stack b →
+          ∀ sz a', alloc_stack a sz = ok a' → eqmem a' (add stack (- sz)) b
+    }.
+
+End REFINEMENT.
+
+Arguments eqmem_read {high low _ _ eqmem} _ {a stack b} _ {_ _ _}.
+Arguments eqmem_write {high low _ _ eqmem} _ {a stack b} _ {_ _ _ _}.
+Arguments eqmem_alloc {high low _ _ eqmem} _ {a stack b} _ {_ _}.
+
 Module Type MemoryT.
 
 Declare Instance A : alignment.
@@ -467,5 +500,14 @@ Parameter write_mem_stable : forall m m' p s v,
 Parameter free_stackP : forall m sz,
   omap snd (ohead (frames m)) = Some sz ->
   free_stack_spec m sz (free_stack m sz).
+
+(* -------------------------------------------------------------------- *)
+Parameter low_mem : Type.
+Parameter LM : raw_memory low_mem.
+Parameter LCM : coreMem Pointer low_mem.
+Parameter LMS : raw_memory_spec A LCM LM.
+Parameter eqmem : mem → pointer → low_mem → Prop.
+
+Declare Instance L : refinement M LM eqmem.
 
 End MemoryT.
