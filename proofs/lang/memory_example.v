@@ -120,20 +120,6 @@ Instance A : alignment :=
 
 End Align.
 
-(** Pointer arithmetic *)
-Definition add (p:pointer) (o:Z) := (p + wrepr U64  o)%R.
-
-Definition sub (p1 p2:pointer)  := wunsigned p1 - wunsigned p2.
-
-Lemma add_0 p: add p 0 = p.
-Proof. by rewrite /add wrepr0; ssrring.ssring. Qed.
-
-Lemma addC p i j : add (add p i) j = add p (i + j).
-Proof. rewrite /add wrepr_add; ssrring.ssring. Qed.
-
-Lemma add_sub p k: add p (sub k p) = k.
-Proof. rewrite /add /sub wrepr_sub !wrepr_unsigned; ssrring.ssring. Qed.
-
 (** An example instance of the memory *)
 
 Section RawMemoryI.
@@ -167,7 +153,7 @@ Section RawMemoryI.
   Proof.
     rewrite /raw_valid => /assertP; rewrite /valid_pointer => /andP [].
     move=> /is_align_no_overflow; rewrite /no_overflow !zify => ha _ hi.
-    have ? := wunsigned_range p; rewrite /sub /add wunsigned_add; Psatz.lia.
+    have ? := wunsigned_range p; rewrite addE subE wunsigned_add; Psatz.lia.
   Qed.
 
   Definition uget (m: raw_mem) (p:pointer) := odflt 0%R (Mz.get m.(data) (wunsigned p)).
@@ -203,8 +189,8 @@ Section RawMemoryI.
     by rewrite /uget /raw_uset /= Mz.setP (eqtype.inj_eq (@wunsigned_inj _)); case: eqP.
   Qed.
 
-  Instance CM : coreMem raw_mem pointer :=
-    CoreMem add_sub raw_sub_add add_0 raw_validw_uset raw_validrP raw_validw_validr raw_setP.
+  Instance CM : coreMem Pointer raw_mem :=
+    CoreMem raw_sub_add raw_validw_uset raw_validrP raw_validw_validr raw_setP.
 
   Definition raw_read_mem (m: raw_mem) (ptr: pointer) (ws: wsize) : exec (word ws) :=
     CoreMem.read m ptr ws.
@@ -271,7 +257,7 @@ Section RawMemoryI.
     rewrite /raw_read_mem /CoreMem.read /= /raw_valid => hw [ /ZleP hno /ZleP hno' hd].
     rewrite (raw_write_valid p' s' hw); case: raw_valid_pointer => //=.
     rewrite (CoreMem.writeP_neq hw) // => i i' hi hi'.
-    rewrite /= /add => heq.
+    rewrite !addE => heq.
     have : wunsigned (p + wrepr U64 i)%R = wunsigned (p' + wrepr U64 i')%R by rewrite heq.
     have hp := wunsigned_range p; have hp' := wunsigned_range p'.
     rewrite !wunsigned_add; Psatz.lia.
@@ -308,7 +294,6 @@ Qed.
 Instance RawMemCorrect al : raw_memory_spec Align.A (CM al) (RawMem al).
 Proof.
   constructor.
-  - done.
   - exact: readV.
   - exact: raw_writeV.
   - exact: raw_read_mem_error.
@@ -408,8 +393,8 @@ Module MemoryI : MemoryT.
     uget (uset m z1 v) z2 = (if z1 == z2 then v else uget m z2).
   Proof. exact: raw_setP. Qed.
 
-  Instance CM : coreMem mem pointer :=
-    @CoreMem mem pointer add sub (λ m, uget m) uset valid valid add_sub sub_add add_0 validw_uset validrP validw_validr setP.
+  Instance CM : coreMem Pointer mem :=
+    @CoreMem pointer Pointer mem (λ m, uget m) uset valid valid sub_add validw_uset validrP validw_validr setP.
 
   Definition top_stack (m:mem) :=
     add m.(stk_root) (- frames_size m.(frames)).
@@ -705,7 +690,6 @@ Module MemoryI : MemoryT.
   Instance RM : raw_memory_spec A CM as_raw_memory.
   Proof.
     constructor.
-    - done.
     - move => m; exact: readV.
     - move => m; exact: writeV.
     - exact: read_mem_error.
@@ -959,7 +943,7 @@ Module MemoryI : MemoryT.
         rewrite set_allocP; case: andP => // - []; rewrite !zify => X Y.
         case: disj; rewrite /top_stack => /lezP noo /lezP noo'.
         have p_range := wunsigned_range p.
-        have pi_range := wunsigned_range (add p i).
+        have pi_range : 0 <= wunsigned (add p i) < wbase U64 by exact: wunsigned_range.
         rewrite wunsigned_add; last by Psatz.lia.
         rewrite wunsigned_add in X; last by Psatz.lia.
         rewrite wunsigned_add in Y; last by Psatz.lia.

@@ -242,7 +242,7 @@ Section PROOF.
     move=> hva /(_ _ hvget) h /dup [] /h h1 /WArray.get_uget ->.
     move: h1; rewrite readP /CoreMem.read.
     t_xrbindP=> ??; rewrite CoreMem.uread8_get => <-; f_equal.
-    by rewrite addP !wrepr_add; ssrring.ssring.
+    by rewrite !wrepr_add; ssrring.ssring.
   Qed.
 
   Section CHECK_E_ESP.
