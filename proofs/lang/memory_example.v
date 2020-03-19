@@ -438,6 +438,14 @@ Module MemoryI : MemoryT.
     by case: (stack_blocks_rec _ _) => /= _ ? <-.
   Qed.
 
+  Corollary stack_framesI (m m': mem) :
+    stack_frames m = stack_frames m' →
+    frames m = frames m'.
+  Proof.
+    by rewrite -(stack_blocks_rec_snd_snd (stk_root m) (frames m)) -(stack_blocks_rec_snd_snd (stk_root m') (frames m'))
+      /stack_frames /stack_blocks => ->.
+  Qed.
+
   Lemma stack_blocks_rec_snd stk_root frames :
     if (stack_blocks_rec stk_root frames).2 is p_sz :: tl
     then let: (p, sz) := p_sz in p = add stk_root (- frames_size frames)
@@ -1064,57 +1072,39 @@ Module MemoryI : MemoryT.
     - rewrite /memory_model.write_mem /memory_model.read_mem /=; t_xrbindP => ?????????  /raw_read_write_any_mem h /h {h} h ? /h {h} h <- ?? <-; exact: h.
   Defined.
 
-  Definition eqalloc (a b: Mz.t unit) : Prop :=
-    is_zalloc a =1 is_zalloc b.
-
-  Remark eqalloc_trans y x z : eqalloc x y → eqalloc y z → eqalloc x z.
-  Proof. by move => a ? ?; rewrite a. Qed.
-
-  Lemma is_alloc_m a b {m p ws} : eqalloc a b → is_alloc a m p ws = is_alloc b m p ws.
-  Proof. by move => eq_a_b; apply/eq_all. Qed.
-
-  Definition eqmem (a: mem) (stack: pointer) (b: low_mem) : Prop :=
-    [/\ stack = add (stk_root a) (- frames_size (frames a)), eqalloc b.1 (set_alloc true (alloc a) 0 (wunsigned stack)) & b.2 = as_raw_mem a ].
-
-  Lemma is_alloc_set_alloc al m p s ptr sz :
-    is_alloc al m p s →
-    is_alloc (set_alloc true al ptr sz) m p s.
-  Proof.
-    move/is_allocP => h; apply/is_allocP => i i_range; rewrite set_allocP.
-    case: ifP => // _; exact: h.
-  Qed.
+  Record eqmem_ (a: mem) (stack: pointer) (b: low_mem) : Prop :=
+    { eqmem_stack : stack = add (stack_root a) (- frames_size (frames a))
+    ; eqmem_valid_pointer p s : memory_model.valid_pointer b p s = memory_model.valid_pointer a p s || is_align p s && (wunsigned p + wsize_size s <= wunsigned stack)%R
+    ; eqmem_data p s v : memory_model.read_mem a p s = ok v → memory_model.read_mem b p s = ok v
+    (* TODO: p, s should not be in an excluded range *)
+    }.
+  Definition eqmem := eqmem_.
 
   Instance L : refinement M LM eqmem.
   Proof.
     split.
-    - rewrite /memory_model.read_mem /= /read_mem => a stack [] al _ [/= -> ok_al ->] p s v.
-      rewrite /raw_read_mem /CoreMem.read /= /raw_valid /raw_valid_pointer; t_xrbindP => /= _ /assertP /andP[] -> ok_p -> /=.
-      by rewrite (is_alloc_m ok_al) (is_alloc_set_alloc _ _ ok_p).
-    - rewrite /memory_model.write_mem /= /write_mem => a stack [] al _ [/= -> ok_al ->] p s v ?; t_xrbindP => a' ok_a' <-.
-      move: ok_a'.
-      rewrite /raw_write_mem /CoreMem.write /= /raw_valid /raw_valid_pointer; t_xrbindP => /= _ /assertP /andP[] -> ok_p <-.
-      rewrite (is_alloc_m ok_al) (is_alloc_set_alloc _ _ ok_p).
-      by eexists; first reflexivity.
-    rewrite /eqmem /= /alloc_stack => a stack [] al _ [/= -> ok_al ->] sz a'; rewrite addC.
-    case: Sumbool.sumbool_of_bool => // ok_check /(@ok_inj _ _ _ _) <- {a'} /=.
-    split; last reflexivity.
-    - congr (add a.(stk_root)); Psatz.lia.
-    case/andP: ok_check => /andP[] /lezP sz_pos sz_align /lezP no_overflow.
-    apply: (eqalloc_trans ok_al) => p; rewrite !set_allocP.
-    have rt_range := wunsigned_range a.(stk_root).
-    have fr_pos := frames_size_pos a.
-    do 2 (rewrite wunsigned_add; last by Psatz.lia).
-    move: (wunsigned a.(stk_root)) no_overflow rt_range => r no_overflow r_range /=.
-    case: andP.
-    - case => /dup[] /lezP p_pos -> /= /ltzP p_bounded.
-      case: ifPn => // /ltzP ?.
-      case: ifPn => //. rewrite negb_and => /orP [].
-      + move => /lezP; Psatz.lia.
-      move => /ltzP; Psatz.lia.
-    rewrite -(rwP lezP) -(rwP ltzP) => ?.
-    case: andP; rewrite -(rwP lezP) -(rwP ltzP); first Psatz.lia.
-    case: andP => //; rewrite -(rwP lezP) -(rwP ltzP).
-    Psatz.lia.
-  Qed.
+    - exact: eqmem_data.
+    - move => a stack b ek p s v a' ok_a'.
+      have valid_aps : memory_model.valid_pointer a p s.
+      + by apply/writeV; exists a'; exact: ok_a'.
+      have valid_bps : memory_model.valid_pointer b p s.
+      + by rewrite (eqmem_valid_pointer ek) valid_aps.
+      case/(memory_model.writeV _ _ v): valid_bps => b' ok_b'.
+      exists b'; first exact: ok_b'.
+      have stable := write_mem_stable ok_a'.
+      split.
+      + by rewrite ek.(eqmem_stack) (ss_root stable) (stack_framesI (ss_frames stable)).
+      + move => p' s'; rewrite (memory_model.write_valid _ _ ok_a') (memory_model.write_valid _ _ ok_b').
+        exact: ek.(eqmem_valid_pointer).
+      move => p' s' v' ok_v'.
+      have valid_ap's' : memory_model.valid_pointer a p' s'.
+      + rewrite -(memory_model.write_valid _ _ ok_a'); apply/memory_model.readV; exists v'; exact: ok_v'.
+      case/memory_model.readV: (valid_ap's') => w ok_w.
+      have := ek.(eqmem_data) ok_w.
+      rewrite -ok_w.
+      admit.
+    move => a stack b ek sz a' ok_a'.
+    rewrite ek.(eqmem_stack) addC.
+  Admitted.
 
 End MemoryI.

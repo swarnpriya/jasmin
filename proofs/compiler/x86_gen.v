@@ -33,7 +33,7 @@ Definition assemble_c (lc: lcmd) : ciexec (seq asm) :=
 
 (* -------------------------------------------------------------------- *)
 Variant x86_gen_error_t :=
-| X86Error_StackPointerInArguments
+| X86Error_StackPointerInArguments (* TODO: better error message *)
 | X86Error_SaveRSPtoRSP
 | X86Error_NonEmptyStackNotSaved.
 
@@ -71,6 +71,13 @@ Definition assemble_saved_stack (stk_size: Z) (x: stack_alloc.saved_stack) : cie
         [:: AsmOp (MOV Uptr) [:: Reg RSP; adr ]])
   end.
 
+Definition killed_by_stack_code (x: stack_alloc.saved_stack): seq register :=
+  match x with
+  | stack_alloc.SavedStackNone => [::]
+  | stack_alloc.SavedStackReg r => if reg_of_var xH r is Ok r then [:: r; RSP ] else [::]
+  | stack_alloc.SavedStackStk _ => [:: RBP; RSP ]
+  end.
+
 Lemma assemble_saved_stack_has_no_label stk_size x prologue epilogue lbl :
   assemble_saved_stack stk_size x = ok (prologue, epilogue) →
   ~~ has (x86_sem.is_label lbl) (prologue ++ epilogue).
@@ -88,10 +95,10 @@ Definition assemble_fd (fd: lfundef) :=
   Let body := assemble_c (lfd_body fd) in
   Let arg := reg_of_vars xH (lfd_arg fd) in
   Let res := reg_of_vars xH (lfd_res fd) in
-  Let _ :=
-    assert (~~ (RSP \in arg)) (x86_gen_error X86Error_StackPointerInArguments) in
   Let tosave := reg_of_vars xH (map (fun x => VarI x xH) (lfd_extra fd).1) in
   Let stack_code  := assemble_saved_stack (lfd_stk_size fd) (lfd_extra fd).2 in
+  let killed_args := filter (λ r, r \in arg) (killed_by_stack_code (lfd_extra fd).2) in
+  Let _ := assert (killed_args == [::]) (x86_gen_error (X86Error_StackPointerInArguments)) in
   let code := stack_code.1 ++ body ++ stack_code.2 in
   ciok (XFundef arg code res tosave).
 
@@ -316,12 +323,12 @@ Lemma prologue_execution m s sz to_save prologue body epilogue :
   eqmem m (add (xreg s RSP) (- sz)) (xmem s) →
   exists2 s',
     x86sem gd {| xm := s ; xc := prologue ++ body ++ epilogue ; xip := 0 |} {| xm := s' ; xc := prologue ++ body ++ epilogue ; xip := size prologue |}
-    & eqmem m (xreg s' RSP) (xmem s') ∧ ∀ r, r ≠ RSP → xreg s' r = xreg s r.
+    & eqmem m (xreg s' RSP) (xmem s') ∧ ∀ r, r \notin killed_by_stack_code to_save → xreg s' r = xreg s r.
 Proof.
   case: to_save => /=; t_xrbindP.
   - move => _ /assertP /Z_eqP -> <- <-{sz prologue epilogue}; rewrite /= add_0 => eqm.
     by exists s; first exact: rt_refl.
-  - move => x r ok_r _ /assertP /negbTE rsp_neq_r <- <- {prologue epilogue} /= eqm.
+  - move => x r ok_r _ /assertP /negbTE rsp_neq_r <- <- {prologue epilogue} /= eqm; rewrite ok_r.
     eexists.
       apply: rt_trans; first exact: rt_step.
       apply: rt_trans; exact: rt_step.
@@ -329,9 +336,8 @@ Proof.
     split.
       by rewrite /mem_write_reg /= !ffunE /= rsp_neq_r /word_extend_reg /= !ffunE /= rsp_neq_r /merge_word /= !wand0 !wxor0 !zero_extend_u
         rsp_are_you_align.
-    move => r' /eqP /negbTE r'_neq_RSP.
-    rewrite /mem_write_reg /= !ffunE /= rsp_neq_r /word_extend_reg /= !ffunE /= r'_neq_RSP.
-    by have -> : r' == r = false by admit.
+    move => r'; rewrite !inE negb_or => /andP[] /negbTE r'_neq_r /negbTE r'_neq_RSP.
+    by rewrite /mem_write_reg /= !ffunE /= rsp_neq_r /word_extend_reg /= !ffunE /= r'_neq_RSP r'_neq_r.
   move => ofs <- <- {prologue epilogue} eqm.
   have : ∃ m', @write_mem low_mem LM (xmem s) (wrepr U64 ofs + add (xreg s RSP) (- sz)) U64 (xreg s RSP) = ok m'.
   + apply/(@writeV _ _ _ _ LMS).
@@ -355,9 +361,7 @@ Proof.
   split.
   + rewrite /= !ffunE /=.
     admit.
-  move => r /eqP /negbTE r_neq_rsp; rewrite !ffunE r_neq_rsp.
-  case:eqP => //.
-  admit.
+  by move => r; rewrite !inE negb_or => /andP[] /negbTE r_neq_RBP /negbTE r_neq_RSP; rewrite !ffunE r_neq_RSP r_neq_RBP.
 Admitted.
 
 (* TODO: this is a general property of fold *)
@@ -394,7 +398,7 @@ have [fd' [h ok_fd']] := get_map_cfprog ok_p'' ok_fd.
 exists fd'. split; first exact: ok_fd'.
 move => s1 hargs eqm1.
 move: h; rewrite /assemble_fd; t_xrbindP => body ok_body
- args ok_args dsts ok_dsts _ /assertP hsp tosave ok_tosave [prologue epilogue] ok_stack_code [?]; subst fd' => /=.
+ args ok_args dsts ok_dsts tosave ok_tosave [prologue epilogue] ok_stack_code _ /assertP /eqP hsp [?]; subst fd' => /=.
 set xr1 := {| xmem := s1.(xmem) ; xreg := s1.(xreg) ; xxreg := s1.(xxreg) ; xrf := rflagmap0 |}.
 have ok_prologue : valid_stack_code prologue.
 + move => lbl. have := assemble_saved_stack_has_no_label lbl ok_stack_code.
@@ -417,10 +421,22 @@ have :
   apply: (write_vars_uincl ok_s2 ok_args).
   split.
   + exact: ok_mem.
-  + admit.
+  + rewrite /vm1 /= => r v.
+    rewrite (inj_reg_of_string ok_sp (reg_of_stringK RSP)).
+    rewrite /get_var /var_of_register /=.
+    case: (r =P RSP).
+    * move => -> {r} /=; rewrite Fv.setP_eq => -[<-].
+      admit.
+    move => ne; rewrite /= Fv.setP_neq /vmap0 ?Fv.get0 //.
+    by apply/eqP => -[] /(@inj_string_of_register RSP) ?; apply: ne.
   + exact: ok_xreg.
   + exact: ok_freg.
-  + move: hargs => /=. admit.
+  + replace (get_reg_values xr2 args) with (get_reg_values s1 args); first exact: hargs.
+    apply: map_ext => r /xseq.InP hr.
+    rewrite /get_reg_value ok_reg; first reflexivity.
+    apply/negP => r_killed.
+    suff : r \in [::] by [].
+    by rewrite -hsp mem_filter hr.
 case => xr2 exec_prologue eqm2.
 have ms : match_state prologue epilogue (of_estate s2 fd.(lfd_body) 0) {| xm := xr2 ; xc := prologue ++ body ++ epilogue ; xip := size prologue |}.
 + econstructor => //=; first by rewrite to_estate_of_estate. eassumption.
