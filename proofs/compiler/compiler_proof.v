@@ -176,34 +176,37 @@ Proof.
   exact: (List_Forall2_refl _ value_uincl_refl).
 Qed.
 
-(*
 Lemma compile_prog_to_x86P entries (p: prog) (gd: glob_decls) (xp: xprog) m1 fn va m2 vr :
   compile_prog_to_x86 cparams entries p = cfok (gd,xp) →
   fn \in entries →
   sem.sem_call p m1 fn va m2 vr →
+  (* TODO: how to express that there is enough stack space?
   (∀ f, get_fundef xp fn = Some f →
-     ∃ p, alloc_stack m1 (xfd_stk_size f) = ok p) →
+     ∃ p, alloc_stack m1 (xfd_stk_size f) = ok p) →*)
   ∃ fd va',
     get_fundef (p_funcs p) fn = Some fd ∧
     mapM2 ErrType truncate_val (f_tyin fd) va = ok va' ∧
   ∃ fd', get_fundef xp fn = Some fd' ∧
   ∀ st1,
     List.Forall2 value_uincl va' (get_reg_values st1 fd'.(xfd_arg)) →
-    st1.(xmem) = m1 →
+    top_stack m1 = xreg st1 RSP →
+    eqmem [::] m1 st1.(xmem) →
   ∃ st2,
     x86sem_fd xp gd fn st1 st2 ∧
     List.Forall2 value_uincl vr (get_reg_values st2 fd'.(xfd_res)) ∧
-    eq_mem m2 st2.(xmem).
+    eqmem [::] m2 st2.(xmem). (* TODO: what do we want here? *)
 Proof.
-apply: rbindP=> -[gd1 lp] hlp; t_xrbindP => /= _ /assertP /allP ok_sig ? hxp ?? hfn hsem hsafe;subst.
+apply: rbindP=> -[gd1 lp] hlp; t_xrbindP => /= _ /assertP /allP ok_sig ? hxp ?? hfn hsem (*hsafe*); subst.
 have hlsem := compile_progP hlp hfn hsem.
 case: hlsem.
+- admit (*
 - move => fd hfd.
   move: hxp; rewrite /assemble_prog; case: x86_variables.reg_of_string => // sp hxp.
   have [xfd [hxfd]] := get_map_cfprog hxp hfd.
   by move => /hsafe; rewrite (assemble_fd_stk_size hxfd).
+*).
 move/ok_sig: hfn.
-case: hsem => {m1 m2 hsafe fn va vr} m1 m2 fn fd va va' st1 vm2 vr vr1 ok_fd ok_va _ _ _ _ hsig m2' [vr'] [ok_vr'] [hm2' hlsem].
+case: hsem => {m1 m2 (*hsafe*) fn va vr} m1 m2 fn fd va va' st1 vm2 vr vr1 ok_fd ok_va _ _ _ _ hsig m2' [vr'] [ok_vr'] [hm2' hlsem].
 exists fd, va.
 split; first exact: ok_fd.
 split; first exact: ok_va.
@@ -213,13 +216,13 @@ have -> : lfd_tyin fd' = f_tyin fd.
 - by move: hsig; rewrite /check_signature ok_fd' ok_fd => /eqP [].
 rewrite ok_va => - [?]; subst va1.
 exists xd; split; first exact: ok_xd.
-move => st hva hm1.
-have [st2 [hxsem [hvr' hm2]]] := h st hva hm1.
+move => st hva ok_rsp hm1.
+have [st2 [hxsem [hvr' [ok_rsp2 hm2]]]] := h st hva ok_rsp hm1.
 exists st2.
 split; first exact: hxsem.
-split; last by rewrite hm2.
-exact: (Forall2_trans value_uincl_trans ok_vr' hvr').
-Qed.
-*)
+split.
+- exact: (Forall2_trans value_uincl_trans ok_vr' hvr').
+admit.
+Admitted.
 
 End PROOF.

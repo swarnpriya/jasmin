@@ -322,7 +322,7 @@ Module MemoryI : MemoryT.
     - stack does not overflow
   *)
   Definition valid_frame (sz: Z) : bool :=
-    (0 <=? sz) && (sz mod 32 == 0).
+    [&& 0 <=? sz, sz mod 32 == 0 & wunsigned (sign_extend Uptr (wrepr U32 sz)) == sz ].
 
   Definition valid_frames (stk_root: pointer) (frames: seq Z) :=
     all valid_frame frames && (frames_size frames <=? wunsigned stk_root).
@@ -754,7 +754,7 @@ Module MemoryI : MemoryT.
     have /andP[h _] := m.(framesP).
     apply/aligned_factor => //.
     elim: {m} (frames m) h; first by exists 0.
-    move => b f ih /andP[] /andP[] /lezP b_pos /aligned_factor - /(_ erefl) [a ab] {}/ih [c fc].
+    move => b f ih /andP[] /and3P[] /lezP b_pos /aligned_factor - /(_ erefl) [a ab] _ {}/ih [c fc].
     change (frames_size (b :: f)) with (b + frames_size f).
     exists (a + c). Psatz.lia.
   Qed.
@@ -778,7 +778,7 @@ Module MemoryI : MemoryT.
     rewrite /alloc_stack /valid_pointer /raw_valid_pointer; case: Sumbool.sumbool_of_bool => // h [<-] p s.
     case ok_p_s: (is_align _ _); last by rewrite andbF.
     rewrite /= /is_alloc /top_stack /= andbT.
-    case/andP: h => /andP[] /lezP sz_pos sz_align /lezP no_ovf.
+    case/andP: h => /and3P[] /lezP sz_pos sz_align _ /lezP no_ovf.
     symmetry.
     case: allP => /=.
     - move => old; symmetry.
@@ -842,7 +842,7 @@ Module MemoryI : MemoryT.
   Proof.
     rewrite /alloc_stack; case: Sumbool.sumbool_of_bool => // h [<-].
     rewrite /is_align /top_stack /= => ofs s.
-    case/andP: h => /andP[] /lezP sz_pos.
+    case/andP: h => /and3P[] /lezP sz_pos.
     have := frames_size_align m.
     have := m.(stk_root_aligned).
     rewrite /is_align /=.
@@ -851,7 +851,7 @@ Module MemoryI : MemoryT.
     have ws_pos := wsize_size_pos s.
     have n_pos : 0 < n by Psatz.nia.
     have ns_nz : n * wsize_size s ≠ 0 by Psatz.lia.
-    move: ws => -> /eqP rt_align /eqP fs_align /eqP /Z.mod_opp_l_z - /(_ ns_nz) sz_align _.
+    move: ws => -> /eqP rt_align /eqP fs_align /eqP /Z.mod_opp_l_z - /(_ ns_nz) sz_align _ _.
 
     rewrite /add wunsigned_repr /=.
     rewrite /wunsigned /=.
@@ -982,7 +982,7 @@ Module MemoryI : MemoryT.
       case: Z.ltb_spec0 => // L _; right.
       have sz_align : sz mod 32 == 0.
       { move: ok_frames o; case: (frames m) => /=; first by move => _ <-.
-        move => a ? /andP[] /andP [] _; congruence. }
+        move => a ? /andP[] /and3P [] _; congruence. }
       case/eqP/aligned_factor: aligned_p (wunsigned_range p) L K => // q ->.
       have := stk_root_aligned m.
       rewrite /is_align /=.
@@ -1021,6 +1021,56 @@ Module MemoryI : MemoryT.
     rewrite /memory_model.frames /= /stack_frames /= /stack_blocks.
     case: (frames m) => //= f fr.
     by case: (stack_blocks_rec _ _).
+  Qed.
+
+  Lemma wand_nop a :
+    (wunsigned a) mod 32 == 0 →
+    wand a (wrepr Uptr (-32)) = a.
+  Proof.
+    case/aligned_factor => // b ok_a.
+    suff : a = wshl (wrepr _ b) 5.
+    move ->.
+    apply/eqP/eq_from_wbit_n => /= i; rewrite wandE wshlE /=.
+    case e: (Pos.to_nat 5 <= i)%nat => //=.
+    suff -> : wbit_n (wrepr Uptr (-32)) i by rewrite andbT.
+    2: {
+      rewrite /wshl /word.lsl Z.shiftl_mul_pow2 //=.
+      rewrite word.urepr_word /=.
+      rewrite Z.mod_small.
+      rewrite -ok_a. symmetry. apply: wrepr_unsigned.
+      have := wunsigned_range a.
+      rewrite -/(wbase U64).
+      Psatz.nia.
+    }
+    case: i e => n /= /ltP.
+    do 64 case: n => [ // | n ].
+    change nat63.+1 with 64%nat.
+    Psatz.lia.
+  Qed.
+
+  Lemma top_stack_is_aligned m :
+    wand (memory_model.top_stack m) (wrepr Uptr (-32)) = memory_model.top_stack m.
+  Proof.
+    rewrite !top_stackE wand_nop // /top_stack -(rwP eqP) Z.mod_divide //.
+    case/andP: (framesP m) => _ /leZP no_overflow.
+    rewrite wunsigned_add; last first.
+    - have r_range := wunsigned_range (stk_root m).
+      have fr_pos := frames_size_pos m.
+      Psatz.lia.
+    case/aligned_factor: (stk_root_aligned m) => // r ->.
+    case/aligned_factor: (frames_size_align m) => // fr ->.
+    exists (r - fr). change (wsize_size U256) with 32. ring.
+  Qed.
+
+  Lemma alloc_stack_is_subtract m sz m' :
+    alloc_stack m sz = ok m' →
+    memory_model.top_stack m' = (memory_model.top_stack m - sign_extend Uptr (wrepr U32 sz))%R.
+  Proof.
+    rewrite /alloc_stack !top_stackE /top_stack.
+    case: Sumbool.sumbool_of_bool => // h []<-{m'} /=.
+    case/andP: h => /and3P[] /leZP sz_pos /aligned_factor[]// sz' ? /eqP sz_small /leZP no_overflow; subst sz.
+    rewrite -addE addC -/(wunsigned (sign_extend U64 (wrepr U32 _))) sz_small.
+    congr (add (stk_root m)); ring.
   Qed.
 
   (** Refinement to a low memory. *)
@@ -1072,19 +1122,10 @@ Module MemoryI : MemoryT.
     - rewrite /memory_model.write_mem /memory_model.read_mem /=; t_xrbindP => ?????????  /raw_read_write_any_mem h /h {h} h ? /h {h} h <- ?? <-; exact: h.
   Defined.
 
-  Record eqmem_ (a: mem) (stack: pointer) (b: low_mem) : Prop :=
-    { eqmem_stack : stack = add (stack_root a) (- frames_size (frames a))
-    ; eqmem_valid_pointer p s : memory_model.valid_pointer b p s = memory_model.valid_pointer a p s || is_align p s && (wunsigned p + wsize_size s <= wunsigned stack)%R
-    ; eqmem_data p s v : memory_model.read_mem a p s = ok v → memory_model.read_mem b p s = ok v
-    (* TODO: p, s should not be in an excluded range *)
-    }.
-  Definition eqmem := eqmem_.
-
-  Instance L : refinement M LM eqmem.
+  Instance L : refinement A M LM.
   Proof.
     split.
-    - exact: eqmem_data.
-    - move => a stack b ek p s v a' ok_a'.
+    - move => reserved a b ek p s v a' ok_a'.
       have valid_aps : memory_model.valid_pointer a p s.
       + by apply/writeV; exists a'; exact: ok_a'.
       have valid_bps : memory_model.valid_pointer b p s.
@@ -1093,18 +1134,16 @@ Module MemoryI : MemoryT.
       exists b'; first exact: ok_b'.
       have stable := write_mem_stable ok_a'.
       split.
-      + by rewrite ek.(eqmem_stack) (ss_root stable) (stack_framesI (ss_frames stable)).
-      + move => p' s'; rewrite (memory_model.write_valid _ _ ok_a') (memory_model.write_valid _ _ ok_b').
+      + move => p' s'; rewrite (memory_model.write_valid _ _ ok_a') (memory_model.write_valid _ _ ok_b') -(ss_top_stack stable).
         exact: ek.(eqmem_valid_pointer).
-      move => p' s' v' ok_v'.
+      move => p' s' v' not_reserved ok_v'.
       have valid_ap's' : memory_model.valid_pointer a p' s'.
       + rewrite -(memory_model.write_valid _ _ ok_a'); apply/memory_model.readV; exists v'; exact: ok_v'.
       case/memory_model.readV: (valid_ap's') => w ok_w.
-      have := ek.(eqmem_data) ok_w.
+      have := ek.(eqmem_data) not_reserved ok_w.
       rewrite -ok_w.
       admit.
-    move => a stack b ek sz a' ok_a'.
-    rewrite ek.(eqmem_stack) addC.
+    move => reserved a b ek sz a' ok_a'.
   Admitted.
 
 End MemoryI.

@@ -7,6 +7,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Local Existing Instance Memory.LM.
+
 (* -------------------------------------------------------------------- *)
 Lemma inj_rflag_of_var ii x y v :
      rflag_of_var ii x = ok v
@@ -29,7 +31,8 @@ Definition eqflags (m: estate) (rf: rflagmap) : Prop :=
 
 Variant lom_eqv (m : estate) (lom : x86_mem) :=
   | MEqv of
-         Memory.eqmem (emem m) (xreg lom RSP) (xmem lom)
+         top_stack (emem m) = xreg lom RSP
+    & eqmem [::] (emem m) (xmem lom)
     & (∀ r v, get_var (evm m) (var_of_register r) = ok v → value_uincl v (Vword (xreg lom r)))
     & (∀ r v, get_var (evm m) (var_of_xmm_register r) = ok v → value_uincl v (Vword (xxreg lom r)))
     & eqflags m (xrf lom).
@@ -50,7 +53,7 @@ Lemma xgetreg_ex ii x r v s xs :
   value_uincl v (Vword (xs.(xreg) r)).
 Proof.
 move: (@var_of_register_of_var x).
-move => h [_ eqv _ _]; case: x h => -[] //= [] // x.
+move => h [_ _ eqv _ _]; case: x h => -[] //= [] // x.
 rewrite /register_of_var /=.
 case: reg_of_string => [vx|] // /(_ _ erefl) <- {x} [<-] ok_v.
 exact: eqv.
@@ -73,7 +76,7 @@ Lemma xxgetreg_ex x r v s xs :
   xmm_register_of_var x = Some r →
   get_var (evm s) x = ok v →
   value_uincl v (Vword (xxreg xs r)).
-Proof. by case => _ _ eqr _ /xmm_register_of_varI ?; subst x; auto. Qed.
+Proof. by case => _ _ _ eqr _ /xmm_register_of_varI ?; subst x; auto. Qed.
 
 (* -------------------------------------------------------------------- *)
 Lemma xgetflag_ex ii m rf x f v :

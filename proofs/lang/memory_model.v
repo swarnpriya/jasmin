@@ -300,6 +300,21 @@ Definition disjoint_zrange (p: pointer) (s: Z) (p': pointer) (s': Z) :=
 Definition disjoint_range p s p' s' :=
   disjoint_zrange p (wsize_size s) p' (wsize_size s').
 
+Definition disjoint_rangeb p s ps : bool :=
+  [&& no_overflow p (wsize_size s),
+   no_overflow ps.1 ps.2 &
+   (wunsigned p + wsize_size s <= wunsigned ps.1)%R || (wunsigned ps.1 + ps.2 <= wunsigned p)%R ].
+
+Lemma disjoint_rangeP p s ps :
+  reflect (disjoint_zrange p (wsize_size s) ps.1 ps.2) (disjoint_rangeb p s ps).
+Proof.
+  rewrite /disjoint_rangeb /disjoint_zrange.
+  do 2 (case: (no_overflow); last by constructor; case).
+  case: orP => h; constructor.
+  - by split => //; move: h; rewrite !zify.
+  by case => _ _ ?; apply: h; rewrite !zify.
+Qed.
+
 Definition between (pstk : pointer)  (sz : Z) (p : pointer) (s : wsize) : bool :=
   ((wunsigned pstk <=? wunsigned p) && (wunsigned p + wsize_size s <=? wunsigned pstk + sz))%Z.
 
@@ -378,6 +393,11 @@ Section SPEC.
     fss_frames : frames m' = behead (frames m);
    }.
 
+  Lemma ss_top_stack :
+    stack_stable →
+    top_stack m = top_stack m'.
+  Proof. by rewrite /top_stack => - [] -> ->. Qed.
+
 End SPEC.
 
 Arguments alloc_stack_spec {_ _ _} _ _ _.
@@ -448,7 +468,11 @@ Section RawMemoryT.
 End RawMemoryT.
 
 (** A memory refinement relates a high-level memory with stack frames to a low-level memory with a single stack region.
-  The “stack” pointer splits this region into an allocated part and a free part.
+
+  Both memories use equal pointers (no “injection”).
+
+  The low-level memory may store more data in the stack (book-keeping and register spilling):
+  refinement is parameterized by a set of reserved slots: valid in both memories, but never used by the high memory.
 *)
 Section REFINEMENT.
   Context
@@ -456,29 +480,33 @@ Section REFINEMENT.
     (high low: Type)
     (H: memory high)
     (L: raw_memory low)
-    (eqmem : high → pointer → low → Prop)
   .
 
+  Record eqmem (reserved: seq (pointer * Z)) (a: high) (b: low) : Prop :=
+    EqMem {
+        eqmem_valid_pointer p s : valid_pointer b p s = valid_pointer a p s || is_align p s && (wunsigned p + wsize_size s <= wunsigned (top_stack a))%R
+      ; eqmem_data p s v :
+          all (disjoint_rangeb p s) reserved →
+          read_mem a p s = ok v → read_mem b p s = ok v
+      }.
+
   Class refinement : Prop :=
-    { eqmem_read :
-        ∀ a stack b,
-          eqmem a stack b →
-          ∀ p s v, read_mem a p s = ok v → read_mem b p s = ok v
-    ; eqmem_write :
-        ∀ a stack b,
-          eqmem a stack b →
-          ∀ p s v a', write_mem a p s v = ok a' → exists2 b', write_mem b p s v = ok b' & eqmem a' stack b'
+    { eqmem_write :
+        ∀ reserved a b,
+          eqmem reserved a b →
+          ∀ p s v a', write_mem a p s v = ok a' → exists2 b', write_mem b p s v = ok b' & eqmem reserved a' b'
       ; eqmem_alloc :
-        ∀ a stack b,
-          eqmem a stack b →
-          ∀ sz a', alloc_stack a sz = ok a' → eqmem a' (add stack (- sz)) b
+        ∀ reserved a b,
+          eqmem reserved a b →
+          ∀ sz a', alloc_stack a sz = ok a' → eqmem reserved a' b
     }.
 
 End REFINEMENT.
 
-Arguments eqmem_read {high low _ _ eqmem} _ {a stack b} _ {_ _ _}.
-Arguments eqmem_write {high low _ _ eqmem} _ {a stack b} _ {_ _ _ _}.
-Arguments eqmem_alloc {high low _ _ eqmem} _ {a stack b} _ {_ _}.
+Arguments eqmem {A high low H L} reserved _ _.
+
+Arguments eqmem_write {A high low _ _} _ {reserved a b} _ {_ _ _ _}.
+Arguments eqmem_alloc {A high low _ _} _ {reserved a b} _ {_ _}.
 
 Module Type MemoryT.
 
@@ -502,12 +530,20 @@ Parameter free_stackP : forall m sz,
   free_stack_spec m sz (free_stack m sz).
 
 (* -------------------------------------------------------------------- *)
+Parameter top_stack_is_aligned :
+  ∀ m, wand (top_stack m) (wrepr Uptr (-32)) = top_stack m.
+
+Parameter alloc_stack_is_subtract :
+  ∀ m sz m',
+    alloc_stack m sz = ok m' →
+    top_stack m' = (top_stack m - sign_extend Uptr (wrepr U32 sz))%R.
+
+(* -------------------------------------------------------------------- *)
 Parameter low_mem : Type.
 Parameter LM : raw_memory low_mem.
 Parameter LCM : coreMem Pointer low_mem.
 Parameter LMS : raw_memory_spec A LCM LM.
-Parameter eqmem : mem → pointer → low_mem → Prop.
 
-Declare Instance L : refinement M LM eqmem.
+Declare Instance L : refinement A M LM.
 
 End MemoryT.
