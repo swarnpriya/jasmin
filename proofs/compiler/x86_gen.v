@@ -36,6 +36,7 @@ Definition assemble_c (lc: lcmd) : ciexec (seq asm) :=
 (* -------------------------------------------------------------------- *)
 Variant x86_gen_error_t :=
 | X86Error_StackPointerInArguments (* TODO: better error message *)
+| X86Error_StackPointerInResults
 | X86Error_SaveRSPtoRSP
 | X86Error_NonEmptyStackNotSaved.
 
@@ -43,6 +44,7 @@ Definition x86_gen_error k : instr_error :=
   (xH, Cerr_assembler (AsmErr_string
   match k with
   | X86Error_StackPointerInArguments => "Stack pointer is also an argument"
+  | X86Error_StackPointerInResults => "Stack pointer is also a result"
   | X86Error_SaveRSPtoRSP => "Stack pointer cannot be saved to RSP"
   | X86Error_NonEmptyStackNotSaved => "Stack pointer should be saved"
   end)).
@@ -101,6 +103,7 @@ Definition assemble_fd (fd: lfundef) :=
   Let stack_code  := assemble_saved_stack (lfd_stk_size fd) (lfd_extra fd).2 in
   let killed_args := filter (λ r, r \in arg) (killed_by_stack_code (lfd_extra fd).2) in
   Let _ := assert (killed_args == [::]) (x86_gen_error (X86Error_StackPointerInArguments)) in
+  Let _ := assert (RSP \notin res) (x86_gen_error X86Error_StackPointerInResults) in
   let code := stack_code.1 ++ body ++ stack_code.2 in
   ciok (XFundef arg code res tosave).
 
@@ -302,16 +305,18 @@ exact: word_uincl_zero_ext.
 Qed.
 
 Lemma get_reg_of_vars_uincl ii xs rs vm vs (rm: regmap) :
-  (∀ r v, get_var vm (var_of_register r) = ok v → value_uincl v (Vword (rm r))) →
+  (∀ r v, r \in rs → get_var vm (var_of_register r) = ok v → value_uincl v (Vword (rm r))) →
   reg_of_vars ii xs = ok rs →
   mapM (λ x : var_i, get_var vm x) xs = ok vs →
   List.Forall2 value_uincl vs (map (λ r, Vword (rm r)) rs).
 Proof.
-move => h; elim: xs rs vs.
-+ by move => _ _ [<-] [<-]; constructor.
-move => x xs ih rs' vs' /=; t_xrbindP => r ok_r rs ok_rs <- {rs'} v ok_v vs ok_vs <- {vs'} /=.
-constructor; last exact: ih.
-apply: h. rewrite -ok_v {ok_v}; f_equal; apply: var_of_register_of_var.
+elim: xs rs vs.
++ by move => _ _ _ [<-] [<-]; constructor.
+move => x xs ih rs' vs' h /=; t_xrbindP => r ok_r rs ok_rs ? v ok_v vs ok_vs <- {vs'} /=; subst rs'.
+constructor; last first.
++ by apply: ih => // r' v' hr'; apply: h; rewrite inE hr' orbT.
+apply: h; first by rewrite inE eqxx.
+rewrite -ok_v {ok_v}; f_equal; apply: var_of_register_of_var.
 case: x ok_r => /= x _; exact: reg_of_var_register_of_var.
 Qed.
 
@@ -322,7 +327,7 @@ Lemma prologue_execution m s sz to_save prologue body epilogue :
   ∃ s',
     [/\
     x86sem gd {| xm := s ; xc := prologue ++ body ++ epilogue ; xip := 0 |} {| xm := s' ; xc := prologue ++ body ++ epilogue ; xip := size prologue |},
-     top_stack m = xreg s' RSP,
+    top_stack m = xreg s' RSP,
     eqmem [::] m (xmem s') &
     ∀ r, r \notin killed_by_stack_code to_save → xreg s' r = xreg s r ].
 Proof.
@@ -366,6 +371,40 @@ Proof.
   by move => r; rewrite !inE negb_or => /andP[] /negbTE r_neq_RBP /negbTE r_neq_RSP; rewrite !ffunE r_neq_RSP r_neq_RBP.
 Admitted.
 
+Lemma epilogue_execution m s sz to_save prologue body epilogue :
+  assemble_saved_stack sz to_save = ok (prologue, epilogue) →
+  top_stack m = xreg s RSP → (* TODO: c’est pas la bonne hypothèse: on veut que le to_save contienne top_stack (free m sz) *)
+  eqmem [::] m (xmem s) →
+  ∃ s',
+    [/\
+     x86sem gd {| xm := s; xc := prologue ++ body ++ epilogue; xip := size (prologue ++ body) |}
+                {| xm := s'; xc := prologue ++ body ++ epilogue; xip := size (prologue ++ body ++ epilogue) |},
+    top_stack (free_stack m sz) = xreg s' RSP,
+    eqmem [::] (free_stack m sz) (xmem s') &
+    ∀ r, r ≠ RSP → xreg s' r = xreg s r ].
+Proof.
+  case: to_save => /=; t_xrbindP.
+  - move => _ /assertP /Z_eqP -> <- <-{sz prologue epilogue} eq_stk eqm; rewrite /= cats0.
+    eexists; split; first exact: rt_refl.
+    admit.
+    admit.
+    by [].
+  - move => x r ok_r _ /assertP /negbTE rsp_neq_r <- <- {prologue epilogue} /= eq_stk eqm.
+    eexists; split.
+    + by apply: rt_step; rewrite /x86sem1 /fetch_and_eval /= -{1}(addn0 (size body)) onth_cat size_cat addnS addn0.
+    + rewrite /= ffunE /=. admit.
+    + rewrite /=. admit.
+    by move => r' /eqP /negbTE r'_not_RSP /=; rewrite ffunE r'_not_RSP.
+  move => ofs <- <- {prologue epilogue} eq_stk eqm.
+  have saved_RSP : read_mem (xmem s) (wrepr Uptr ofs + (xreg s) RSP) Uptr = ok (top_stack (free_stack m sz)).
+  + admit.
+  eexists; split.
+  + by apply: rt_step; rewrite /x86sem1 /fetch_and_eval /= -{1}(addn0 (size body)) onth_cat /= /eval_op /= /exec_instr_op /eval_instr_op /= /decode_addr /= GRing.mulr0 GRing.addr0 saved_RSP size_cat addnS addn0 /=.
+  + by rewrite /= ffunE /= /word_extend_reg /merge_word /= wand0 wxor0 !zero_extend_u.
+  + rewrite /=. admit.
+  by move => r /eqP /negbTE r_not_RSP; rewrite /= ffunE r_not_RSP.
+Admitted.
+
 Lemma assemble_fdP m1 fn va m2 vr :
   lsem_fd p gd m1 fn va m2 vr →
   ∃ fd va',
@@ -392,7 +431,7 @@ have [fd' [h ok_fd']] := get_map_cfprog ok_p'' ok_fd.
 exists fd'. split; first exact: ok_fd'.
 move => s1 hargs eq_stk eqm1.
 move: h; rewrite /assemble_fd; t_xrbindP => body ok_body
- args ok_args dsts ok_dsts tosave ok_tosave [prologue epilogue] ok_stack_code _ /assertP /eqP hsp [?]; subst fd' => /=.
+ args ok_args dsts ok_dsts tosave ok_tosave [prologue epilogue] ok_stack_code _ /assertP /eqP hsp _ /assertP RSP_not_dst [?]; subst fd' => /=.
 set xr1 := {| xmem := s1.(xmem) ; xreg := s1.(xreg) ; xxreg := s1.(xxreg) ; xrf := rflagmap0 |}.
 have ok_prologue : valid_stack_code prologue.
 + move => lbl. have := assemble_saved_stack_has_no_label lbl ok_stack_code.
@@ -438,53 +477,23 @@ have ms : match_state prologue epilogue (of_estate s2 fd.(lfd_body) 0) {| xm := 
 + econstructor => //=; first by rewrite to_estate_of_estate. eassumption.
 have [[[om or oxr orf] oc opc] [xexec]] := match_state_sem ok_prologue hexec ms.
 case => /= body' eqm2'; rewrite ok_body => - [] ???; subst body' opc oc.
-have :
-  exists2 xr3,
-  x86sem gd {|
-           xm := {| xmem := om; xreg := or; xxreg := oxr; xrf := orf |};
-           xc := prologue ++ body ++ epilogue;
-           xip := size prologue + size (lfd_body fd) |}
-         {| xm := xr3 ; xc := prologue ++ body ++ epilogue ; xip := size (prologue ++ body ++ epilogue) |}
-  & lom_eqv {| emem := free_stack m2' (lfd_stk_size fd) ; evm := vm2 |} xr3.
-+ admit.
-case => xr3 exec_epilogue eqm3.
+move: xexec eqm2'.
+set s3 := {| xmem := om |}.
+move => xexec [] eq_stk2 eqm2' /= hor hoxr horf.
+have [xr3 [exec_epilogue /= eq_stk3 eqm3 eqr3]] := epilogue_execution body ok_stack_code eq_stk2 eqm2'.
 eexists; split.
 + econstructor. eassumption. 2: reflexivity.
   apply: x86sem_trans; first exact: exec_prologue.
   apply: x86sem_trans; last exact: exec_epilogue.
+  rewrite size_cat -(mapM_size ok_body).
   exact: xexec.
-case: eqm3 => /= ok_rsp eqm3 eqr _ _.
-split; last split; last assumption.
+split; last by [].
 rewrite /get_reg_values /get_reg_value /=.
 apply: (Forall2_trans value_uincl_trans).
 + apply: (mapM2_Forall2 _ ok_vr) => a b r _; exact: truncate_val_uincl.
-apply: get_reg_of_vars_uincl; eassumption.
-Admitted. (*
-set xr1 := mem_write_reg sp (top_stack m1') {| xmem := m1' ; xreg := s1.(xreg) ; xxreg := s1.(xxreg) ; xrf := rflagmap0 |}.
-have eqm1 : lom_eqv {| emem := m1' ; evm := vm1 |} xr1.
-+ constructor => //.
-  - rewrite /vm1 /= => r v.
-    rewrite (inj_reg_of_string ok_sp (reg_of_stringK sp)).
-    rewrite /get_var /var_of_register /RegMap.set ffunE; case: eqP.
-    * move => -> {r} /=; rewrite Fv.setP_eq word_extend_reg_id // zero_extend_u => -[<-];
-      exact: word_uincl_refl.
-    move => ne; rewrite /= Fv.setP_neq /vmap0 ?Fv.get0 //.
-    by apply/eqP => -[] /inj_string_of_register ?; apply: ne.
-have eqm2 : lom_eqv s2 xr1.
-+ by apply: write_vars_uincl; eauto.
-have ms : match_state (of_estate s2 fd.(lfd_body) 0) {| xm := xr1 ; xc := body ; xip := 0 |}.
-+ by constructor => //=; rewrite to_estate_of_estate.
-have [[[om or oxr orf] oc opc] [xexec]] := match_state_sem hexec ms.
-rewrite (mapM_size ok_body).
-case => eqm' /=.
-rewrite ok_body => -[?] ?; subst oc opc.
-eexists; split; first by econstructor; eauto.
-case: eqm' => /= ?; subst om => eqr' _; split => //.
-rewrite /get_reg_values /get_reg_value /=.
-apply: (Forall2_trans value_uincl_trans).
-+ apply: (mapM2_Forall2 _ ok_vr) => a b r _; exact: truncate_val_uincl.
-apply: get_reg_of_vars_uincl; eassumption.
+apply: get_reg_of_vars_uincl. 2, 3: eassumption.
+move => r v hr /hor; rewrite eqr3 // => k.
+by move: RSP_not_dst; rewrite -k hr.
 Qed.
-*)
 
 End PROG.
