@@ -1122,6 +1122,21 @@ Module MemoryI : MemoryT.
     - rewrite /memory_model.write_mem /memory_model.read_mem /=; t_xrbindP => ?????????  /raw_read_write_any_mem h /h {h} h ? /h {h} h <- ?? <-; exact: h.
   Defined.
 
+  Lemma read_after_write a p s (v: word s)  a' m b b' p' s' :
+    valid_pointer a p' s' →
+    raw_read_mem m b p' s' = read_mem a p' s' →
+    write_mem a p v = ok a' →
+    raw_write_mem m b p v = ok b' →
+    read_mem a' p' s' = raw_read_mem m b' p' s'.
+  Proof.
+    rewrite /write_mem /read_mem /valid_pointer /raw_read_mem /CoreMem.read /= /raw_valid.
+    move => hva; rewrite hva; apply: rbindP => _ /assertP hvb h; apply: rbindP => a2 hwa [] <-{a'} /= hwb.
+    rewrite (raw_write_valid _ _ hwa) hva (raw_write_valid _ _ hwb) hvb /=; congr (ok (LE.decode _ _)).
+    have {h}/eqP/CoreMem.uread_decode h := ok_inj h.
+    apply /eqP /CoreMem.ureadP => i hin.
+    by rewrite (CoreMem.write_uget _ hwa) (CoreMem.write_uget _ hwb) h.
+  Qed.
+
   Instance L : refinement A M LM.
   Proof.
     split.
@@ -1141,8 +1156,10 @@ Module MemoryI : MemoryT.
       + rewrite -(memory_model.write_valid _ _ ok_a'); apply/memory_model.readV; exists v'; exact: ok_v'.
       case/memory_model.readV: (valid_ap's') => w ok_w.
       have := ek.(eqmem_data) not_reserved ok_w.
-      rewrite -ok_w.
-      admit.
+      rewrite -ok_w => eqr.
+      move: ok_b'; rewrite /memory_model.write_mem /=; apply: rbindP => q ok_b' []<-{b'}.
+      rewrite -ok_v'; symmetry.
+      exact: (read_after_write valid_ap's' eqr ok_a' ok_b').
     move => reserved a b ek sz a' ok_a'.
   Admitted.
 
