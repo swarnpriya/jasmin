@@ -14,7 +14,7 @@ before_install:
 branches:
   only:
   - master
-  - glob_array3
+  - subroutines
 script:
 - nix-shell --pure --run 'make -C proofs Makefile.coq'
 - nix-shell --pure --run 'make -j $NIX_BUILD_CORES -C proofs compiler/compiler.vo'
