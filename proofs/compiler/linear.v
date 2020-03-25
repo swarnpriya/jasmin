@@ -42,13 +42,11 @@ Local Open Scope seq_scope.
 (* --------------------------------------------------------------------------- *)
 (* Syntax                                                                      *)
 
-Definition label := positive.
-
 Variant linstr_r :=
   | Lopn   : lvals -> sopn -> pexprs -> linstr_r
   | Lalign : linstr_r
   | Llabel : label -> linstr_r
-  | Lgoto  : label -> linstr_r
+  | Lgoto  : remote_label -> linstr_r
   | Lcond  : pexpr -> label -> linstr_r
 .
 
@@ -158,7 +156,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
     let lbl := next_lbl L2 in
                            MkLI ii (Lcond e L1) >;
                            linear_c linear_i c2 ;;
-                           MkLI ii (Lgoto L2) >;
+                           MkLI ii (Lgoto (Local L2)) >;
     MkLI ii (Llabel L1) >; linear_c linear_i c1 lbl
    (MkLI ii (Llabel L2) :: lc)
 
@@ -170,7 +168,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
       align ii a (
       MkLI ii (Llabel L1) >; linear_c linear_i c ;;
                              linear_c linear_i c' lbl
-                             (MkLI ii (Lgoto L1) :: lc))
+                             (MkLI ii (Lgoto (Local L1)) :: lc))
 
     | Some false =>
       linear_c linear_i c lbl lc
@@ -186,7 +184,7 @@ Fixpoint linear_i (i:instr) (lbl:label) (lc:lcmd) :=
       let L1 := lbl in
       let L2 := next_lbl L1 in
       let lbl := next_lbl L2 in
-                             MkLI ii (Lgoto L1) >;
+                             MkLI ii (Lgoto (Local L1)) >;
       align ii a (MkLI ii (Llabel L2) >; linear_c linear_i c' ;;
       MkLI ii (Llabel L1) >; linear_c linear_i c lbl
                              (MkLI ii (Lcond e L2) :: lc))
@@ -230,8 +228,7 @@ Module Eq_linstr.
       by split => [ [] /andP [] /eqP -> /eqP -> /eqP -> //| [] -> -> ->];rewrite !eqxx.
     + apply (@equivP (l1 = l2));first by apply eqP.
       by split => [->|[]->].
-    + apply (@equivP (l1 = l2));first by apply eqP.
-      by split => [->|[]->].
+    + by apply: (equivP eqP); split; congruence.
     apply (@equivP ((e1 == e2) /\ (l1 == l2)));first by apply andP.
     by split => [ [] /eqP -> /eqP -> //| [] -> ->];rewrite !eqxx.
   Qed.

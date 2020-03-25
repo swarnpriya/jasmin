@@ -48,6 +48,27 @@ Unset Printing Implicit Defensive.
 (* ==================================================================== *)
 Definition label := positive.
 
+Variant remote_label :=
+| Local of label (* Label in current function *)
+| Remote of funname (* Entry point of given function *)
+.
+
+Definition remote_label_beq (x y: remote_label) : bool :=
+  match x with
+  | Local lbl => if y is Local lbl' then lbl == lbl' else false
+  | Remote fn => if y is Remote fn' then fn == fn' else false
+  end.
+
+Lemma remote_label_axiom : Equality.axiom remote_label_beq.
+Proof.
+  case=> [ lbl | fn ] [ lbl' | fn' ] /=.
+  1, 4: case: eqP => K.
+  all: constructor; congruence.
+Qed.
+
+Definition remote_label_eqMixin := Equality.Mixin remote_label_axiom.
+Canonical  remote_label_eqType := Eval hnf in EqType remote_label remote_label_eqMixin.
+
 (* -------------------------------------------------------------------- *)
 Variant register : Type :=
   | RAX | RCX | RDX | RBX | RSP | RBP | RSI | RDI

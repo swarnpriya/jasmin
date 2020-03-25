@@ -105,12 +105,16 @@ rewrite /assemble_c /linear.find_label /x86_sem.find_label => ok_i.
 by rewrite (mapM_size ok_i) (assemble_c_find_is_label lbl ok_i).
 Qed.
 
+Section PROG.
+
+Context (p: lprog) (p': xprog) (ok_p': assemble_prog p = ok p').
+
 Lemma assemble_iP rip i j ls ls' xs :
   match_state rip ls xs →
   assemble_i rip i = ok j →
-  linear_sem.eval_instr i ls = ok ls' →
+  linear_sem.eval_instr p i ls = ok ls' →
   ∃ xs' : x86_state,
-    x86_sem.eval_instr j xs = ok xs' ∧
+    x86_sem.eval_instr p' j xs = ok xs' ∧
     match_state rip ls' xs'.
 Proof.
 rewrite /linear_sem.eval_instr /x86_sem.eval_instr; case => eqm eqc eqpc.
@@ -124,9 +128,10 @@ case: i => ii [] /=.
 - move => lbl [<-] [<-]; eexists; split; first by reflexivity.
   constructor => //.
   by rewrite /setpc /= eqpc.
-- move => lbl [<-]; t_xrbindP => pc ok_pc <- {ls'}.
+- move => lbl [<-]. (* ; t_xrbindP => pc. ok_pc <- {ls'}.
   rewrite /eval_JMP -(assemble_c_find_label lbl eqc) ok_pc /=.
   by eexists; split; eauto; constructor.
+*) admit.
 - t_xrbindP => cnd lbl cndt ok_c [<-] b v ok_v ok_b.
   case: eqm => eqm hrip hd eqr eqx eqf.
   have [v' [ok_v' hvv']] := eval_assemble_cond eqf ok_c ok_v.
@@ -139,13 +144,13 @@ case: i => ii [] /=.
     by eexists; split; eauto; constructor.
   case => <- /=; eexists; split; first by reflexivity.
   by constructor => //; rewrite /setpc /= eqpc.
-Qed.
+Admitted.
 
 Lemma match_state_step rip ls ls' xs :
   match_state rip ls xs →
-  step ls = ok ls' →
+  step p ls = ok ls' →
   ∃ xs',
-  fetch_and_eval xs = ok xs' ∧
+  fetch_and_eval p' xs = ok xs' ∧
   match_state rip ls' xs'.
 Proof.
 move => ms; rewrite /step /find_instr /fetch_and_eval; case: (ms)=> _ eqc ->.
@@ -155,13 +160,13 @@ exact: assemble_iP.
 Qed.
 
 Lemma match_state_sem rip ls ls' xs :
-  lsem ls ls' →
+  lsem p ls ls' →
   match_state rip ls xs →
   ∃ xs',
-    x86sem xs xs' ∧
+    x86sem p' xs xs' ∧
     match_state rip ls' xs'.
 Proof.
-move => h; elim/lsem_ind: h xs; clear.
+move => h; elim/lsem_ind: h xs => {ls ls'}.
 - move => ls xs h; exists xs; split => //; exact: rt_refl.
 move => ls1 ls2 ls3 h1 h ih xs1 m1.
 have [xs2 [x m2]] := match_state_step m1 h1.
@@ -170,10 +175,6 @@ exists xs3; split => //.
 apply: x86sem_trans; last by eauto.
 exact: rt_step.
 Qed.
-
-Section PROG.
-
-Context (p: lprog) (p': xprog) (ok_p': assemble_prog p = ok p').
 
 Local Notation rip := (mk_rip p.(lp_rip)).
 
@@ -280,6 +281,7 @@ have [fds [sp [hp' ok_sp hrip ok_fds]]]: exists fds rsp, [/\ p' = {|xp_globs := 
   rewrite /assemble_prog; t_xrbindP => _ /assertP /check_rip_ok hrip.
   case: reg_of_string => // rsp; t_xrbindP => fds ok_fds <-.
   by exists fds, rsp.
+have MSS := match_state_sem.
 subst p'.
 have [fd' [h ok_fd']] := get_map_cfprog ok_fds ok_fd.
 exists fd'; split => //. 
@@ -315,7 +317,7 @@ have eqm2 : lom_eqv rip s2 xr1.
 + by apply: write_vars_uincl; eauto.
 have ms : match_state rip (of_estate s2 fd.(lfd_body) 0) {| xm := xr1 ; xc := body ; xip := 0 |}.
 + by constructor => //=; rewrite to_estate_of_estate.
-have [[[om or orip oxr orf] oc opc] [xexec]] := match_state_sem hexec ms.
+have [[[om or orip oxr orf] oc opc] [xexec]] := MSS _ _ _ _ hexec ms.
 rewrite (mapM_size ok_body).
 case => eqm' /=.
 rewrite ok_body => -[?] ?; subst oc opc.

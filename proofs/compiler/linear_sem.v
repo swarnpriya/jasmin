@@ -58,6 +58,7 @@ Definition to_estate (s:lstate) : estate := Estate s.(lmem) s.(lvm).
 Definition of_estate (s:estate) c pc := Lstate s.(emem) s.(evm) c pc.
 Definition setpc (s:lstate) pc :=  Lstate s.(lmem) s.(lvm) s.(lc) pc.
 Definition setc (s:lstate) c := Lstate s.(lmem) s.(lvm) c s.(lpc).
+Definition setcpc (s:lstate) c pc := Lstate s.(lmem) s.(lvm) c pc.
 
 Lemma to_estate_of_estate es c pc:
   to_estate (of_estate es c pc) = es.
@@ -80,9 +81,13 @@ Definition eval_instr (i : linstr) (s1: lstate) : exec lstate :=
     ok (of_estate s2 s1.(lc) s1.(lpc).+1)
   | Lalign   => ok (setpc s1 s1.(lpc).+1)
   | Llabel _ => ok (setpc s1 s1.(lpc).+1)
-  | Lgoto lbl =>
+  | Lgoto (Local lbl) =>
     Let pc := find_label lbl s1.(lc) in
     ok (setpc s1 pc.+1)
+  | Lgoto (Remote fn) =>
+    if get_fundef (lp_funcs P) fn is Some fd then
+      ok (setcpc s1 (lfd_body fd) 0)
+    else type_error
   | Lcond e lbl =>
     Let b := sem_pexpr [::] (to_estate s1) e >>= to_bool in
     if b then

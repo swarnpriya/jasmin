@@ -4,7 +4,6 @@ open Bigint.Notations
 open X86_decl
 (* -------------------------------------------------------------------- *)
 module W = Wsize
-module LM = Type
 
 (* -------------------------------------------------------------------- *)
 type rsize = [ `U8 | `U16 | `U32 | `U64 ]
@@ -47,7 +46,7 @@ let pp_gens (fmt : Format.formatter) xs =
   List.iter (Format.fprintf fmt "%a\n%!" pp_gen) xs
 
 (* -------------------------------------------------------------------- *)
-let string_of_label name (p : Linear.label) =
+let string_of_label name (p : label) =
   Format.sprintf "L%s$%d" name (Conv.int_of_pos p)
 
 (* -------------------------------------------------------------------- *)
@@ -170,6 +169,11 @@ let pp_imm (imm : Bigint.zint) =
 (* -------------------------------------------------------------------- *)
 let pp_label = string_of_label
 
+let pp_remote_label name tbl =
+  function
+  | Local lbl -> string_of_label name lbl
+  | Remote fn -> string_of_funname tbl fn
+
 (* -------------------------------------------------------------------- *)
 let pp_ct (ct : X86_decl.condt) =
   match ct with
@@ -261,15 +265,15 @@ let pp_name_ext pp_op =
   Printf.sprintf "%s%s" (Conv.string_of_string0 pp_op.pp_aop_name) (pp_ext pp_op.pp_aop_ext)
 
 (* -------------------------------------------------------------------- *)
-let pp_instr name (i : X86_sem.asm) =
+let pp_instr tbl name (i : X86_sem.asm) =
   match i with
   | ALIGN ->
     `Instr (".p2align", ["5"])
     
   | LABEL lbl ->
     `Label (pp_label name lbl)
-  | JMP lbl -> 
-    `Instr ("jmp", [pp_label name lbl])
+  | JMP lbl ->
+     `Instr ("jmp", [pp_remote_label name tbl lbl])
   | Jcc(lbl,ct) ->
     let iname = Printf.sprintf "j%s" (pp_ct ct) in
     `Instr (iname, [pp_label name lbl])
@@ -282,12 +286,12 @@ let pp_instr name (i : X86_sem.asm) =
 
 
 (* -------------------------------------------------------------------- *)
-let pp_instr name (fmt : Format.formatter) (i : X86_sem.asm) =
-  pp_gen fmt (pp_instr name i)
+let pp_instr tbl name (fmt : Format.formatter) (i : X86_sem.asm) =
+  pp_gen fmt (pp_instr tbl name i)
 
 (* -------------------------------------------------------------------- *)
-let pp_instrs name (fmt : Format.formatter) (is : X86_sem.asm list) =
-  List.iter (Format.fprintf fmt "%a\n%!" (pp_instr name)) is
+let pp_instrs tbl name (fmt : Format.formatter) (is : X86_sem.asm list) =
+  List.iter (Format.fprintf fmt "%a\n%!" (pp_instr tbl name)) is
 
 (* -------------------------------------------------------------------- *)
 
@@ -354,16 +358,16 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
       begin match saved_stack with
       | SavedStackNone  -> 
         assert (Bigint.equal stsz Bigint.zero);
-        pp_instrs name fmt d.X86_sem.xfd_body;
+        pp_instrs tbl name fmt d.X86_sem.xfd_body;
       | SavedStackReg r ->
-        pp_instrs name fmt
+        pp_instrs tbl name fmt
           [ AsmOp(MOV uptr, [Reg r; Reg RSP]);
             AsmOp(SUB uptr, [Reg RSP; Imm(U32, Conv.int32_of_bi stsz)]);
             AsmOp(AND uptr, [Reg RSP; Imm(U32, 
                                           Conv.int32_of_bi (B.of_int (-32)))]);
           ];
-        pp_instrs name fmt d.X86_sem.xfd_body;
-        pp_instrs name fmt 
+        pp_instrs tbl name fmt d.X86_sem.xfd_body;
+        pp_instrs tbl name fmt
           [ AsmOp(MOV uptr, [Reg RSP; Reg r]) ]
   
       | SavedStackStk p -> 
@@ -372,15 +376,15 @@ let pp_prog (tbl: 'info tbl) (fmt : Format.formatter)
                       ad_base   = Some RSP;
                       ad_scale  = Scale1;
                       ad_offset = None }) in
-        pp_instrs name fmt 
+        pp_instrs tbl name fmt
           [ AsmOp(MOV uptr, [Reg RBP; Reg RSP]);
             AsmOp(SUB uptr, [Reg RSP; Imm(U32, Conv.int32_of_bi stsz)]);
             AsmOp(AND uptr, [Reg RSP; Imm(U32, 
                                           Conv.int32_of_bi (B.of_int (-32)))]);
             AsmOp(MOV uptr, [adr; Reg RBP])
           ];
-        pp_instrs name fmt d.X86_sem.xfd_body;
-        pp_instrs name fmt
+        pp_instrs tbl name fmt d.X86_sem.xfd_body;
+        pp_instrs tbl name fmt
           [ AsmOp(MOV uptr, [Reg RSP; adr]) ] 
       end;
       List.iter (fun r ->

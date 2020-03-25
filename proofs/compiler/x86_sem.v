@@ -42,9 +42,28 @@ Variant asm : Type :=
 | ALIGN
 | LABEL of label
   (* Jumps *)
-| JMP    of label          (* Unconditional jump *)
+| JMP    of remote_label          (* Unconditional jump *)
 | Jcc    of label & condt  (* Conditional jump *)
 | AsmOp     of asm_op & asm_args.
+
+(* -------------------------------------------------------------------- *)
+Variant saved_stack :=
+| SavedStackNone
+| SavedStackReg of register
+| SavedStackStk of Z.
+
+Record xfundef := XFundef {
+ xfd_stk_size : Z;
+ xfd_nstk : register;
+ xfd_arg  : seq register;
+ xfd_body : seq asm;
+ xfd_res  : seq register;
+ xfd_extra : list register * saved_stack;
+}.
+
+Record xprog : Type :=
+  { xp_globs : seq u8;
+    xp_funcs : seq (funname * xfundef) }.
 
 (* -------------------------------------------------------------------- *)
 Record x86_mem : Type := X86Mem {
@@ -132,13 +151,22 @@ Definition find_label (lbl : label) (a : seq asm) :=
   if idx < size a then ok idx else type_error.
 
 (* -------------------------------------------------------------------- *)
-Definition eval_JMP lbl (s: x86_state) : x86_result_state :=
-  Let ip := find_label lbl s.(xc) in ok (st_write_ip ip.+1 s).
+Definition eval_JMP p lbl (s: x86_state) : x86_result_state :=
+  match lbl with
+  | Local lbl =>
+    Let ip := find_label lbl s.(xc) in ok (st_write_ip ip.+1 s)
+  | Remote fn =>
+    if get_fundef (xp_funcs p) fn is Some fd then
+      ok {| xm := s.(xm) ; xc := xfd_body fd ; xip := 0 |}
+    else type_error
+  end.
 
 (* -------------------------------------------------------------------- *)
 Definition eval_Jcc lbl ct (s: x86_state) : x86_result_state :=
   Let b := eval_cond ct s.(xrf) in
-  if b then eval_JMP lbl s else ok (st_write_ip (xip s).+1 s).
+  if b then
+    Let ip := find_label lbl s.(xc) in ok (st_write_ip ip.+1 s)
+  else ok (st_write_ip (xip s).+1 s).
 
 (* -------------------------------------------------------------------- *)
 Definition st_get_rflag (rf : rflag) (s : x86_mem) :=
@@ -354,11 +382,13 @@ Definition eval_op o args m :=
     let id := instr_desc o in
     exec_instr_op id args m.
 
+Context  (p: xprog).
+
 Definition eval_instr (i : asm) (s: x86_state) : exec x86_state :=
   match i with
-  | ALIGN        
+  | ALIGN
   | LABEL _      => ok (st_write_ip (xip s).+1 s)
-  | JMP   lbl    => eval_JMP lbl s
+  | JMP lbl   => eval_JMP p lbl s
   | Jcc   lbl ct => eval_Jcc lbl ct s
   | AsmOp o args =>
     Let m := eval_op o args s.(xm) in
@@ -383,24 +413,6 @@ Definition x86sem : relation x86_state := clos_refl_trans x86_state x86sem1.
 End GLOB_DEFS.
 
 (* -------------------------------------------------------------------- *)
-Variant saved_stack := 
-| SavedStackNone 
-| SavedStackReg of register  
-| SavedStackStk of Z.
-
-Record xfundef := XFundef {
- xfd_stk_size : Z;
- xfd_nstk : register;
- xfd_arg  : seq register;
- xfd_body : seq asm;
- xfd_res  : seq register;
- xfd_extra : list register * saved_stack;
-}.
-
-Record xprog : Type :=
-  { xp_globs : seq u8;
-    xp_funcs : seq (funname * xfundef) }.
-
 (* TODO: flags may be preserved *)
 (* TODO: restore stack pointer of caller? *)
 Variant x86sem_fd (P: xprog) (wrip: pointer) fn st st' : Prop :=
@@ -414,7 +426,7 @@ Variant x86sem_fd (P: xprog) (wrip: pointer) fn st st' : Prop :=
                xxreg := st.(xxreg); 
                xrf := rflagmap0 |})
     (c := fd.(xfd_body))
-    `(x86sem {| xm := st1 ; xc := c ; xip := 0 |} {| xm := st2; xc := c; xip := size c |})
+    `(x86sem P {| xm := st1 ; xc := c ; xip := 0 |} {| xm := st2; xc := c; xip := size c |})
     `(st' = {| xmem := free_stack st2.(xmem) fd.(xfd_stk_size); 
                xreg := st2.(xreg);
                xrip := st2.(xrip);
@@ -422,8 +434,8 @@ Variant x86sem_fd (P: xprog) (wrip: pointer) fn st st' : Prop :=
                xrf := rflagmap0 |})
     .
 
-Definition x86sem_trans s2 s1 s3 :
-  x86sem s1 s2 -> x86sem s2 s3 -> x86sem s1 s3 :=
+Definition x86sem_trans P s2 s1 s3 :
+  x86sem P s1 s2 -> x86sem P s2 s3 -> x86sem P s1 s3 :=
   rt_trans _ _ s1 s2 s3.
 
 
