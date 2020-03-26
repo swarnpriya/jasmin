@@ -59,10 +59,8 @@ let pp_lval tbl fmt =
 let pp_label fmt lbl =
   F.fprintf fmt "%a" B.pp_print (Conv.bi_of_pos lbl)
 
-let pp_remote_label tbl fmt =
-  function
-  | X86_decl.Local lbl -> pp_label fmt lbl
-  | Remote fn -> F.fprintf fmt "%s" (string_of_funname tbl fn)
+let pp_remote_label tbl fmt (fn, lbl) =
+  F.fprintf fmt "%s.%a" (string_of_funname tbl fn) pp_label lbl
 
 let pp_instr tbl fmt i =
   match i.li_i with
@@ -74,6 +72,8 @@ let pp_instr tbl fmt i =
   | Lalign     -> F.fprintf fmt "Align"
   | Llabel lbl -> F.fprintf fmt "Label %a" pp_label lbl
   | Lgoto lbl -> F.fprintf fmt "Goto %a" (pp_remote_label tbl) lbl
+  | Ligoto e -> F.fprintf fmt "IGoto %a" (pp_expr tbl) e
+  | LstoreLabel (lv, lbl) -> F.fprintf fmt "StoreLabel %a %a" (pp_lval tbl) lv pp_label lbl
   | Lcond (e, lbl) -> F.fprintf fmt "If %a goto %a" (pp_expr tbl) e pp_label lbl
 
 let pp_stackframe fmt sz =

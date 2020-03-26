@@ -169,10 +169,8 @@ let pp_imm (imm : Bigint.zint) =
 (* -------------------------------------------------------------------- *)
 let pp_label = string_of_label
 
-let pp_remote_label name tbl =
-  function
-  | Local lbl -> string_of_label name lbl
-  | Remote fn -> string_of_funname tbl fn
+let pp_remote_label tbl (fn, lbl) =
+  string_of_label (string_of_funname tbl fn) lbl
 
 (* -------------------------------------------------------------------- *)
 let pp_ct (ct : X86_decl.condt) =
@@ -265,6 +263,10 @@ let pp_name_ext pp_op =
   Printf.sprintf "%s%s" (Conv.string_of_string0 pp_op.pp_aop_name) (pp_ext pp_op.pp_aop_ext)
 
 (* -------------------------------------------------------------------- *)
+let pp_indirect_label lbl =
+  Format.sprintf "*%s" (pp_asm_arg (W.U64, lbl))
+
+(* -------------------------------------------------------------------- *)
 let pp_instr tbl name (i : X86_sem.asm) =
   match i with
   | ALIGN ->
@@ -272,8 +274,14 @@ let pp_instr tbl name (i : X86_sem.asm) =
     
   | LABEL lbl ->
     `Label (pp_label name lbl)
+
+  | STORELABEL (dst, lbl) ->
+     `Instr (Printf.sprintf "mov%s" (pp_instr_wsize W.U64), [string_of_label name lbl ; pp_asm_arg (W.U64, dst)])
+
   | JMP lbl ->
-     `Instr ("jmp", [pp_remote_label name tbl lbl])
+     `Instr ("jmp", [pp_remote_label tbl lbl])
+  | JMPI lbl ->
+     `Instr ("jmp", [pp_indirect_label lbl])
   | Jcc(lbl,ct) ->
     let iname = Printf.sprintf "j%s" (pp_ct ct) in
     `Instr (iname, [pp_label name lbl])

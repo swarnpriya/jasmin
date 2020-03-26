@@ -41,8 +41,10 @@ Unset Printing Implicit Defensive.
 Variant asm : Type :=
 | ALIGN
 | LABEL of label
+| STORELABEL of asm_arg & label (* Store the address of a local label *)
   (* Jumps *)
-| JMP    of remote_label          (* Unconditional jump *)
+| JMP    of remote_label (* Direct jump *)
+| JMPI of asm_arg (* Indirect jump *)
 | Jcc    of label & condt  (* Conditional jump *)
 | AsmOp     of asm_op & asm_args.
 
@@ -81,6 +83,7 @@ Definition comparableMixin :=
 
 Record x86_state := X86State {
   xm   :> x86_mem;
+  xfn : funname;
   xc   : seq asm;
   xip  : nat;
 }.
@@ -136,6 +139,7 @@ Definition eval_cond (c : condt) (rm : rflagmap) :=
 Definition st_write_ip (ip : nat) (s : x86_state) :=
   {| xm := s.(xm);
      xc   := s.(xc);
+     xfn := s.(xfn);
      xip  := ip; |}.
 
 (* -------------------------------------------------------------------- *)
@@ -151,15 +155,13 @@ Definition find_label (lbl : label) (a : seq asm) :=
   if idx < size a then ok idx else type_error.
 
 (* -------------------------------------------------------------------- *)
-Definition eval_JMP p lbl (s: x86_state) : x86_result_state :=
-  match lbl with
-  | Local lbl =>
-    Let ip := find_label lbl s.(xc) in ok (st_write_ip ip.+1 s)
-  | Remote fn =>
-    if get_fundef (xp_funcs p) fn is Some fd then
-      ok {| xm := s.(xm) ; xc := xfd_body fd ; xip := 0 |}
-    else type_error
-  end.
+Definition eval_JMP p dst (s: x86_state) : x86_result_state :=
+  let: (fn, lbl) := dst in
+  if get_fundef (xp_funcs p) fn is Some fd then
+    let body := xfd_body fd in
+    Let ip := find_label lbl body in
+    ok {| xm := s.(xm) ; xfn := fn ; xc := body ; xip := ip.+1 |}
+  else type_error.
 
 (* -------------------------------------------------------------------- *)
 Definition eval_Jcc lbl ct (s: x86_state) : x86_result_state :=
@@ -188,15 +190,29 @@ Definition decode_addr (s:x86_mem) (a:address) : pointer :=
   end.
 
 (* -------------------------------------------------------------------- *)
-
-Section GLOB_DEFS.
-
 Definition check_oreg or ai :=
   match or, ai with
   | Some r, Reg r' => r == r'
   | Some _, Imm _ _ => true
   | Some _, _      => false
   | None, _        => true
+  end.
+
+Definition eval_asm_arg (s: x86_mem) (a: asm_arg) (ty: stype) : exec value :=
+  match a with
+  | Condt c   => Let b := eval_cond c s.(xrf) in ok (Vbool b)
+  | Imm sz' w =>
+    match ty with
+    | sword sz => ok (Vword (sign_extend sz w))
+    | _        => type_error
+    end
+  | Reg r     => ok (Vword (s.(xreg) r))
+  | Adr adr   =>
+    match ty with
+    | sword sz => Let w := read_mem s.(xmem) (decode_addr s adr) sz in ok (Vword w)
+    | _        => type_error
+    end
+  | XMM x     => ok (Vword (s.(xxreg) x))
   end.
 
 Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (a:arg_desc) (ty:stype) : exec value :=
@@ -208,21 +224,7 @@ Definition eval_arg_in_v (s:x86_mem) (args:asm_args) (a:arg_desc) (ty:stype) : e
     | None => type_error
     | Some a =>
       Let _ := assert (check_oreg or a) ErrType in
-      match a with
-      | Condt c   => Let b := eval_cond c s.(xrf) in ok (Vbool b)
-      | Imm sz' w => 
-        match ty with 
-        | sword sz => ok (Vword (sign_extend sz w))
-        | _        => type_error
-        end
-      | Reg r     => ok (Vword (s.(xreg) r))
-      | Adr adr   => 
-        match ty with
-        | sword sz => Let w := read_mem s.(xmem) (decode_addr s adr) sz in ok (Vword w)
-        | _        => type_error
-        end
-      | XMM x     => ok (Vword (s.(xxreg) x))
-      end
+      eval_asm_arg s a ty
     end
   end.
 
@@ -382,18 +384,31 @@ Definition eval_op o args m :=
     let id := instr_desc o in
     exec_instr_op id args m.
 
+Section PROG.
+
 Context  (p: xprog).
 
 Definition eval_instr (i : asm) (s: x86_state) : exec x86_state :=
   match i with
   | ALIGN
   | LABEL _      => ok (st_write_ip (xip s).+1 s)
+  | STORELABEL dst lbl =>
+    if encode_label (xfn s, lbl) is Some p then
+      Let m := eval_op (MOV Uptr) [:: dst ; Imm p ] s.(xm) in
+      ok {| xm := m ; xfn := s.(xfn) ; xc := s.(xc) ; xip := s.(xip).+1 |}
+    else type_error
   | JMP lbl   => eval_JMP p lbl s
+  | JMPI d =>
+    Let v := eval_asm_arg s d (sword Uptr) >>= to_pointer in
+    if decode_label v is Some lbl then
+      eval_JMP p lbl s
+    else type_error
   | Jcc   lbl ct => eval_Jcc lbl ct s
   | AsmOp o args =>
     Let m := eval_op o args s.(xm) in
     ok {|
       xm := m;
+      xfn := s.(xfn);
       xc := s.(xc);
       xip := s.(xip).+1
     |}
@@ -410,7 +425,7 @@ Definition x86sem1 (s1 s2: x86_state) : Prop :=
 
 Definition x86sem : relation x86_state := clos_refl_trans x86_state x86sem1.
 
-End GLOB_DEFS.
+End PROG.
 
 (* -------------------------------------------------------------------- *)
 (* TODO: flags may be preserved *)
@@ -426,7 +441,7 @@ Variant x86sem_fd (P: xprog) (wrip: pointer) fn st st' : Prop :=
                xxreg := st.(xxreg); 
                xrf := rflagmap0 |})
     (c := fd.(xfd_body))
-    `(x86sem P {| xm := st1 ; xc := c ; xip := 0 |} {| xm := st2; xc := c; xip := size c |})
+    `(x86sem P {| xm := st1 ; xfn := fn ; xc := c ; xip := 0 |} {| xm := st2; xfn := fn ; xc := c; xip := size c |})
     `(st' = {| xmem := free_stack st2.(xmem) fd.(xfd_stk_size); 
                xreg := st2.(xreg);
                xrip := st2.(xrip);

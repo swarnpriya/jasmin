@@ -21,6 +21,26 @@ Definition assemble_i rip (i: linstr) : ciexec asm :=
 
   | Lgoto lbl => ciok (JMP lbl)
 
+  | Ligoto e =>
+    Let arg := assemble_word rip ii Uptr None e in
+    ciok (JMPI arg)
+
+  | LstoreLabel x lbl =>
+    let fail (msg: string) := cierror ii (Cerr_assembler (AsmErr_string ("store-label: " ++ msg))) in
+    Let dst := match x with
+    | Lvar x => if register_of_var x is Some r then ok (Reg r) else fail "bad var"%string
+    | Lmem sz b ofs =>
+      (*
+      if register_of_var b is Some r then
+        ok (inr (Areg (mkAddress 
+      else fail "bad mem"
+*)
+      fail "todo"%string
+    | Laset _ _ _ _ => fail "array"%string
+    | Lnone _ _ => fail "none"%string
+    end in
+    ciok (STORELABEL dst lbl)
+
   | Lcond e l =>
       Let cond := assemble_cond ii e in
       ciok (Jcc l cond)
@@ -74,6 +94,7 @@ Definition assemble_prog (p: lprog) : cfexec xprog :=
 Variant match_state rip (ls: lstate) (xs: x86_state) : Prop :=
 | MS
   `(lom_eqv rip (to_estate ls) (xm xs))
+  `(lfn ls = xfn xs)
   `(assemble_c rip (lc ls) = ok (xc xs))
   `(lpc ls = xip xs)
 .
@@ -83,7 +104,7 @@ Lemma assemble_i_is_label rip a b lbl :
   linear.is_label lbl a = x86_sem.is_label lbl b.
 Proof.
 by (rewrite /assemble_i /linear.is_label ; case a =>  ii []; t_xrbindP) => /=
-  [????? <- | [<-] | ? [<-] | ? [<-] | ???? [<-]].
+  [????? <- | [<-] | ? [<-] | ? [<-] | _ ? _ [<-] | [] // _ ?? _ [<-] | ???? [<-]].
 Qed.
 
 Lemma assemble_c_find_is_label rip c i lbl:
@@ -105,6 +126,30 @@ rewrite /assemble_c /linear.find_label /x86_sem.find_label => ok_i.
 by rewrite (mapM_size ok_i) (assemble_c_find_is_label lbl ok_i).
 Qed.
 
+(* -------------------------------------------------------------------- *)
+Lemma eval_assemble_word rip ii sz e a s xs v :
+  lom_eqv rip s xs →
+  assemble_word rip ii sz None e = ok a →
+  sem_pexpr [::] s e = ok v →
+  exists2 v', eval_asm_arg xs a (sword sz) = ok v' & value_uincl v v'.
+Proof.
+  move => eqm.
+  case: e => //=; t_xrbindP.
+  - move => x _ /assertP ok_x.
+    rewrite /get_gvar ok_x => h ok_v; move: h.
+    have := xxgetreg_ex eqm _ ok_v.
+    case: (xmm_register_of_var _).
+    + by move => xr /(_ _ erefl) h [<-] /=; eexists; first reflexivity.
+    t_xrbindP => _ r ok_r <-; eexists; first reflexivity.
+    exact: (xgetreg_ex eqm ok_r ok_v).
+  - move => sz' ??; case: eqP => // <-{sz'}; t_xrbindP => d ok_d <- ptr w ok_w ok_ptr uptr u ok_u ok_uptr ? ok_rd ?; subst v => /=.
+    case: (eqm) => eqmem _ _ _ _ _.
+    rewrite (addr_of_xpexprP eqm ok_d ok_w ok_ptr ok_u ok_uptr) -eqmem ok_rd.
+    eexists; first reflexivity.
+    exact: word_uincl_refl.
+  by case => // ? [].
+Qed.
+
 Section PROG.
 
 Context (p: lprog) (p': xprog) (ok_p': assemble_prog p = ok p').
@@ -117,7 +162,7 @@ Lemma assemble_iP rip i j ls ls' xs :
     x86_sem.eval_instr p' j xs = ok xs' ∧
     match_state rip ls' xs'.
 Proof.
-rewrite /linear_sem.eval_instr /x86_sem.eval_instr; case => eqm eqc eqpc.
+rewrite /linear_sem.eval_instr /x86_sem.eval_instr; case => eqm eqfn eqc eqpc.
 case: i => ii [] /=.
 - move => lvs op pes; t_xrbindP => -[op' asm_args] hass <- m hsem <-.
   have [s [-> eqm' /=]]:= assemble_sopnP hsem hass eqm.
@@ -132,6 +177,16 @@ case: i => ii [] /=.
   rewrite /eval_JMP -(assemble_c_find_label lbl eqc) ok_pc /=.
   by eexists; split; eauto; constructor.
 *) admit.
+- t_xrbindP => e d ok_d [<-] ptr v ok_v ok_ptr.
+  have [v' ok_v' hvv'] := eval_assemble_word eqm ok_d ok_v.
+  rewrite ok_v' /= (value_uincl_word hvv' ok_ptr) /=.
+  case: decode_label => //.
+  admit.
+- case => // x lbl.
+  case: (register_of_var _) (@var_of_register_of_var x) => //= r /(_ _ erefl) ok_r_x [<-]{j}.
+  case: encode_label => // ptr.
+  rewrite /sem_sopn /=.
+  admit.
 - t_xrbindP => cnd lbl cndt ok_c [<-] b v ok_v ok_b.
   case: eqm => eqm hrip hd eqr eqx eqf.
   have [v' [ok_v' hvv']] := eval_assemble_cond eqf ok_c ok_v.
@@ -153,7 +208,7 @@ Lemma match_state_step rip ls ls' xs :
   fetch_and_eval p' xs = ok xs' ∧
   match_state rip ls' xs'.
 Proof.
-move => ms; rewrite /step /find_instr /fetch_and_eval; case: (ms)=> _ eqc ->.
+move => ms; rewrite /step /find_instr /fetch_and_eval; case: (ms)=> _ _ eqc ->.
 case ok_i : (oseq.onth) => [ i | // ].
 have [j [-> ok_j]] := mapM_onth eqc ok_i.
 exact: assemble_iP.
@@ -315,12 +370,12 @@ have h1 : get_reg_values xr1 args = get_reg_values s1 args.
 rewrite -h1 in hargs => {h1}.
 have eqm2 : lom_eqv rip s2 xr1.
 + by apply: write_vars_uincl; eauto.
-have ms : match_state rip (of_estate s2 fd.(lfd_body) 0) {| xm := xr1 ; xc := body ; xip := 0 |}.
+have ms : match_state rip (of_estate s2 fn fd.(lfd_body) 0) {| xm := xr1 ; xfn := fn ; xc := body ; xip := 0 |}.
 + by constructor => //=; rewrite to_estate_of_estate.
-have [[[om or orip oxr orf] oc opc] [xexec]] := MSS _ _ _ _ hexec ms.
+have [[[om or orip oxr orf] ofn oc opc] [xexec]] := MSS _ _ _ _ hexec ms.
 rewrite (mapM_size ok_body).
-case => eqm' /=.
-rewrite ok_body => -[?] ?; subst oc opc.
+case => eqm' /= ?.
+rewrite ok_body => -[?] ?; subst ofn oc opc.
 eexists; split. econstructor; eauto.
 case: eqm' => /= ?; subst om => eqr' _; split => //.
 rewrite /get_reg_values /get_reg_value /=.
